@@ -149,6 +149,12 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
     Hid* app = context;
     bool consumed = false;
 
+    if(event.type == SceneManagerEventTypeBack) {
+        // Exit the app rather than looping back to profile select
+        view_dispatcher_stop(app->view_dispatcher);
+        return true;
+    }
+
     if(event.type == SceneManagerEventTypeCustom) {
         scene_manager_set_scene_state(
             app->scene_manager, BtRemotesSceneStart, event.event);

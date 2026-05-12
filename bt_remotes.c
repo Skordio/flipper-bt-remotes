@@ -232,6 +232,9 @@ bool bt_remotes_profile_delete(Hid* app) {
 void bt_remotes_start_ble(Hid* app) {
     furi_assert(!app->ble_started);
 
+    // Ensure LED is off until an actual connection is established
+    notification_internal_message(app->notifications, &sequence_reset_blue);
+
     bt_remotes_load_cfg(app);
 
     app->ble_hid_profile = bt_profile_start(app->bt, ble_profile_hid_ext, &app->ble_hid_cfg);
@@ -246,6 +249,7 @@ void bt_remotes_stop_ble(Hid* app) {
     if(!app->ble_started) return;
 
     bt_set_status_changed_callback(app->bt, NULL, NULL);
+    notification_internal_message(app->notifications, &sequence_reset_blue);
     bt_disconnect(app->bt);
     furi_delay_ms(200);
     bt_keys_storage_set_default_path(app->bt);
@@ -458,6 +462,8 @@ static void bt_remotes_free(Hid* app) {
 int32_t bt_remotes_app(void* p) {
     UNUSED(p);
     Hid* app = bt_remotes_alloc();
+
+    notification_internal_message(app->notifications, &sequence_reset_blue);
 
     bt_disconnect(app->bt);
     furi_delay_ms(200);
