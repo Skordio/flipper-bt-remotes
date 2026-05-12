@@ -1,0 +1,16 @@
+App(
+    appid="bt_remotes",
+    name="BT Remotes",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="bt_remotes_app",
+    stack_size=2 * 1024,
+    sources=["*.c"],
+    cdefines=["HID_TRANSPORT_BLE"],
+    fap_libs=["ble_profile"],
+    fap_description="Bluetooth remote control with multi-profile support",
+    fap_version="1.0",
+    fap_category="Bluetooth",
+    fap_icon="bt_remotes_10px.png",
+    fap_icon_assets="assets",
+    fap_icon_assets_symbol="hid",
+)

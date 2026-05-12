@@ -1,0 +1,8 @@
+ADD_SCENE(bt_remotes, profile_select, ProfileSelect)
+ADD_SCENE(bt_remotes, profile_new, ProfileNew)
+ADD_SCENE(bt_remotes, start, Start)
+ADD_SCENE(bt_remotes, main, Main)
+ADD_SCENE(bt_remotes, rename, Rename)
+ADD_SCENE(bt_remotes, unpair, Unpair)
+ADD_SCENE(bt_remotes, save_profile, SaveProfile)
+ADD_SCENE(bt_remotes, delete_profile, DeleteProfile)
