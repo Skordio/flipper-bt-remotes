@@ -70,10 +70,14 @@ bool bt_remotes_scene_profile_select_on_event(void* context, SceneManagerEvent e
             strlcpy(
                 app->active_profile, app->profile_list[idx], BT_REMOTES_PROFILE_NAME_LEN);
 
-            bt_remotes_profile_activate(app);
-            bt_remotes_start_ble(app);
-
-            scene_manager_next_scene(app->scene_manager, BtRemotesSceneStart);
+            if(!bt_remotes_profile_activate(app)) {
+                FURI_LOG_E("BtRemotes", "Failed to activate profile: %s", app->active_profile);
+                app->active_profile[0] = '\0';
+                // Stay on profile select — submenu is still visible
+            } else {
+                bt_remotes_start_ble(app);
+                scene_manager_next_scene(app->scene_manager, BtRemotesSceneStart);
+            }
         } else if(event.event == BtRemotesProfileSelectEventNew) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneProfileNew);
         }
