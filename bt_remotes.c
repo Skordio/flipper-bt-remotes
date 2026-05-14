@@ -243,15 +243,92 @@ bool bt_remotes_profile_delete(Hid* app) {
            (e2 == FSE_OK || e2 == FSE_NOT_EXIST);
 }
 
+bool bt_remotes_profile_rename(Hid* app) {
+    // pending_name = old filename, active_profile = new filename (written by text_input)
+    FuriString* old_cfg = furi_string_alloc_printf(
+        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->pending_name, BT_REMOTES_CFG_EXT);
+    FuriString* old_keys = furi_string_alloc_printf(
+        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->pending_name, BT_REMOTES_KEYS_EXT);
+    FuriString* new_cfg = furi_string_alloc_printf(
+        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
+    FuriString* new_keys = furi_string_alloc_printf(
+        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_KEYS_EXT);
+
+    FS_Error err = storage_common_copy(
+        app->storage, furi_string_get_cstr(old_cfg), furi_string_get_cstr(new_cfg));
+    bool ok = (err == FSE_OK);
+
+    if(ok) {
+        storage_common_remove(app->storage, furi_string_get_cstr(old_cfg));
+
+        if(storage_file_exists(app->storage, furi_string_get_cstr(old_keys))) {
+            storage_common_copy(
+                app->storage,
+                furi_string_get_cstr(old_keys),
+                furi_string_get_cstr(new_keys));
+            storage_common_remove(app->storage, furi_string_get_cstr(old_keys));
+        }
+
+        FURI_LOG_I(TAG, "Profile renamed: %s → %s", app->pending_name, app->active_profile);
+    } else {
+        FURI_LOG_E(TAG, "Profile rename failed: %d", err);
+    }
+
+    furi_string_free(old_cfg);
+    furi_string_free(old_keys);
+    furi_string_free(new_cfg);
+    furi_string_free(new_keys);
+    return ok;
+}
+
+bool bt_remotes_profile_reset(Hid* app) {
+    uint8_t mac[BT_REMOTES_MAC_SIZE];
+    furi_hal_random_fill_buf(mac, BT_REMOTES_MAC_SIZE);
+    mac[5] |= 0xC0; // static-random address format
+
+    memcpy(app->ble_hid_cfg.mac, mac, BT_REMOTES_MAC_SIZE);
+    // name is intentionally preserved
+
+    bt_hid_save_cfg(app); // writes new MAC + existing name to .bt_hid.cfg
+
+    // Snapshot updated cfg into the profile directory
+    FuriString* dst_cfg = furi_string_alloc_printf(
+        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
+    storage_common_remove(app->storage, furi_string_get_cstr(dst_cfg));
+    FS_Error err =
+        storage_common_copy(app->storage, BT_REMOTES_CFG_PATH, furi_string_get_cstr(dst_cfg));
+    furi_string_free(dst_cfg);
+
+    // Wipe all bonding data so host must pair fresh
+    FuriString* prof_keys = furi_string_alloc_printf(
+        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_KEYS_EXT);
+    storage_common_remove(app->storage, furi_string_get_cstr(prof_keys));
+    furi_string_free(prof_keys);
+    storage_common_remove(app->storage, APP_DATA_PATH(HID_BT_KEYS_STORAGE_NAME));
+
+    if(err == FSE_OK) {
+        FURI_LOG_I(TAG, "Profile reset: %s", app->active_profile);
+    } else {
+        FURI_LOG_E(TAG, "Profile reset cfg copy failed: %d", err);
+    }
+    return err == FSE_OK;
+}
+
 // ---------------------------------------------------------------------------
 // BLE lifecycle
 // ---------------------------------------------------------------------------
+
+// Forward declaration so bt_remotes_start_ble can register it
+static void bt_remotes_connection_status_changed_callback(BtStatus status, void* context);
 
 void bt_remotes_start_ble(Hid* app) {
     furi_assert(!app->ble_started);
 
     // Ensure LED is off until an actual connection is established
     notification_internal_message(app->notifications, &sequence_reset_blue);
+
+    bt_keys_storage_set_storage_path(app->bt, APP_DATA_PATH(HID_BT_KEYS_STORAGE_NAME));
+    bt_set_status_changed_callback(app->bt, bt_remotes_connection_status_changed_callback, app);
 
     bt_remotes_load_cfg(app);
 
@@ -495,11 +572,7 @@ int32_t bt_remotes_app(void* p) {
         EXT_PATH("apps/Tools/.bt_hid.keys"),
         APP_DATA_PATH(HID_BT_KEYS_STORAGE_NAME));
 
-    bt_keys_storage_set_storage_path(app->bt, APP_DATA_PATH(HID_BT_KEYS_STORAGE_NAME));
-
     storage_simply_mkdir(app->storage, BT_REMOTES_PROFILES_DIR);
-
-    bt_set_status_changed_callback(app->bt, bt_remotes_connection_status_changed_callback, app);
 
     dolphin_deed(DolphinDeedPluginStart);
 

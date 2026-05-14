@@ -47,15 +47,9 @@ bool bt_remotes_scene_rename_on_event(void* context, SceneManagerEvent event) {
     if(event.type == SceneManagerEventTypeCustom) {
         consumed = true;
         if(event.event == BtRemotesRenameEventTextInput) {
-            bt_disconnect(app->bt);
-            furi_delay_ms(200);
-            furi_check(bt_profile_restore_default(app->bt));
-            app->ble_hid_profile =
-                bt_profile_start(app->bt, ble_profile_hid_ext, &app->ble_hid_cfg);
-            furi_check(app->ble_hid_profile);
-            furi_hal_bt_start_advertising();
-
+            bt_remotes_stop_ble(app);
             bt_hid_save_cfg(app);
+            bt_remotes_start_ble(app);
 
             view_dispatcher_switch_to_view(app->view_dispatcher, HidViewPopup);
         } else if(event.event == BtRemotesRenameEventPopup) {

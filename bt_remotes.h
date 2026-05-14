@@ -77,6 +77,7 @@ struct Hid {
     HidPushToTalkMenu* hid_ptt_menu;
     // Profile management
     char active_profile[BT_REMOTES_PROFILE_NAME_LEN];
+    char pending_name[BT_REMOTES_PROFILE_NAME_LEN]; // old name held during profile rename
     char profile_list[BT_REMOTES_PROFILE_MAX_COUNT][BT_REMOTES_PROFILE_NAME_LEN];
     uint8_t profile_count;
 };
@@ -95,6 +96,8 @@ bool bt_remotes_profile_create(Hid* app);
 bool bt_remotes_profile_save(Hid* app);
 bool bt_remotes_profile_activate(Hid* app);
 bool bt_remotes_profile_delete(Hid* app);
+bool bt_remotes_profile_rename(Hid* app);
+bool bt_remotes_profile_reset(Hid* app);
 
 // HAL
 void hid_hal_keyboard_press(Hid* instance, uint16_t event);

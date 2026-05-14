@@ -1,11 +1,13 @@
 #include "../bt_remotes.h"
 
-#define NEW_PROFILE_INDEX UINT32_MAX
+#define NEW_PROFILE_INDEX      UINT32_MAX
+#define SETTINGS_PROFILE_INDEX (UINT32_MAX - 1)
 
 enum BtRemotesProfileSelectEvent {
     BtRemotesProfileSelectEventChosen,
     BtRemotesProfileSelectEventNew,
     BtRemotesProfileSelectEventAutoAdvance,
+    BtRemotesProfileSelectEventSettings,
 };
 
 static void bt_remotes_scene_profile_select_cb(void* context, uint32_t index) {
@@ -13,6 +15,9 @@ static void bt_remotes_scene_profile_select_cb(void* context, uint32_t index) {
     if(index == NEW_PROFILE_INDEX) {
         view_dispatcher_send_custom_event(
             app->view_dispatcher, BtRemotesProfileSelectEventNew);
+    } else if(index == SETTINGS_PROFILE_INDEX) {
+        view_dispatcher_send_custom_event(
+            app->view_dispatcher, BtRemotesProfileSelectEventSettings);
     } else {
         scene_manager_set_scene_state(
             app->scene_manager, BtRemotesSceneProfileSelect, index);
@@ -51,6 +56,12 @@ void bt_remotes_scene_profile_select_on_enter(void* context) {
         NEW_PROFILE_INDEX,
         bt_remotes_scene_profile_select_cb,
         app);
+    submenu_add_item(
+        app->submenu,
+        "Settings",
+        SETTINGS_PROFILE_INDEX,
+        bt_remotes_scene_profile_select_cb,
+        app);
 
     view_dispatcher_switch_to_view(app->view_dispatcher, HidViewSubmenu);
 }
@@ -80,6 +91,8 @@ bool bt_remotes_scene_profile_select_on_event(void* context, SceneManagerEvent e
             }
         } else if(event.event == BtRemotesProfileSelectEventNew) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneProfileNew);
+        } else if(event.event == BtRemotesProfileSelectEventSettings) {
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneSettings);
         }
     }
 

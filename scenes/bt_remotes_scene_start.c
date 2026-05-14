@@ -15,7 +15,7 @@ enum BtRemotesStartIndex {
     BtRemotesStartIndexMouseJiggler,
     BtRemotesStartIndexMouseJigglerStealth,
     BtRemotesStartIndexPushToTalk,
-    BtRemotesStartIndexRename,
+    BtRemotesStartIndexSettings,
     BtRemotesStartIndexRemovePairing,
     BtRemotesStartIndexSaveProfile,
     BtRemotesStartIndexSwitchProfile,
@@ -110,8 +110,8 @@ void bt_remotes_scene_start_on_enter(void* context) {
         app);
     submenu_add_item(
         app->submenu,
-        "Bluetooth Remote Name",
-        BtRemotesStartIndexRename,
+        "Settings",
+        BtRemotesStartIndexSettings,
         bt_remotes_scene_start_submenu_callback,
         app);
     submenu_add_item(
@@ -162,8 +162,9 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
 
         if(event.event == BtRemotesStartIndexRemovePairing) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneUnpair);
-        } else if(event.event == BtRemotesStartIndexRename) {
-            scene_manager_next_scene(app->scene_manager, BtRemotesSceneRename);
+        } else if(event.event == BtRemotesStartIndexSettings) {
+            bt_remotes_stop_ble(app);
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneSettings);
         } else if(event.event == BtRemotesStartIndexSaveProfile) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneSaveProfile);
         } else if(event.event == BtRemotesStartIndexSwitchProfile) {
