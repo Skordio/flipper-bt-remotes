@@ -19,6 +19,11 @@ static bool
     bt_remotes_scene_profile_new_validator(const char* text, FuriString* error, void* context) {
     Hid* app = context;
 
+    if(text[0] == '\0') {
+        furi_string_set(error, "Name cannot\nbe empty");
+        return false;
+    }
+
     const char* invalid = "<>:\"/\\|?*";
     for(size_t i = 0; text[i]; i++) {
         if(strchr(invalid, text[i])) {
