@@ -286,6 +286,9 @@ static void bt_remotes_connection_status_changed_callback(BtStatus status, void*
     const bool connected = (status == BtStatusConnected);
     notification_internal_message(
         hid->notifications, connected ? &sequence_set_blue_255 : &sequence_reset_blue);
+    if(connected && hid->active_profile[0] != '\0') {
+        bt_remotes_profile_save(hid);
+    }
     hid_keynote_set_connected_status(hid->hid_keynote, connected);
     hid_keyboard_set_connected_status(hid->hid_keyboard, connected);
     hid_numpad_set_connected_status(hid->hid_numpad, connected);
