@@ -162,12 +162,27 @@ bool bt_remotes_profile_save(Hid* app) {
 
     furi_string_free(dst);
 
-    if(err == FSE_OK) {
-        FURI_LOG_I(TAG, "Profile saved: %s", app->active_profile);
-    } else {
-        FURI_LOG_E(TAG, "Profile save failed: %d", err);
+    if(err != FSE_OK) {
+        FURI_LOG_E(TAG, "Profile save (keys) failed: %d", err);
+        return false;
     }
-    return err == FSE_OK;
+
+    // Also snapshot the current cfg (contains the device name) into the profile directory
+    // so that activating the profile later restores the name set via Rename.
+    FuriString* dst_cfg = furi_string_alloc_printf(
+        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
+    storage_common_remove(app->storage, furi_string_get_cstr(dst_cfg));
+    FS_Error err_cfg =
+        storage_common_copy(app->storage, BT_REMOTES_CFG_PATH, furi_string_get_cstr(dst_cfg));
+    furi_string_free(dst_cfg);
+
+    if(err_cfg != FSE_OK) {
+        FURI_LOG_E(TAG, "Profile save (cfg) failed: %d", err_cfg);
+        return false;
+    }
+
+    FURI_LOG_I(TAG, "Profile saved: %s", app->active_profile);
+    return true;
 }
 
 bool bt_remotes_profile_activate(Hid* app) {
@@ -177,11 +192,14 @@ bool bt_remotes_profile_activate(Hid* app) {
         "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_KEYS_EXT);
 
     // Restore cfg (contains the profile's MAC)
-    if(storage_file_exists(app->storage, furi_string_get_cstr(src_cfg))) {
-        storage_common_remove(app->storage, BT_REMOTES_CFG_PATH);
-        storage_common_copy(
-            app->storage, furi_string_get_cstr(src_cfg), BT_REMOTES_CFG_PATH);
+    if(!storage_file_exists(app->storage, furi_string_get_cstr(src_cfg))) {
+        FURI_LOG_E(TAG, "Profile cfg missing: %s", app->active_profile);
+        furi_string_free(src_cfg);
+        furi_string_free(src_keys);
+        return false;
     }
+    storage_common_remove(app->storage, BT_REMOTES_CFG_PATH);
+    storage_common_copy(app->storage, furi_string_get_cstr(src_cfg), BT_REMOTES_CFG_PATH);
 
     // Restore bonding keys
     const char* keys_path = APP_DATA_PATH(HID_BT_KEYS_STORAGE_NAME);
