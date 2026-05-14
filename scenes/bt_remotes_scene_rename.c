@@ -47,7 +47,9 @@ bool bt_remotes_scene_rename_on_event(void* context, SceneManagerEvent event) {
     if(event.type == SceneManagerEventTypeCustom) {
         consumed = true;
         if(event.event == BtRemotesRenameEventTextInput) {
-            furi_hal_bt_stop_advertising();
+            bt_disconnect(app->bt);
+            furi_delay_ms(200);
+            furi_check(bt_profile_restore_default(app->bt));
             app->ble_hid_profile =
                 bt_profile_start(app->bt, ble_profile_hid_ext, &app->ble_hid_cfg);
             furi_check(app->ble_hid_profile);
