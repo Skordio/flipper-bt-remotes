@@ -56,18 +56,10 @@ bool bt_remotes_scene_rename_on_event(void* context, SceneManagerEvent event) {
                 // Back from Settings (via settings_on_event), loading the updated cfg.
                 bt_hid_save_cfg(app);
 
-                // Also write the updated cfg directly into the profile's .cfg file so
-                // that bt_remotes_profile_activate (called on Back) restores the new
-                // name rather than the old one.
-                FuriString* prof_cfg = furi_string_alloc_printf(
-                    "%s/%s%s",
-                    BT_REMOTES_PROFILES_DIR,
-                    app->active_profile,
-                    BT_REMOTES_CFG_EXT);
-                storage_common_remove(app->storage, furi_string_get_cstr(prof_cfg));
-                storage_common_copy(
-                    app->storage, BT_REMOTES_CFG_PATH, furi_string_get_cstr(prof_cfg));
-                furi_string_free(prof_cfg);
+                // Write the full profile cfg (name + mac + menu_order + menu_hidden) so
+                // bt_remotes_profile_activate (called on Back from Settings) restores
+                // the new name AND preserves the profile's menu settings.
+                bt_remotes_save_profile_menu_cfg(app);
             } else {
                 // No profile selected: save as the new default name for future profiles.
                 bt_remotes_save_app_cfg(app);
