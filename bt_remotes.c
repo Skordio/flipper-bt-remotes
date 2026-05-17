@@ -34,6 +34,8 @@ static void
 // ---------------------------------------------------------------------------
 
 void bt_remotes_load_app_cfg(Hid* app) {
+    app->disconnect_vibro = true; // default ON before reading cfg
+
     FlipperFormat* fff = flipper_format_file_alloc(app->storage);
     FuriString* tmp = furi_string_alloc();
     uint32_t ver = 0;
@@ -48,6 +50,13 @@ void bt_remotes_load_app_cfg(Hid* app) {
                 app->default_ble_name,
                 furi_string_get_cstr(tmp),
                 sizeof(app->default_ble_name));
+        } else {
+            flipper_format_rewind(fff);
+        }
+        // disconnect_vibro defaults to true if key is absent (old cfg files)
+        bool vibro = true;
+        if(flipper_format_read_bool(fff, "disconnect_vibro", &vibro, 1)) {
+            app->disconnect_vibro = vibro;
         }
     } while(0);
     furi_string_free(tmp);
@@ -60,6 +69,7 @@ void bt_remotes_save_app_cfg(Hid* app) {
         flipper_format_write_header_cstr(
             fff, BT_REMOTES_APP_CFG_FILE_TYPE, BT_REMOTES_APP_CFG_VERSION);
         flipper_format_write_string_cstr(fff, "default_name", app->default_ble_name);
+        flipper_format_write_bool(fff, "disconnect_vibro", &app->disconnect_vibro, 1);
         flipper_format_file_close(fff);
     }
     flipper_format_free(fff);
@@ -417,7 +427,7 @@ static void bt_remotes_connection_status_changed_callback(BtStatus status, void*
     const bool connected = (status == BtStatusConnected);
     notification_internal_message(
         hid->notifications, connected ? &sequence_set_blue_255 : &sequence_reset_blue);
-    if(!connected) {
+    if(!connected && hid->disconnect_vibro) {
         notification_message(hid->notifications, &sequence_single_vibro);
     }
     if(connected && hid->active_profile[0] != '\0') {

@@ -82,6 +82,8 @@ struct Hid {
     char default_ble_name[FURI_HAL_BT_ADV_NAME_LENGTH]; // default BT name applied to new profiles
     char profile_list[BT_REMOTES_PROFILE_MAX_COUNT][BT_REMOTES_PROFILE_NAME_LEN];
     uint8_t profile_count;
+    // App-level settings
+    bool disconnect_vibro; // whether to vibrate on BLE disconnect
 };
 
 // BLE lifecycle

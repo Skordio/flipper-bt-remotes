@@ -2,8 +2,8 @@
 
 enum BtRemotesSettingsIndex {
     BtRemotesSettingsIndexBluetoothName,
+    BtRemotesSettingsIndexDisconnectVibro,
     BtRemotesSettingsIndexRenameProfile,
-    BtRemotesSettingsIndexResetProfile,
     BtRemotesSettingsIndexUnpair,
     BtRemotesSettingsIndexSaveProfile,
     BtRemotesSettingsIndexDeleteProfile,
@@ -14,28 +14,29 @@ static void bt_remotes_scene_settings_submenu_cb(void* context, uint32_t index) 
     view_dispatcher_send_custom_event(app->view_dispatcher, index);
 }
 
-void bt_remotes_scene_settings_on_enter(void* context) {
-    Hid* app = context;
-
+static void build_settings_menu(Hid* app) {
     submenu_reset(app->submenu);
     submenu_set_header(app->submenu, "Settings");
+
     submenu_add_item(
         app->submenu,
         "Bluetooth Name",
         BtRemotesSettingsIndexBluetoothName,
         bt_remotes_scene_settings_submenu_cb,
         app);
+
+    submenu_add_item(
+        app->submenu,
+        app->disconnect_vibro ? "Disconnect Vibration: ON" : "Disconnect Vibration: OFF",
+        BtRemotesSettingsIndexDisconnectVibro,
+        bt_remotes_scene_settings_submenu_cb,
+        app);
+
     if(app->active_profile[0] != '\0') {
         submenu_add_item(
             app->submenu,
             "Rename Profile",
             BtRemotesSettingsIndexRenameProfile,
-            bt_remotes_scene_settings_submenu_cb,
-            app);
-        submenu_add_item(
-            app->submenu,
-            "Reset Profile",
-            BtRemotesSettingsIndexResetProfile,
             bt_remotes_scene_settings_submenu_cb,
             app);
         submenu_add_item(
@@ -57,7 +58,12 @@ void bt_remotes_scene_settings_on_enter(void* context) {
             bt_remotes_scene_settings_submenu_cb,
             app);
     }
+}
 
+void bt_remotes_scene_settings_on_enter(void* context) {
+    Hid* app = context;
+
+    build_settings_menu(app);
     submenu_set_selected_item(
         app->submenu,
         scene_manager_get_scene_state(app->scene_manager, BtRemotesSceneSettings));
@@ -82,10 +88,13 @@ bool bt_remotes_scene_settings_on_event(void* context, SceneManagerEvent event) 
 
         if(event.event == BtRemotesSettingsIndexBluetoothName) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneRename);
+        } else if(event.event == BtRemotesSettingsIndexDisconnectVibro) {
+            app->disconnect_vibro = !app->disconnect_vibro;
+            bt_remotes_save_app_cfg(app);
+            build_settings_menu(app);
+            submenu_set_selected_item(app->submenu, BtRemotesSettingsIndexDisconnectVibro);
         } else if(event.event == BtRemotesSettingsIndexRenameProfile) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneProfileRenameFile);
-        } else if(event.event == BtRemotesSettingsIndexResetProfile) {
-            scene_manager_next_scene(app->scene_manager, BtRemotesSceneResetProfile);
         } else if(event.event == BtRemotesSettingsIndexUnpair) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneUnpair);
         } else if(event.event == BtRemotesSettingsIndexSaveProfile) {
