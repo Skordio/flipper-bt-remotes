@@ -2,6 +2,7 @@
 
 typedef enum {
     HidViewSubmenu,
+    HidViewRemoteMenu,
     HidViewKeynote,
     HidViewKeyboard,
     HidViewNumpad,

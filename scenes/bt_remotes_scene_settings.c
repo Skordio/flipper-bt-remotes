@@ -1,8 +1,16 @@
 #include "../bt_remotes.h"
 
+static const char* const bt_remotes_vibro_mode_labels[] = {
+    "Vibration: Neither",
+    "Vibration: Disconnect",
+    "Vibration: Connect",
+    "Vibration: Both",
+};
+
 enum BtRemotesSettingsIndex {
     BtRemotesSettingsIndexBluetoothName,
     BtRemotesSettingsIndexDisconnectVibro,
+    BtRemotesSettingsIndexHideItems,
     BtRemotesSettingsIndexRenameProfile,
     BtRemotesSettingsIndexUnpair,
     BtRemotesSettingsIndexSaveProfile,
@@ -27,8 +35,15 @@ static void build_settings_menu(Hid* app) {
 
     submenu_add_item(
         app->submenu,
-        app->disconnect_vibro ? "Disconnect Vibration: ON" : "Disconnect Vibration: OFF",
+        bt_remotes_vibro_mode_labels[app->vibro_mode],
         BtRemotesSettingsIndexDisconnectVibro,
+        bt_remotes_scene_settings_submenu_cb,
+        app);
+
+    submenu_add_item(
+        app->submenu,
+        "Hide Remote Types",
+        BtRemotesSettingsIndexHideItems,
         bt_remotes_scene_settings_submenu_cb,
         app);
 
@@ -89,10 +104,12 @@ bool bt_remotes_scene_settings_on_event(void* context, SceneManagerEvent event) 
         if(event.event == BtRemotesSettingsIndexBluetoothName) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneRename);
         } else if(event.event == BtRemotesSettingsIndexDisconnectVibro) {
-            app->disconnect_vibro = !app->disconnect_vibro;
+            app->vibro_mode = (app->vibro_mode + 1) % 4;
             bt_remotes_save_app_cfg(app);
             build_settings_menu(app);
             submenu_set_selected_item(app->submenu, BtRemotesSettingsIndexDisconnectVibro);
+        } else if(event.event == BtRemotesSettingsIndexHideItems) {
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneHideItems);
         } else if(event.event == BtRemotesSettingsIndexRenameProfile) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneProfileRenameFile);
         } else if(event.event == BtRemotesSettingsIndexUnpair) {

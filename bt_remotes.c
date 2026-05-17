@@ -34,7 +34,12 @@ static void
 // ---------------------------------------------------------------------------
 
 void bt_remotes_load_app_cfg(Hid* app) {
-    app->disconnect_vibro = true; // default ON before reading cfg
+    app->vibro_mode = 1; // default: Disconnect
+    // menu_order and menu_hidden are per-profile — loaded by bt_remotes_profile_activate.
+    // Initialise to safe defaults here so the struct is never uninitialised.
+    for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) app->menu_order[i] = i;
+    app->menu_hidden = 0;
+    app->profile_order_str[0] = '\0'; // empty = no saved profile order
 
     FlipperFormat* fff = flipper_format_file_alloc(app->storage);
     FuriString* tmp = furi_string_alloc();
@@ -53,10 +58,21 @@ void bt_remotes_load_app_cfg(Hid* app) {
         } else {
             flipper_format_rewind(fff);
         }
-        // disconnect_vibro defaults to true if key is absent (old cfg files)
-        bool vibro = true;
-        if(flipper_format_read_bool(fff, "disconnect_vibro", &vibro, 1)) {
-            app->disconnect_vibro = vibro;
+        // vibro_mode: 0=Neither, 1=Disconnect, 2=Connect, 3=Both
+        // Old cfg files had "disconnect_vibro" bool — those won't parse as uint32,
+        // so we default to 1 (Disconnect) when the key is absent.
+        uint32_t vibro_mode_u32 = 1;
+        if(flipper_format_read_uint32(fff, "vibro_mode", &vibro_mode_u32, 1)) {
+            if(vibro_mode_u32 > 3) vibro_mode_u32 = 1;
+            app->vibro_mode = (uint8_t)vibro_mode_u32;
+        }
+        // Profile order: pipe-separated profile names
+        flipper_format_rewind(fff);
+        if(flipper_format_read_string(fff, "profile_order", tmp)) {
+            strlcpy(
+                app->profile_order_str,
+                furi_string_get_cstr(tmp),
+                sizeof(app->profile_order_str));
         }
     } while(0);
     furi_string_free(tmp);
@@ -69,7 +85,9 @@ void bt_remotes_save_app_cfg(Hid* app) {
         flipper_format_write_header_cstr(
             fff, BT_REMOTES_APP_CFG_FILE_TYPE, BT_REMOTES_APP_CFG_VERSION);
         flipper_format_write_string_cstr(fff, "default_name", app->default_ble_name);
-        flipper_format_write_bool(fff, "disconnect_vibro", &app->disconnect_vibro, 1);
+        uint32_t vibro_mode_u32 = app->vibro_mode;
+        flipper_format_write_uint32(fff, "vibro_mode", &vibro_mode_u32, 1);
+        flipper_format_write_string_cstr(fff, "profile_order", app->profile_order_str);
         flipper_format_file_close(fff);
     }
     flipper_format_free(fff);
@@ -112,6 +130,32 @@ void bt_hid_save_cfg(Hid* app) {
         flipper_format_file_close(fff);
     }
     flipper_format_free(fff);
+}
+
+// Write the complete profile .cfg (name + mac + menu_order + menu_hidden) for the active profile.
+// Also keeps .bt_hid.cfg in sync so bt_remotes_profile_save's key snapshot uses the right base.
+// No-op when no profile is active.
+void bt_remotes_save_profile_menu_cfg(Hid* app) {
+    if(app->active_profile[0] == '\0') return;
+
+    FuriString* path = furi_string_alloc_printf(
+        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
+
+    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
+    if(flipper_format_file_open_always(fff, furi_string_get_cstr(path))) {
+        flipper_format_write_header_cstr(fff, BT_REMOTES_CFG_FILE_TYPE, BT_REMOTES_CFG_VERSION);
+        flipper_format_write_string_cstr(fff, "name", app->ble_hid_cfg.name);
+        flipper_format_write_hex(fff, "mac", app->ble_hid_cfg.mac, BT_REMOTES_MAC_SIZE);
+        uint32_t order_u32[BT_REMOTES_MENU_ITEM_COUNT];
+        for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) order_u32[i] = app->menu_order[i];
+        flipper_format_write_uint32(fff, "menu_order", order_u32, BT_REMOTES_MENU_ITEM_COUNT);
+        uint32_t hidden_u32 = app->menu_hidden;
+        flipper_format_write_uint32(fff, "menu_hidden", &hidden_u32, 1);
+        flipper_format_file_close(fff);
+    }
+    flipper_format_free(fff);
+    furi_string_free(path);
+    FURI_LOG_D(TAG, "Profile menu cfg saved: %s", app->active_profile);
 }
 
 // ---------------------------------------------------------------------------
@@ -172,6 +216,55 @@ void bt_remotes_profile_load_list(Hid* app) {
         storage_dir_close(dir);
     }
     storage_file_free(dir);
+
+    bt_remotes_apply_profile_order(app);
+}
+
+// Reorder profile_list[] to match the saved pipe-separated profile_order_str.
+// Profiles not in the saved order are appended at the end (new profiles since last save).
+// Profiles in the saved order that no longer exist on disk are silently dropped.
+void bt_remotes_apply_profile_order(Hid* app) {
+    if(app->profile_order_str[0] == '\0' || app->profile_count == 0) return;
+
+    // Parse the saved order into a temporary name list
+    char ordered[BT_REMOTES_PROFILE_MAX_COUNT][BT_REMOTES_PROFILE_NAME_LEN];
+    uint8_t ordered_count = 0;
+    bool in_list[BT_REMOTES_PROFILE_MAX_COUNT];
+    memset(in_list, 0, sizeof(in_list));
+
+    // Work on a copy so strtok doesn't corrupt the struct field
+    char tmp[BT_REMOTES_PROFILE_MAX_COUNT * (BT_REMOTES_PROFILE_NAME_LEN + 1)];
+    strlcpy(tmp, app->profile_order_str, sizeof(tmp));
+
+    char* token = strtok(tmp, "|");
+    while(token && ordered_count < BT_REMOTES_PROFILE_MAX_COUNT) {
+        // Find this name in the current (disk-loaded) profile_list
+        for(uint8_t i = 0; i < app->profile_count; i++) {
+            if(!in_list[i] && strcmp(app->profile_list[i], token) == 0) {
+                strlcpy(
+                    ordered[ordered_count++], app->profile_list[i], BT_REMOTES_PROFILE_NAME_LEN);
+                in_list[i] = true;
+                break;
+            }
+        }
+        token = strtok(NULL, "|");
+    }
+
+    // Append any profiles not present in the saved order (newly created profiles)
+    for(uint8_t i = 0; i < app->profile_count && ordered_count < BT_REMOTES_PROFILE_MAX_COUNT;
+        i++) {
+        if(!in_list[i]) {
+            strlcpy(
+                ordered[ordered_count++], app->profile_list[i], BT_REMOTES_PROFILE_NAME_LEN);
+        }
+    }
+
+    // Write the sorted order back into profile_list
+    for(uint8_t i = 0; i < ordered_count; i++) {
+        strlcpy(app->profile_list[i], ordered[i], BT_REMOTES_PROFILE_NAME_LEN);
+    }
+    app->profile_count = ordered_count;
+    FURI_LOG_I(TAG, "Profile order applied: %u profiles", ordered_count);
 }
 
 bool bt_remotes_profile_create(Hid* app) {
@@ -231,19 +324,9 @@ bool bt_remotes_profile_save(Hid* app) {
         return false;
     }
 
-    // Also snapshot the current cfg (contains the device name) into the profile directory
-    // so that activating the profile later restores the name set via Rename.
-    FuriString* dst_cfg = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
-    storage_common_remove(app->storage, furi_string_get_cstr(dst_cfg));
-    FS_Error err_cfg =
-        storage_common_copy(app->storage, BT_REMOTES_CFG_PATH, furi_string_get_cstr(dst_cfg));
-    furi_string_free(dst_cfg);
-
-    if(err_cfg != FSE_OK) {
-        FURI_LOG_E(TAG, "Profile save (cfg) failed: %d", err_cfg);
-        return false;
-    }
+    // Snapshot the full profile cfg (name + mac + menu_order + menu_hidden) so that
+    // activating the profile later restores all settings, not just the BLE identity.
+    bt_remotes_save_profile_menu_cfg(app);
 
     FURI_LOG_I(TAG, "Profile saved: %s", app->active_profile);
     return true;
@@ -280,6 +363,40 @@ bool bt_remotes_profile_activate(Hid* app) {
         // MAC-only profile: clear stale bonding data so host must pair fresh
         storage_common_remove(app->storage, keys_path);
         ok = true;
+    }
+
+    // Load per-profile menu settings (menu_order, menu_hidden).
+    // These live in the profile .cfg — missing keys in old-format files get safe defaults.
+    {
+        for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) app->menu_order[i] = i;
+        app->menu_hidden = 0;
+
+        FlipperFormat* mfff = flipper_format_file_alloc(app->storage);
+        FuriString*    mtmp = furi_string_alloc();
+        uint32_t       mver = 0;
+        do {
+            if(!flipper_format_file_open_existing(mfff, furi_string_get_cstr(src_cfg))) break;
+            if(!flipper_format_read_header(mfff, mtmp, &mver)) break;
+
+            uint32_t order_u32[BT_REMOTES_MENU_ITEM_COUNT];
+            for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) order_u32[i] = i;
+            if(flipper_format_read_uint32(
+                   mfff, "menu_order", order_u32, BT_REMOTES_MENU_ITEM_COUNT)) {
+                for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) {
+                    app->menu_order[i] = (uint8_t)(
+                        order_u32[i] < BT_REMOTES_MENU_ITEM_COUNT ? order_u32[i] : i);
+                }
+            }
+            flipper_format_rewind(mfff);
+            uint32_t hidden_u32 = 0;
+            if(flipper_format_read_uint32(mfff, "menu_hidden", &hidden_u32, 1)) {
+                app->menu_hidden = (uint16_t)hidden_u32;
+                // Settings item must never be hidden
+                app->menu_hidden &= ~(uint16_t)(1u << (BT_REMOTES_MENU_ITEM_COUNT - 1));
+            }
+        } while(0);
+        furi_string_free(mtmp);
+        flipper_format_free(mfff);
     }
 
     furi_string_free(src_cfg);
@@ -355,13 +472,8 @@ bool bt_remotes_profile_reset(Hid* app) {
 
     bt_hid_save_cfg(app); // writes new MAC + existing name to .bt_hid.cfg
 
-    // Snapshot updated cfg into the profile directory
-    FuriString* dst_cfg = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
-    storage_common_remove(app->storage, furi_string_get_cstr(dst_cfg));
-    FS_Error err =
-        storage_common_copy(app->storage, BT_REMOTES_CFG_PATH, furi_string_get_cstr(dst_cfg));
-    furi_string_free(dst_cfg);
+    // Snapshot updated cfg (including menu_order + menu_hidden) into the profile directory
+    bt_remotes_save_profile_menu_cfg(app);
 
     // Wipe all bonding data so host must pair fresh
     FuriString* prof_keys = furi_string_alloc_printf(
@@ -370,12 +482,8 @@ bool bt_remotes_profile_reset(Hid* app) {
     furi_string_free(prof_keys);
     storage_common_remove(app->storage, APP_DATA_PATH(HID_BT_KEYS_STORAGE_NAME));
 
-    if(err == FSE_OK) {
-        FURI_LOG_I(TAG, "Profile reset: %s", app->active_profile);
-    } else {
-        FURI_LOG_E(TAG, "Profile reset cfg copy failed: %d", err);
-    }
-    return err == FSE_OK;
+    FURI_LOG_I(TAG, "Profile reset: %s", app->active_profile);
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -427,7 +535,11 @@ static void bt_remotes_connection_status_changed_callback(BtStatus status, void*
     const bool connected = (status == BtStatusConnected);
     notification_internal_message(
         hid->notifications, connected ? &sequence_set_blue_255 : &sequence_reset_blue);
-    if(!connected && hid->disconnect_vibro) {
+    if(connected && (hid->vibro_mode == 2 || hid->vibro_mode == 3)) {
+        // Connect or Both
+        notification_message(hid->notifications, &sequence_single_vibro);
+    } else if(!connected && (hid->vibro_mode == 1 || hid->vibro_mode == 3)) {
+        // Disconnect or Both
         notification_message(hid->notifications, &sequence_single_vibro);
     }
     if(connected && hid->active_profile[0] != '\0') {
@@ -566,6 +678,12 @@ static Hid* bt_remotes_alloc(void) {
     view_dispatcher_add_view(
         app->view_dispatcher, HidViewPushToTalk, hid_ptt_get_view(app->hid_ptt));
 
+    app->hid_remote_menu = hid_remote_menu_alloc();
+    view_dispatcher_add_view(
+        app->view_dispatcher,
+        HidViewRemoteMenu,
+        hid_remote_menu_get_view(app->hid_remote_menu));
+
     return app;
 }
 
@@ -610,6 +728,8 @@ static void bt_remotes_free(Hid* app) {
     hid_ptt_menu_free(app->hid_ptt_menu);
     view_dispatcher_remove_view(app->view_dispatcher, HidViewPushToTalk);
     hid_ptt_free(app->hid_ptt);
+    view_dispatcher_remove_view(app->view_dispatcher, HidViewRemoteMenu);
+    hid_remote_menu_free(app->hid_remote_menu);
     view_dispatcher_remove_view(app->view_dispatcher, BtHidViewTikTok);
     hid_tiktok_free(app->hid_tiktok);
 

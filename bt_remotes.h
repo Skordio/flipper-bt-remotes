@@ -19,6 +19,7 @@
 #include <gui/modules/dialog_ex.h>
 #include <gui/modules/popup.h>
 #include <gui/modules/text_input.h>
+#include "views/hid_remote_menu.h"
 #include "views/hid_keynote.h"
 #include "views/hid_keyboard.h"
 #include "views/hid_numpad.h"
@@ -40,6 +41,7 @@
 
 #define BT_REMOTES_PROFILE_NAME_LEN  32
 #define BT_REMOTES_PROFILE_MAX_COUNT 16
+#define BT_REMOTES_MENU_ITEM_COUNT   14
 
 #define BT_REMOTES_PROFILES_DIR APP_DATA_PATH("profiles")
 #define BT_REMOTES_CFG_PATH     APP_DATA_PATH(".bt_hid.cfg")
@@ -76,6 +78,7 @@ struct Hid {
     HidTikTok* hid_tiktok;
     HidPushToTalk* hid_ptt;
     HidPushToTalkMenu* hid_ptt_menu;
+    HidRemoteMenu* hid_remote_menu;
     // Profile management
     char active_profile[BT_REMOTES_PROFILE_NAME_LEN];
     char pending_name[BT_REMOTES_PROFILE_NAME_LEN]; // old name held during profile rename
@@ -83,7 +86,13 @@ struct Hid {
     char profile_list[BT_REMOTES_PROFILE_MAX_COUNT][BT_REMOTES_PROFILE_NAME_LEN];
     uint8_t profile_count;
     // App-level settings
-    bool disconnect_vibro; // whether to vibrate on BLE disconnect
+    // 0=Neither, 1=Disconnect, 2=Connect, 3=Both
+    uint8_t vibro_mode;
+    uint8_t  menu_order[BT_REMOTES_MENU_ITEM_COUNT]; // persistent visual order for Start menu
+    uint16_t menu_hidden; // bitmask: bit i set → BtRemotesStartIndex i hidden in Start menu
+    // Profile display order: profile names pipe-separated, loaded from app.cfg
+    // profile_list[] is reordered to match this on every profile_load_list call
+    char profile_order_str[BT_REMOTES_PROFILE_MAX_COUNT * (BT_REMOTES_PROFILE_NAME_LEN + 1)];
 };
 
 // BLE lifecycle
@@ -95,9 +104,16 @@ void bt_hid_remove_pairing(Hid* app);
 void bt_hid_save_cfg(Hid* app);
 void bt_remotes_profile_clear_pairing(Hid* app);
 
-// App-level config (default BT name)
+// App-level config (default BT name, vibro mode, profile order)
 void bt_remotes_load_app_cfg(Hid* app);
 void bt_remotes_save_app_cfg(Hid* app);
+
+// Write menu_order + menu_hidden into the active profile's .cfg (alongside name + mac).
+// No-op if no profile is active.  Call whenever order or visibility changes.
+void bt_remotes_save_profile_menu_cfg(Hid* app);
+
+// Reorder profile_list[] to match profile_order_str (call after bt_remotes_profile_load_list)
+void bt_remotes_apply_profile_order(Hid* app);
 
 // Profile operations
 void bt_remotes_profile_load_list(Hid* app);
@@ -107,6 +123,10 @@ bool bt_remotes_profile_activate(Hid* app);
 bool bt_remotes_profile_delete(Hid* app);
 bool bt_remotes_profile_rename(Hid* app);
 bool bt_remotes_profile_reset(Hid* app);
+
+// Default Start-menu item table — defined in bt_remotes_scene_start.c, shared with
+// bt_remotes_scene_hide_items.c.  Entry [i].index == i always (table is in enum order).
+extern const BtRemotesMenuEntry bt_remotes_menu_default[BT_REMOTES_MENU_ITEM_COUNT];
 
 // HAL
 void hid_hal_keyboard_press(Hid* instance, uint16_t event);
