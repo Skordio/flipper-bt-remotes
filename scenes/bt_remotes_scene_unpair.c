@@ -6,7 +6,7 @@ static void bt_remotes_scene_unpair_dialog_cb(DialogExResult result, void* conte
     Hid* app = context;
 
     if(result == DialogExResultRight) {
-        bt_hid_remove_pairing(app);
+        bt_remotes_profile_clear_pairing(app);
         view_dispatcher_switch_to_view(app->view_dispatcher, HidViewPopup);
     } else if(result == DialogExResultLeft) {
         scene_manager_previous_scene(app->scene_manager);

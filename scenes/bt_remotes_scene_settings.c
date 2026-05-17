@@ -4,6 +4,9 @@ enum BtRemotesSettingsIndex {
     BtRemotesSettingsIndexBluetoothName,
     BtRemotesSettingsIndexRenameProfile,
     BtRemotesSettingsIndexResetProfile,
+    BtRemotesSettingsIndexUnpair,
+    BtRemotesSettingsIndexSaveProfile,
+    BtRemotesSettingsIndexDeleteProfile,
 };
 
 static void bt_remotes_scene_settings_submenu_cb(void* context, uint32_t index) {
@@ -33,6 +36,24 @@ void bt_remotes_scene_settings_on_enter(void* context) {
             app->submenu,
             "Reset Profile",
             BtRemotesSettingsIndexResetProfile,
+            bt_remotes_scene_settings_submenu_cb,
+            app);
+        submenu_add_item(
+            app->submenu,
+            "Bluetooth Unpairing",
+            BtRemotesSettingsIndexUnpair,
+            bt_remotes_scene_settings_submenu_cb,
+            app);
+        submenu_add_item(
+            app->submenu,
+            "Save Profile",
+            BtRemotesSettingsIndexSaveProfile,
+            bt_remotes_scene_settings_submenu_cb,
+            app);
+        submenu_add_item(
+            app->submenu,
+            "Delete Profile",
+            BtRemotesSettingsIndexDeleteProfile,
             bt_remotes_scene_settings_submenu_cb,
             app);
     }
@@ -65,6 +86,12 @@ bool bt_remotes_scene_settings_on_event(void* context, SceneManagerEvent event) 
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneProfileRenameFile);
         } else if(event.event == BtRemotesSettingsIndexResetProfile) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneResetProfile);
+        } else if(event.event == BtRemotesSettingsIndexUnpair) {
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneUnpair);
+        } else if(event.event == BtRemotesSettingsIndexSaveProfile) {
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneSaveProfile);
+        } else if(event.event == BtRemotesSettingsIndexDeleteProfile) {
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneDeleteProfile);
         }
     }
 

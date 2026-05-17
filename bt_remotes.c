@@ -116,6 +116,21 @@ void bt_hid_remove_pairing(Hid* app) {
     furi_hal_bt_start_advertising();
 }
 
+// Clear pairing keys from disk without touching the BLE stack.
+// Safe to call when BLE is stopped (e.g. from inside the Settings scene).
+// After calling this, the next BLE start will advertise without bonding data
+// so the host must pair again.
+void bt_remotes_profile_clear_pairing(Hid* app) {
+    storage_common_remove(app->storage, APP_DATA_PATH(HID_BT_KEYS_STORAGE_NAME));
+    if(app->active_profile[0] != '\0') {
+        FuriString* prof_keys = furi_string_alloc_printf(
+            "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_KEYS_EXT);
+        storage_common_remove(app->storage, furi_string_get_cstr(prof_keys));
+        furi_string_free(prof_keys);
+        FURI_LOG_I(TAG, "Pairing cleared for profile: %s", app->active_profile);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Profile operations
 // ---------------------------------------------------------------------------

@@ -16,9 +16,6 @@ enum BtRemotesStartIndex {
     BtRemotesStartIndexMouseJigglerStealth,
     BtRemotesStartIndexPushToTalk,
     BtRemotesStartIndexSettings,
-    BtRemotesStartIndexRemovePairing,
-    BtRemotesStartIndexSaveProfile,
-    BtRemotesStartIndexDeleteProfile,
 };
 
 static void bt_remotes_scene_start_submenu_callback(void* context, uint32_t index) {
@@ -113,24 +110,6 @@ void bt_remotes_scene_start_on_enter(void* context) {
         BtRemotesStartIndexSettings,
         bt_remotes_scene_start_submenu_callback,
         app);
-    submenu_add_item(
-        app->submenu,
-        "Bluetooth Unpairing",
-        BtRemotesStartIndexRemovePairing,
-        bt_remotes_scene_start_submenu_callback,
-        app);
-    submenu_add_item(
-        app->submenu,
-        "Save Profile",
-        BtRemotesStartIndexSaveProfile,
-        bt_remotes_scene_start_submenu_callback,
-        app);
-    submenu_add_item(
-        app->submenu,
-        "Delete Profile",
-        BtRemotesStartIndexDeleteProfile,
-        bt_remotes_scene_start_submenu_callback,
-        app);
 
     submenu_set_selected_item(
         app->submenu,
@@ -156,15 +135,9 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
             app->scene_manager, BtRemotesSceneStart, event.event);
         consumed = true;
 
-        if(event.event == BtRemotesStartIndexRemovePairing) {
-            scene_manager_next_scene(app->scene_manager, BtRemotesSceneUnpair);
-        } else if(event.event == BtRemotesStartIndexSettings) {
+        if(event.event == BtRemotesStartIndexSettings) {
             bt_remotes_stop_ble(app);
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneSettings);
-        } else if(event.event == BtRemotesStartIndexSaveProfile) {
-            scene_manager_next_scene(app->scene_manager, BtRemotesSceneSaveProfile);
-        } else if(event.event == BtRemotesStartIndexDeleteProfile) {
-            scene_manager_next_scene(app->scene_manager, BtRemotesSceneDeleteProfile);
         } else {
             HidView view_id;
 
