@@ -20,6 +20,7 @@
 #include <gui/modules/popup.h>
 #include <gui/modules/text_input.h>
 #include "views/hid_remote_menu.h"
+#include "helpers/ducky_runner.h"
 #include "views/hid_keynote.h"
 #include "views/hid_keyboard.h"
 #include "views/hid_numpad.h"
@@ -41,7 +42,7 @@
 
 #define BT_REMOTES_PROFILE_NAME_LEN  32
 #define BT_REMOTES_PROFILE_MAX_COUNT 16
-#define BT_REMOTES_MENU_ITEM_COUNT   14
+#define BT_REMOTES_MENU_ITEM_COUNT   15
 
 #define BT_REMOTES_PROFILES_DIR APP_DATA_PATH("profiles")
 #define BT_REMOTES_CFG_PATH     APP_DATA_PATH(".bt_hid.cfg")
@@ -93,6 +94,11 @@ struct Hid {
     // Profile display order: profile names pipe-separated, loaded from app.cfg
     // profile_list[] is reordered to match this on every profile_load_list call
     char profile_order_str[BT_REMOTES_PROFILE_MAX_COUNT * (BT_REMOTES_PROFILE_NAME_LEN + 1)];
+    // Custom Actions / DuckyScript runner
+    DuckyRunner* ducky_runner;
+    char pending_script_path[256]; // full path to the selected .txt script
+    char ducky_script_names[DUCKY_MAX_SCRIPTS][DUCKY_SCRIPT_NAME_LEN]; // filenames (with .txt)
+    uint8_t ducky_script_count;
 };
 
 // BLE lifecycle

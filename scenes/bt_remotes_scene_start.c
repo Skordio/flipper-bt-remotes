@@ -20,6 +20,7 @@ enum BtRemotesStartIndex {
     BtRemotesStartIndexMouseJiggler,
     BtRemotesStartIndexMouseJigglerStealth,
     BtRemotesStartIndexPushToTalk,
+    BtRemotesStartIndexCustomActions,
     BtRemotesStartIndexSettings,
 };
 
@@ -42,6 +43,7 @@ const BtRemotesMenuEntry bt_remotes_menu_default[BT_REMOTES_MENU_ITEM_COUNT] = {
     {"Mouse Jiggler",         BtRemotesStartIndexMouseJiggler},
     {"Mouse Jiggler Stealth", BtRemotesStartIndexMouseJigglerStealth},
     {"PushToTalk",            BtRemotesStartIndexPushToTalk},
+    {"Custom Actions",        BtRemotesStartIndexCustomActions},
     {"Settings",              BtRemotesStartIndexSettings},
 };
 
@@ -134,6 +136,8 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
         if(event.event == BtRemotesStartIndexSettings) {
             bt_remotes_stop_ble(app);
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneSettings);
+        } else if(event.event == BtRemotesStartIndexCustomActions) {
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneCustomActions);
         } else {
             HidView view_id;
 
