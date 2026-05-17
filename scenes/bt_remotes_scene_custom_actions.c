@@ -32,10 +32,12 @@ static void bt_remotes_scene_custom_actions_scan(Hid* app) {
         size_t len = strlen(entry_name);
         if(len < 5 || strcmp(entry_name + len - 4, ".txt") != 0) continue;
 
+        // Store without the .txt extension so the menu label is clean
         strlcpy(
             app->ducky_script_names[app->ducky_script_count],
             entry_name,
             DUCKY_SCRIPT_NAME_LEN);
+        app->ducky_script_names[app->ducky_script_count][len - 4] = '\0';
         app->ducky_script_count++;
     }
 
@@ -58,11 +60,7 @@ void bt_remotes_scene_custom_actions_on_enter(void* context) {
                          bt_remotes_scene_custom_actions_cb, app);
     } else {
         for(uint8_t i = 0; i < app->ducky_script_count; i++) {
-            // Strip ".txt" extension for the label
-            char label[DUCKY_SCRIPT_NAME_LEN];
-            strlcpy(label, app->ducky_script_names[i], sizeof(label));
-            size_t len = strlen(label);
-            if(len > 4) label[len - 4] = '\0'; // remove ".txt"
+            // ducky_script_names stores names without .txt — safe to use as menu label
             submenu_add_item(app->submenu, app->ducky_script_names[i], i,
                              bt_remotes_scene_custom_actions_cb, app);
         }
@@ -87,11 +85,11 @@ bool bt_remotes_scene_custom_actions_on_event(void* context, SceneManagerEvent e
 
         scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneCustomActions, idx);
 
-        // Build the full path for the selected script
+        // Build the full path for the selected script (re-append .txt stripped during scan)
         snprintf(
             app->pending_script_path,
             sizeof(app->pending_script_path),
-            "%s/%s",
+            "%s/%s.txt",
             DUCKY_SCRIPT_DIR,
             app->ducky_script_names[idx]);
 

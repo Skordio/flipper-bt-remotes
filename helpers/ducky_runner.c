@@ -84,6 +84,7 @@ struct DuckyRunner {
     char                 path[256];
     char                 error[64];
     volatile DuckyRunnerState state;
+    volatile bool        user_stopped; // set by ducky_runner_stop() to suppress spurious Done event
     uint32_t             default_delay; // ms appended after each command
     uint32_t             string_delay;  // ms between chars in STRING
     DuckyRunnerCallback  callback;
@@ -326,7 +327,7 @@ static int32_t ducky_worker(void* context) {
     // Release any held keys
     ble_profile_hid_kb_release_all(runner->profile);
 
-    if(runner->state == DuckyRunnerStateRunning) {
+    if(runner->state == DuckyRunnerStateRunning && !runner->user_stopped) {
         runner->state = DuckyRunnerStateDone;
         if(runner->callback) runner->callback(runner->callback_context);
     }
@@ -362,9 +363,10 @@ bool ducky_runner_start(DuckyRunner* runner, FuriHalBleProfileBase* profile, con
 
     if(runner->state == DuckyRunnerStateRunning) return false;
 
-    runner->profile = profile;
+    runner->profile      = profile;
+    runner->user_stopped = false;
     strlcpy(runner->path, path, sizeof(runner->path));
-    runner->state = DuckyRunnerStateIdle;
+    runner->state    = DuckyRunnerStateIdle;
     runner->error[0] = '\0';
 
     if(runner->thread) {
@@ -380,6 +382,10 @@ bool ducky_runner_start(DuckyRunner* runner, FuriHalBleProfileBase* profile, con
 void ducky_runner_stop(DuckyRunner* runner) {
     furi_assert(runner);
     if(runner->thread == NULL) return;
+    // Set user_stopped BEFORE the stop flag so the worker sees it before it tries to fire
+    // the Done callback.  This prevents a spurious Done event from reaching the scene
+    // manager after the run scene has already been popped.
+    runner->user_stopped = true;
     furi_thread_flags_set(furi_thread_get_id(runner->thread), DUCKY_EVT_STOP);
     furi_thread_join(runner->thread);
     furi_thread_free(runner->thread);
