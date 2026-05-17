@@ -417,6 +417,9 @@ static void bt_remotes_connection_status_changed_callback(BtStatus status, void*
     const bool connected = (status == BtStatusConnected);
     notification_internal_message(
         hid->notifications, connected ? &sequence_set_blue_255 : &sequence_reset_blue);
+    if(!connected) {
+        notification_message(hid->notifications, &sequence_single_vibro);
+    }
     if(connected && hid->active_profile[0] != '\0') {
         bt_remotes_profile_save(hid);
     }

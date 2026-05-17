@@ -864,9 +864,7 @@ static void hid_ptt_process(HidPushToTalk* hid_ptt, InputEvent* event) {
                 }
             } else if(event->type == InputTypeLong && event->key == InputKeyRight) {
                 model->muted = !model->muted;
-                notification_message(hid_ptt->hid->notifications, &sequence_single_vibro);
             } else if(event->type == InputTypeLong && event->key == InputKeyLeft) {
-                notification_message(hid_ptt->hid->notifications, &sequence_single_vibro);
                 model->left_pressed = false;
                 view_dispatcher_switch_to_view(
                     hid_ptt->hid->view_dispatcher, HidViewPushToTalkHelp);
@@ -887,7 +885,6 @@ static bool hid_ptt_input_callback(InputEvent* event, void* context) {
     bool consumed = false;
     if(event->type == InputTypeLong && event->key == InputKeyBack) {
         hid_hal_keyboard_release_all(hid_ptt->hid);
-        notification_message(hid_ptt->hid->notifications, &sequence_double_vibro);
         widget_reset(hid_ptt->help);
     } else {
         consumed = true;
@@ -1163,9 +1160,6 @@ void hid_ptt_set_connected_status(HidPushToTalk* hid_ptt, bool connected) {
         hid_ptt->view,
         HidPushToTalkModel * model,
         {
-            if(!connected && model->connected) {
-                notification_message(hid_ptt->hid->notifications, &sequence_single_vibro);
-            }
             model->connected = connected;
         },
         true);
