@@ -542,7 +542,20 @@ static void bt_remotes_connection_status_changed_callback(BtStatus status, void*
         // Disconnect or Both
         notification_message(hid->notifications, &sequence_single_vibro);
     }
-    if(connected && hid->active_profile[0] != '\0') {
+    // Save on every status transition while a profile is active.
+    //
+    // On a *reconnect* the keys file already exists when BtStatusConnected fires,
+    // so the save succeeds there.
+    //
+    // On a *first-time pairing* the BLE link layer connects before SMP
+    // bonding completes, so BtStatusConnected fires before the keys file is
+    // written.  The second transition (connected → advertising, i.e. disconnect)
+    // fires after bonding is complete and the keys are on disk, so saving there
+    // catches the first-time case.
+    //
+    // bt_remotes_profile_save is a safe no-op (returns false immediately) when
+    // the keys file does not exist, so calling it unconditionally is harmless.
+    if(hid->active_profile[0] != '\0') {
         bt_remotes_profile_save(hid);
     }
     hid_keynote_set_connected_status(hid->hid_keynote, connected);
