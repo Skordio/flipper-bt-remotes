@@ -11,6 +11,7 @@ enum BtRemotesSettingsIndex {
     BtRemotesSettingsIndexBluetoothName,
     BtRemotesSettingsIndexDisconnectVibro,
     BtRemotesSettingsIndexHideItems,
+    BtRemotesSettingsIndexResetMenu,
     BtRemotesSettingsIndexRenameProfile,
     BtRemotesSettingsIndexUnpair,
     BtRemotesSettingsIndexSaveProfile,
@@ -48,6 +49,12 @@ static void build_settings_menu(Hid* app) {
         app);
 
     if(app->active_profile[0] != '\0') {
+        submenu_add_item(
+            app->submenu,
+            "Reset Menu Order",
+            BtRemotesSettingsIndexResetMenu,
+            bt_remotes_scene_settings_submenu_cb,
+            app);
         submenu_add_item(
             app->submenu,
             "Rename Profile",
@@ -110,6 +117,8 @@ bool bt_remotes_scene_settings_on_event(void* context, SceneManagerEvent event) 
             submenu_set_selected_item(app->submenu, BtRemotesSettingsIndexDisconnectVibro);
         } else if(event.event == BtRemotesSettingsIndexHideItems) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneHideItems);
+        } else if(event.event == BtRemotesSettingsIndexResetMenu) {
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneResetMenu);
         } else if(event.event == BtRemotesSettingsIndexRenameProfile) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneProfileRenameFile);
         } else if(event.event == BtRemotesSettingsIndexUnpair) {
