@@ -69,29 +69,48 @@ bool bt_remotes_scene_profile_new_on_event(void* context, SceneManagerEvent even
     if(event.type == SceneManagerEventTypeCustom) {
         consumed = true;
         if(event.event == BtRemotesProfileNewEventDone) {
-            bt_remotes_profile_create(app);
-
             popup_reset(app->popup);
-            popup_set_header(app->popup, "Profile Created!", 64, 10, AlignCenter, AlignTop);
-            popup_set_text(
-                app->popup,
-                "Starting BLE...\nPair your device\nwhen ready.",
-                64,
-                28,
-                AlignCenter,
-                AlignTop);
-            popup_set_timeout(app->popup, 2000);
+            if(bt_remotes_profile_create(app)) {
+                popup_set_header(app->popup, "Profile Created!", 64, 10, AlignCenter, AlignTop);
+                popup_set_text(
+                    app->popup,
+                    "Starting BLE...\nPair your device\nwhen ready.",
+                    64,
+                    28,
+                    AlignCenter,
+                    AlignTop);
+                popup_set_timeout(app->popup, 2000);
+            } else {
+                // Creation failed (storage error) — show error and let popup pop the scene
+                // without starting BLE or advancing to Start.
+                app->active_profile[0] = '\0';
+                popup_set_header(app->popup, "Error", 64, 10, AlignCenter, AlignTop);
+                popup_set_text(
+                    app->popup,
+                    "Could not create\nprofile. Check\nstorage.",
+                    64,
+                    28,
+                    AlignCenter,
+                    AlignTop);
+                popup_set_timeout(app->popup, 2500);
+            }
             popup_set_context(app->popup, app);
             popup_set_callback(app->popup, bt_remotes_scene_profile_new_popup_cb);
             popup_enable_timeout(app->popup);
             view_dispatcher_switch_to_view(app->view_dispatcher, HidViewPopup);
 
         } else if(event.event == BtRemotesProfileNewEventPopup) {
-            // Start BLE then pop back to profile_select, which detects ble_started
-            // and auto-advances to Start.
-            bt_remotes_start_ble(app);
-            scene_manager_search_and_switch_to_previous_scene(
-                app->scene_manager, BtRemotesSceneProfileSelect);
+            if(app->active_profile[0] != '\0') {
+                // Start BLE then pop back to profile_select, which detects ble_started
+                // and auto-advances to Start.
+                bt_remotes_start_ble(app);
+                scene_manager_search_and_switch_to_previous_scene(
+                    app->scene_manager, BtRemotesSceneProfileSelect);
+            } else {
+                // Creation failed — just go back to profile select without starting BLE.
+                scene_manager_search_and_switch_to_previous_scene(
+                    app->scene_manager, BtRemotesSceneProfileSelect);
+            }
         }
     }
 

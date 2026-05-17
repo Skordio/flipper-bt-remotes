@@ -76,6 +76,13 @@ bool bt_remotes_scene_profile_rename_file_on_event(void* context, SceneManagerEv
     Hid* app = context;
     bool consumed = false;
 
+    if(event.type == SceneManagerEventTypeBack) {
+        // Restore active_profile in case the user typed partial text before pressing Back.
+        // TextInput writes directly into the buffer, so we must recover the original name.
+        strlcpy(app->active_profile, app->pending_name, BT_REMOTES_PROFILE_NAME_LEN);
+        return false; // let scene manager pop the scene
+    }
+
     if(event.type == SceneManagerEventTypeCustom) {
         consumed = true;
         if(event.event == BtRemotesProfileRenameFileEventDone) {
