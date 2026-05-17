@@ -18,7 +18,6 @@ enum BtRemotesStartIndex {
     BtRemotesStartIndexSettings,
     BtRemotesStartIndexRemovePairing,
     BtRemotesStartIndexSaveProfile,
-    BtRemotesStartIndexSwitchProfile,
     BtRemotesStartIndexDeleteProfile,
 };
 
@@ -128,12 +127,6 @@ void bt_remotes_scene_start_on_enter(void* context) {
         app);
     submenu_add_item(
         app->submenu,
-        "Switch Profile",
-        BtRemotesStartIndexSwitchProfile,
-        bt_remotes_scene_start_submenu_callback,
-        app);
-    submenu_add_item(
-        app->submenu,
         "Delete Profile",
         BtRemotesStartIndexDeleteProfile,
         bt_remotes_scene_start_submenu_callback,
@@ -150,8 +143,11 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
     bool consumed = false;
 
     if(event.type == SceneManagerEventTypeBack) {
-        // Exit the app rather than looping back to profile select
-        view_dispatcher_stop(app->view_dispatcher);
+        // Stop BLE, clear the active profile, and return to profile select
+        bt_remotes_stop_ble(app);
+        app->active_profile[0] = '\0';
+        scene_manager_search_and_switch_to_previous_scene(
+            app->scene_manager, BtRemotesSceneProfileSelect);
         return true;
     }
 
@@ -167,10 +163,6 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneSettings);
         } else if(event.event == BtRemotesStartIndexSaveProfile) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneSaveProfile);
-        } else if(event.event == BtRemotesStartIndexSwitchProfile) {
-            bt_remotes_stop_ble(app);
-            scene_manager_search_and_switch_to_previous_scene(
-                app->scene_manager, BtRemotesSceneProfileSelect);
         } else if(event.event == BtRemotesStartIndexDeleteProfile) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneDeleteProfile);
         } else {
