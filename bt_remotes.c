@@ -7,20 +7,59 @@
 
 #define TAG "BtRemotes"
 
-#define BT_REMOTES_CFG_FILE_TYPE "Flipper BT Remote Settings File"
-#define BT_REMOTES_CFG_VERSION   (1)
-#define BT_REMOTES_MAC_SIZE      (6)
+#define BT_REMOTES_CFG_FILE_TYPE     "Flipper BT Remote Settings File"
+#define BT_REMOTES_CFG_VERSION       (1)
+#define BT_REMOTES_APP_CFG_FILE_TYPE "Flipper BT Remotes App Config"
+#define BT_REMOTES_APP_CFG_VERSION   (1)
+#define BT_REMOTES_MAC_SIZE          (6)
 
 // ---------------------------------------------------------------------------
 // Config helpers
 // ---------------------------------------------------------------------------
 
-static void bt_remotes_write_cfg(Hid* app, const char* path, uint8_t mac[BT_REMOTES_MAC_SIZE]) {
+static void
+    bt_remotes_write_cfg(Hid* app, const char* path, const char* name, uint8_t mac[BT_REMOTES_MAC_SIZE]) {
     FlipperFormat* fff = flipper_format_file_alloc(app->storage);
     if(flipper_format_file_open_always(fff, path)) {
         flipper_format_write_header_cstr(fff, BT_REMOTES_CFG_FILE_TYPE, BT_REMOTES_CFG_VERSION);
-        flipper_format_write_string_cstr(fff, "name", "");
+        flipper_format_write_string_cstr(fff, "name", name);
         flipper_format_write_hex(fff, "mac", mac, BT_REMOTES_MAC_SIZE);
+        flipper_format_file_close(fff);
+    }
+    flipper_format_free(fff);
+}
+
+// ---------------------------------------------------------------------------
+// App-level config (default BT name)
+// ---------------------------------------------------------------------------
+
+void bt_remotes_load_app_cfg(Hid* app) {
+    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
+    FuriString* tmp = furi_string_alloc();
+    uint32_t ver = 0;
+    do {
+        if(!flipper_format_file_open_existing(fff, BT_REMOTES_APP_CFG_PATH)) break;
+        if(!flipper_format_read_header(fff, tmp, &ver)) break;
+        if(strcmp(furi_string_get_cstr(tmp), BT_REMOTES_APP_CFG_FILE_TYPE) != 0 ||
+           ver != BT_REMOTES_APP_CFG_VERSION)
+            break;
+        if(flipper_format_read_string(fff, "default_name", tmp)) {
+            strlcpy(
+                app->default_ble_name,
+                furi_string_get_cstr(tmp),
+                sizeof(app->default_ble_name));
+        }
+    } while(0);
+    furi_string_free(tmp);
+    flipper_format_free(fff);
+}
+
+void bt_remotes_save_app_cfg(Hid* app) {
+    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
+    if(flipper_format_file_open_always(fff, BT_REMOTES_APP_CFG_PATH)) {
+        flipper_format_write_header_cstr(
+            fff, BT_REMOTES_APP_CFG_FILE_TYPE, BT_REMOTES_APP_CFG_VERSION);
+        flipper_format_write_string_cstr(fff, "default_name", app->default_ble_name);
         flipper_format_file_close(fff);
     }
     flipper_format_free(fff);
@@ -118,7 +157,7 @@ bool bt_remotes_profile_create(Hid* app) {
     furi_hal_random_fill_buf(mac, BT_REMOTES_MAC_SIZE);
     mac[5] |= 0xC0;
 
-    // Write profile cfg
+    // Write profile cfg — inherit the current default BT name
     FuriString* dst = furi_string_alloc_printf(
         "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
     bool ok = false;
@@ -126,7 +165,7 @@ bool bt_remotes_profile_create(Hid* app) {
     if(flipper_format_file_open_always(fff, furi_string_get_cstr(dst))) {
         ok = flipper_format_write_header_cstr(
                  fff, BT_REMOTES_CFG_FILE_TYPE, BT_REMOTES_CFG_VERSION) &&
-             flipper_format_write_string_cstr(fff, "name", "") &&
+             flipper_format_write_string_cstr(fff, "name", app->default_ble_name) &&
              flipper_format_write_hex(fff, "mac", mac, BT_REMOTES_MAC_SIZE);
         flipper_format_file_close(fff);
     }
@@ -134,8 +173,8 @@ bool bt_remotes_profile_create(Hid* app) {
     furi_string_free(dst);
 
     if(ok) {
-        // Push the new MAC into the active cfg so BLE starts with it
-        bt_remotes_write_cfg(app, BT_REMOTES_CFG_PATH, mac);
+        // Push the new MAC + default name into the active cfg so BLE starts with it
+        bt_remotes_write_cfg(app, BT_REMOTES_CFG_PATH, app->default_ble_name, mac);
         // Remove stale bonding data — new device will pair fresh
         storage_common_remove(app->storage, APP_DATA_PATH(HID_BT_KEYS_STORAGE_NAME));
         FURI_LOG_I(TAG, "Profile created: %s", app->active_profile);
@@ -573,6 +612,9 @@ int32_t bt_remotes_app(void* p) {
         APP_DATA_PATH(HID_BT_KEYS_STORAGE_NAME));
 
     storage_simply_mkdir(app->storage, BT_REMOTES_PROFILES_DIR);
+
+    // Load app-level config (default BT name for new profiles)
+    bt_remotes_load_app_cfg(app);
 
     dolphin_deed(DolphinDeedPluginStart);
 

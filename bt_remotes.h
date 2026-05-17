@@ -43,6 +43,7 @@
 
 #define BT_REMOTES_PROFILES_DIR APP_DATA_PATH("profiles")
 #define BT_REMOTES_CFG_PATH     APP_DATA_PATH(".bt_hid.cfg")
+#define BT_REMOTES_APP_CFG_PATH APP_DATA_PATH("app.cfg")
 #define BT_REMOTES_CFG_EXT      ".cfg"
 #define BT_REMOTES_KEYS_EXT     ".keys"
 
@@ -78,6 +79,7 @@ struct Hid {
     // Profile management
     char active_profile[BT_REMOTES_PROFILE_NAME_LEN];
     char pending_name[BT_REMOTES_PROFILE_NAME_LEN]; // old name held during profile rename
+    char default_ble_name[FURI_HAL_BT_ADV_NAME_LENGTH]; // default BT name applied to new profiles
     char profile_list[BT_REMOTES_PROFILE_MAX_COUNT][BT_REMOTES_PROFILE_NAME_LEN];
     uint8_t profile_count;
 };
@@ -89,6 +91,10 @@ void bt_remotes_stop_ble(Hid* app);
 // Config / pairing
 void bt_hid_remove_pairing(Hid* app);
 void bt_hid_save_cfg(Hid* app);
+
+// App-level config (default BT name)
+void bt_remotes_load_app_cfg(Hid* app);
+void bt_remotes_save_app_cfg(Hid* app);
 
 // Profile operations
 void bt_remotes_profile_load_list(Hid* app);
