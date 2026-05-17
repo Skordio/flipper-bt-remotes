@@ -41,14 +41,13 @@ static void build_settings_menu(Hid* app) {
         bt_remotes_scene_settings_submenu_cb,
         app);
 
-    submenu_add_item(
-        app->submenu,
-        "Hide Remote Types",
-        BtRemotesSettingsIndexHideItems,
-        bt_remotes_scene_settings_submenu_cb,
-        app);
-
     if(app->active_profile[0] != '\0') {
+        submenu_add_item(
+            app->submenu,
+            "Hide Remote Types",
+            BtRemotesSettingsIndexHideItems,
+            bt_remotes_scene_settings_submenu_cb,
+            app);
         submenu_add_item(
             app->submenu,
             "Reset Menu Order",
