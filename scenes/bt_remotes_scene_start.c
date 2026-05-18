@@ -61,10 +61,14 @@ static void bt_remotes_start_select_cb(void* context, uint8_t index_value) {
 static void
     bt_remotes_start_reorder_cb(void* context, const uint8_t* new_order, uint8_t count) {
     Hid* app = context;
-    // Rebuild menu_order: visible items in their new order first, then hidden items appended
+    // new_order contains a mix of fixed item indices (0..BT_REMOTES_MENU_ITEM_COUNT-1) and
+    // active custom remote indices (BT_REMOTES_MENU_ITEM_COUNT+).
+    // Only fixed item positions are persisted; custom remote positions are session-only.
     uint8_t k = 0;
     for(uint8_t i = 0; i < count && k < BT_REMOTES_MENU_ITEM_COUNT; i++) {
-        app->menu_order[k++] = new_order[i];
+        if(new_order[i] < BT_REMOTES_MENU_ITEM_COUNT) {
+            app->menu_order[k++] = new_order[i];
+        }
     }
     // Append hidden items in natural enum order so they're easy to find later
     for(uint8_t idx = 0;
@@ -80,6 +84,11 @@ static void
 // ---------------------------------------------------------------------------
 // Scene handlers
 // ---------------------------------------------------------------------------
+
+// Starred label buffers for active custom remotes — valid while Start is the active scene.
+// Each entry holds "*{name}\0".  BT_REMOTES_CUSTOM_REMOTE_NAME_LEN includes the NUL,
+// so +1 extra byte covers the '*' prefix.
+static char s_cr_labels[BT_REMOTES_CUSTOM_REMOTE_MAX][BT_REMOTES_CUSTOM_REMOTE_NAME_LEN + 1];
 
 // Remove any names from active_custom_remotes[] that no longer have a .remote file.
 // Persists the updated list if anything was pruned.
@@ -117,8 +126,9 @@ void bt_remotes_scene_start_on_enter(void* context) {
     // Drop any active-remote entries whose .remote files no longer exist
     bt_remotes_start_filter_active_remotes(app);
 
-    // Build combined table: reorderable fixed items first, then non-reorderable active
-    // custom remotes appended at the end.
+    // Build combined table: fixed items first (in saved order), then active custom remotes.
+    // All entries are fully reorderable (fixed_count = 0).
+    // Custom remotes appear with a '*' prefix so they're visually distinct.
     BtRemotesMenuEntry all_entries[BT_REMOTES_MENU_ITEM_COUNT + BT_REMOTES_CUSTOM_REMOTE_MAX];
     uint8_t            all_order[BT_REMOTES_MENU_ITEM_COUNT + BT_REMOTES_CUSTOM_REMOTE_MAX];
     uint8_t            total = 0;
@@ -132,11 +142,9 @@ void bt_remotes_scene_start_on_enter(void* context) {
         total++;
     }
 
-    uint8_t reorderable_count = total; // active custom remotes are NOT reorderable
-
     for(uint8_t i = 0; i < app->active_custom_remote_count; i++) {
-        // app->active_custom_remotes[i] is app-lifetime storage — safe as label pointer
-        all_entries[total].label = app->active_custom_remotes[i];
+        snprintf(s_cr_labels[i], sizeof(s_cr_labels[i]), "*%s", app->active_custom_remotes[i]);
+        all_entries[total].label = s_cr_labels[i];
         all_entries[total].index = (uint8_t)(BT_REMOTES_MENU_ITEM_COUNT + i);
         all_order[total]         = (uint8_t)(BT_REMOTES_MENU_ITEM_COUNT + i);
         total++;
@@ -147,7 +155,7 @@ void bt_remotes_scene_start_on_enter(void* context) {
         all_entries,
         all_order,
         total,
-        total - reorderable_count); // fixed_count = number of pinned items at the end
+        0); // fixed_count = 0: all items are fully reorderable
     hid_remote_menu_set_select_callback(app->hid_remote_menu, bt_remotes_start_select_cb, app);
     hid_remote_menu_set_reorder_callback(
         app->hid_remote_menu, bt_remotes_start_reorder_cb, app);
