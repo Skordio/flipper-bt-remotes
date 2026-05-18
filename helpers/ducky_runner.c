@@ -9,8 +9,10 @@
 // Worker thread stop flag
 #define DUCKY_EVT_STOP (1u << 0)
 
-// Maximum characters per script line
-#define DUCKY_LINE_MAX 512
+// Maximum characters per script line.
+// 256 covers all realistic DuckyScript lines (long STRING payloads included)
+// while keeping two instances of this buffer within the 2048-byte thread stack.
+#define DUCKY_LINE_MAX 256
 
 // ---------------------------------------------------------------------------
 // Key lookup tables
