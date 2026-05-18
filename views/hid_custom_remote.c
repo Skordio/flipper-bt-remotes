@@ -8,6 +8,13 @@
 // Short-label length: 8 chars + NUL.  At ~6 px/char this fits in ~50 px per column.
 #define HID_CR_LABEL_LEN 9
 
+// Single definition of the labels table (declared extern in the header).
+const char* const custom_remote_input_labels[CustomRemoteInputCount] = {
+    "Tap Up",   "Tap Down", "Tap Left", "Tap Right",
+    "Hold Up",  "Hold Down","Hold Left","Hold Right",
+    "Tap OK",   "Hold OK",  "Tap Back",
+};
+
 typedef struct {
     char remote_name[BT_REMOTES_CUSTOM_REMOTE_NAME_LEN];
     // Pre-computed display stems for each input slot
@@ -21,18 +28,19 @@ struct HidCustomRemote {
 };
 
 // ---------------------------------------------------------------------------
-// Helper: extract filename stem from a full path, truncate to HID_CR_LABEL_LEN-1 chars.
-// Empty path → "-".
+// Shared stem extractor — declared in hid_custom_remote.h.
+// Extracts the filename stem from a full path, truncated to out_size-1 chars.
+// Empty/NULL path → "-".
 // ---------------------------------------------------------------------------
 
-static void cr_stem(const char* path, char* out, size_t out_size) {
+void hid_custom_remote_stem(const char* path, char* out, size_t out_size) {
     if(!path || path[0] == '\0') {
         strlcpy(out, "-", out_size);
         return;
     }
     const char* base = strrchr(path, '/');
     base = base ? base + 1 : path;
-    strlcpy(out, base, out_size); // auto-truncates
+    strlcpy(out, base, out_size); // auto-truncates to out_size-1
     char* dot = strrchr(out, '.');
     if(dot) *dot = '\0';
     if(out[0] == '\0') strlcpy(out, "-", out_size);
@@ -148,10 +156,15 @@ static bool hid_custom_remote_input_cb(InputEvent* event, void* context) {
     }
 
     if(valid && cr->callback) {
-        cr->callback(cr->callback_context, slot);
+        bool handled = cr->callback(cr->callback_context, slot);
+        // For Short Back specifically: if the callback returned false (slot unassigned),
+        // propagate the event so the scene manager pops the scene.
+        if(!handled && slot == CustomRemoteInputTapBack) {
+            return false;
+        }
     }
 
-    return true; // always consume (the scene decides whether to act)
+    return true; // consume all other inputs regardless of assignment
 }
 
 // ---------------------------------------------------------------------------
@@ -202,7 +215,7 @@ void hid_custom_remote_set_remote(HidCustomRemote* cr, const CustomRemoteDef* de
         {
             strlcpy(model->remote_name, def->name, sizeof(model->remote_name));
             for(uint8_t i = 0; i < CustomRemoteInputCount; i++) {
-                cr_stem(def->scripts[i], model->short_labels[i], HID_CR_LABEL_LEN);
+                hid_custom_remote_stem(def->scripts[i], model->short_labels[i], HID_CR_LABEL_LEN);
             }
         },
         true);

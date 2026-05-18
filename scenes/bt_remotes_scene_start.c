@@ -81,11 +81,41 @@ static void
 // Scene handlers
 // ---------------------------------------------------------------------------
 
+// Remove any names from active_custom_remotes[] that no longer have a .remote file.
+// Persists the updated list if anything was pruned.
+static void bt_remotes_start_filter_active_remotes(Hid* app) {
+    uint8_t new_count = 0;
+    for(uint8_t i = 0; i < app->active_custom_remote_count; i++) {
+        bool found = false;
+        for(uint8_t j = 0; j < app->custom_remote_count; j++) {
+            if(strcmp(app->active_custom_remotes[i], app->custom_remote_names[j]) == 0) {
+                found = true;
+                break;
+            }
+        }
+        if(found) {
+            if(new_count != i) {
+                strlcpy(
+                    app->active_custom_remotes[new_count],
+                    app->active_custom_remotes[i],
+                    BT_REMOTES_CUSTOM_REMOTE_NAME_LEN);
+            }
+            new_count++;
+        }
+    }
+    if(new_count != app->active_custom_remote_count) {
+        app->active_custom_remote_count = new_count;
+        bt_remotes_active_remotes_save(app);
+    }
+}
+
 void bt_remotes_scene_start_on_enter(void* context) {
     Hid* app = context;
 
     // Refresh custom remote list and active state (may have changed while in sub-scenes)
     bt_remotes_custom_remote_load_list(app);
+    // Drop any active-remote entries whose .remote files no longer exist
+    bt_remotes_start_filter_active_remotes(app);
 
     // Build combined table: reorderable fixed items first, then non-reorderable active
     // custom remotes appended at the end.

@@ -23,12 +23,9 @@ typedef enum {
     CustomRemoteInputCount, // sentinel — always 11
 } CustomRemoteInputSlot;
 
-// Human-readable labels for the edit screen (indexed by CustomRemoteInputSlot)
-static const char* const custom_remote_input_labels[CustomRemoteInputCount] = {
-    "Tap Up",   "Tap Down", "Tap Left", "Tap Right",
-    "Hold Up",  "Hold Down","Hold Left","Hold Right",
-    "Tap OK",   "Hold OK",  "Tap Back",
-};
+// Human-readable labels for the edit screen (indexed by CustomRemoteInputSlot).
+// Defined once in hid_custom_remote.c; use this extern declaration everywhere else.
+extern const char* const custom_remote_input_labels[CustomRemoteInputCount];
 
 // ---------------------------------------------------------------------------
 // Remote definition — stored in/loaded from .remote files
@@ -50,7 +47,14 @@ typedef struct HidCustomRemote HidCustomRemote;
 
 // Callback fired when the user presses a mapped input (short-press or long-press).
 // Long Back is NOT fired — it exits the view instead.
-typedef void (*HidCustomRemoteCallback)(void* context, CustomRemoteInputSlot slot);
+// Returns true if the event was handled (script ran), false if the slot is unassigned.
+// For Short Back specifically, returning false causes the view to propagate the event
+// so the scene manager can pop the scene (i.e. unassigned TapBack exits the view).
+typedef bool (*HidCustomRemoteCallback)(void* context, CustomRemoteInputSlot slot);
+
+// Extract the filename stem from a full path into out (truncated to out_size-1).
+// Empty path → "-".  Shared with edit scene to avoid duplication.
+void hid_custom_remote_stem(const char* path, char* out, size_t out_size);
 
 HidCustomRemote* hid_custom_remote_alloc(void);
 void             hid_custom_remote_free(HidCustomRemote* view);

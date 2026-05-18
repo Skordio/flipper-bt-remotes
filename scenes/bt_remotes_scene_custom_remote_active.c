@@ -78,8 +78,10 @@ bool bt_remotes_scene_custom_remote_active_on_event(void* context, SceneManagerE
 
         bt_remotes_active_remotes_save(app);
 
-        // Rebuild submenu in-place to reflect the new state
+        // Rebuild submenu in-place to reflect the new state, then restore the cursor
+        // to the item that was just toggled so the user can toggle more without scrolling.
         build_active_submenu(app);
+        submenu_set_selected_item(app->submenu, (uint32_t)event.event);
         return true;
     }
     return false;

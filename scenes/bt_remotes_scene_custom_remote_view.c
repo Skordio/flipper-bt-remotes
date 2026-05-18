@@ -5,10 +5,10 @@
 // View callback — fired when the user presses a mapped button
 // ---------------------------------------------------------------------------
 
-static void cr_view_input_cb(void* context, CustomRemoteInputSlot slot) {
+static bool cr_view_input_cb(void* context, CustomRemoteInputSlot slot) {
     Hid* app = context;
-    // Only act if a script is assigned to this slot
-    if(app->editing_remote.scripts[slot][0] == '\0') return;
+    // If no script is assigned, return false so the view can decide whether to propagate.
+    if(app->editing_remote.scripts[slot][0] == '\0') return false;
 
     strlcpy(
         app->pending_script_path,
@@ -16,6 +16,7 @@ static void cr_view_input_cb(void* context, CustomRemoteInputSlot slot) {
         sizeof(app->pending_script_path));
     // Use slot as the custom event value; scene converts it to a script run
     view_dispatcher_send_custom_event(app->view_dispatcher, (uint32_t)slot);
+    return true;
 }
 
 // ---------------------------------------------------------------------------
