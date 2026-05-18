@@ -20,4 +20,5 @@ typedef enum {
     HidViewDialog,
     HidViewPopup,
     HidViewTextInput,
+    HidViewFileBrowser,
 } HidView;

@@ -6,12 +6,6 @@
 // Base directory on the SD card where BadKB/BadUSB scripts live
 #define DUCKY_SCRIPT_DIR EXT_PATH("badusb")
 
-// Maximum number of scripts shown in the Custom Actions list
-#define DUCKY_MAX_SCRIPTS 32
-
-// Maximum length of a script filename (without path, including NUL)
-#define DUCKY_SCRIPT_NAME_LEN 64
-
 typedef enum {
     DuckyRunnerStateIdle,
     DuckyRunnerStateRunning,

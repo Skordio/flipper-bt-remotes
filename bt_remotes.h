@@ -19,6 +19,7 @@
 #include <gui/modules/dialog_ex.h>
 #include <gui/modules/popup.h>
 #include <gui/modules/text_input.h>
+#include <gui/modules/file_browser.h>
 #include "views/hid_remote_menu.h"
 #include "helpers/ducky_runner.h"
 #include "views/hid_keynote.h"
@@ -94,11 +95,11 @@ struct Hid {
     // Profile display order: profile names pipe-separated, loaded from app.cfg
     // profile_list[] is reordered to match this on every profile_load_list call
     char profile_order_str[BT_REMOTES_PROFILE_MAX_COUNT * (BT_REMOTES_PROFILE_NAME_LEN + 1)];
-    // Custom Actions / DuckyScript runner
+    // Ducky Scripts / file browser
+    FileBrowser* file_browser;
+    FuriString*  file_browser_result; // receives the selected file path
     DuckyRunner* ducky_runner;
-    char pending_script_path[256]; // full path to the selected .txt script
-    char ducky_script_names[DUCKY_MAX_SCRIPTS][DUCKY_SCRIPT_NAME_LEN]; // filenames (with .txt)
-    uint8_t ducky_script_count;
+    char pending_script_path[256]; // full path to the selected .txt script, copied from result
 };
 
 // BLE lifecycle

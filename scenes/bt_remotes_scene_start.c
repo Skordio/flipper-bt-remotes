@@ -43,7 +43,7 @@ const BtRemotesMenuEntry bt_remotes_menu_default[BT_REMOTES_MENU_ITEM_COUNT] = {
     {"Mouse Jiggler",         BtRemotesStartIndexMouseJiggler},
     {"Mouse Jiggler Stealth", BtRemotesStartIndexMouseJigglerStealth},
     {"PushToTalk",            BtRemotesStartIndexPushToTalk},
-    {"Custom Actions",        BtRemotesStartIndexCustomActions},
+    {"Ducky Scripts",         BtRemotesStartIndexCustomActions},
     {"Settings",              BtRemotesStartIndexSettings},
 };
 

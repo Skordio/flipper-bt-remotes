@@ -697,6 +697,13 @@ static Hid* bt_remotes_alloc(void) {
         HidViewRemoteMenu,
         hid_remote_menu_get_view(app->hid_remote_menu));
 
+    app->file_browser_result = furi_string_alloc();
+    app->file_browser        = file_browser_alloc(app->file_browser_result);
+    view_dispatcher_add_view(
+        app->view_dispatcher,
+        HidViewFileBrowser,
+        file_browser_get_view(app->file_browser));
+
     app->ducky_runner = ducky_runner_alloc();
 
     return app;
@@ -747,6 +754,9 @@ static void bt_remotes_free(Hid* app) {
     hid_remote_menu_free(app->hid_remote_menu);
     view_dispatcher_remove_view(app->view_dispatcher, BtHidViewTikTok);
     hid_tiktok_free(app->hid_tiktok);
+    view_dispatcher_remove_view(app->view_dispatcher, HidViewFileBrowser);
+    file_browser_free(app->file_browser);
+    furi_string_free(app->file_browser_result);
     ducky_runner_free(app->ducky_runner);
 
     scene_manager_free(app->scene_manager);
