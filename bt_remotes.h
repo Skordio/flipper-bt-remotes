@@ -45,6 +45,8 @@
 #define BT_REMOTES_PROFILE_NAME_LEN  32
 #define BT_REMOTES_PROFILE_MAX_COUNT 16
 #define BT_REMOTES_MENU_ITEM_COUNT   16   // 15 built-in remotes + Custom Remotes hub
+// Total slots in menu_order[]: fixed items + custom remote slots (for interleaved ordering).
+#define BT_REMOTES_MENU_ORDER_LEN    (BT_REMOTES_MENU_ITEM_COUNT + BT_REMOTES_CUSTOM_REMOTE_MAX)
 
 #define BT_REMOTES_PROFILES_DIR APP_DATA_PATH("profiles")
 #define BT_REMOTES_CFG_PATH     APP_DATA_PATH(".bt_hid.cfg")
@@ -97,7 +99,10 @@ struct Hid {
     // App-level settings
     // 0=Neither, 1=Disconnect, 2=Connect, 3=Both
     uint8_t vibro_mode;
-    uint8_t  menu_order[BT_REMOTES_MENU_ITEM_COUNT]; // persistent visual order for Start menu
+    // Persistent visual order for the Start menu.  Slots 0‥15 hold fixed-item indices (0‥15);
+    // slots 16‥31 hold custom-remote slot indices (BT_REMOTES_MENU_ITEM_COUNT + cr_position).
+    // 0xFF is a sentinel meaning "not placed" (custom remote slots not yet interleaved).
+    uint8_t  menu_order[BT_REMOTES_MENU_ORDER_LEN];
     uint32_t menu_hidden; // bitmask: bit i set → BtRemotesStartIndex i hidden in Start menu
     // Profile display order: profile names pipe-separated, loaded from app.cfg
     // profile_list[] is reordered to match this on every profile_load_list call

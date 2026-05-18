@@ -61,18 +61,15 @@ static void bt_remotes_start_select_cb(void* context, uint8_t index_value) {
 static void
     bt_remotes_start_reorder_cb(void* context, const uint8_t* new_order, uint8_t count) {
     Hid* app = context;
-    // new_order contains a mix of fixed item indices (0..BT_REMOTES_MENU_ITEM_COUNT-1) and
-    // active custom remote indices (BT_REMOTES_MENU_ITEM_COUNT+).
-    // Only fixed item positions are persisted; custom remote positions are session-only.
+    // Save the full interleaved order (fixed items 0‥15 and custom-remote slots 16‥31).
+    // Hidden fixed items are appended at the end so they can be found when un-hidden.
+    for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) app->menu_order[i] = 0xFF;
     uint8_t k = 0;
-    for(uint8_t i = 0; i < count && k < BT_REMOTES_MENU_ITEM_COUNT; i++) {
-        if(new_order[i] < BT_REMOTES_MENU_ITEM_COUNT) {
-            app->menu_order[k++] = new_order[i];
-        }
+    for(uint8_t i = 0; i < count && k < BT_REMOTES_MENU_ORDER_LEN; i++) {
+        app->menu_order[k++] = new_order[i];
     }
-    // Append hidden items in natural enum order so they're easy to find later
     for(uint8_t idx = 0;
-        idx < BT_REMOTES_MENU_ITEM_COUNT && k < BT_REMOTES_MENU_ITEM_COUNT;
+        idx < BT_REMOTES_MENU_ITEM_COUNT && k < BT_REMOTES_MENU_ORDER_LEN;
         idx++) {
         if(app->menu_hidden & (1u << idx)) {
             app->menu_order[k++] = idx;
@@ -126,27 +123,49 @@ void bt_remotes_scene_start_on_enter(void* context) {
     // Drop any active-remote entries whose .remote files no longer exist
     bt_remotes_start_filter_active_remotes(app);
 
-    // Build combined table: fixed items first (in saved order), then active custom remotes.
-    // All entries are fully reorderable (fixed_count = 0).
-    // Custom remotes appear with a '*' prefix so they're visually distinct.
-    BtRemotesMenuEntry all_entries[BT_REMOTES_MENU_ITEM_COUNT + BT_REMOTES_CUSTOM_REMOTE_MAX];
-    uint8_t            all_order[BT_REMOTES_MENU_ITEM_COUNT + BT_REMOTES_CUSTOM_REMOTE_MAX];
+    // Build the combined table from menu_order[], which now holds the full interleaved
+    // sequence of fixed items (0‥15) and custom-remote slots (16‥31), with 0xFF sentinels
+    // for any unused trailing slots.  Custom remotes not yet placed in menu_order are
+    // appended at the end so newly-activated remotes always appear.
+    BtRemotesMenuEntry all_entries[BT_REMOTES_MENU_ORDER_LEN];
+    uint8_t            all_order[BT_REMOTES_MENU_ORDER_LEN];
     uint8_t            total = 0;
+    bool               cr_placed[BT_REMOTES_CUSTOM_REMOTE_MAX] = {false};
 
-    for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) {
-        uint8_t idx = app->menu_order[i];
-        if(idx >= BT_REMOTES_MENU_ITEM_COUNT) continue; // safety
-        if(app->menu_hidden & (1u << idx)) continue;     // skip hidden
-        all_entries[total] = bt_remotes_menu_default[idx];
-        all_order[total]   = idx;
-        total++;
+    for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) {
+        uint8_t slot = app->menu_order[i];
+        if(slot == 0xFF) continue; // empty sentinel
+
+        if(slot < BT_REMOTES_MENU_ITEM_COUNT) {
+            // Fixed item
+            if(app->menu_hidden & (1u << slot)) continue;
+            all_entries[total] = bt_remotes_menu_default[slot];
+            all_order[total]   = slot;
+            total++;
+        } else {
+            // Custom remote slot — valid only while that cr_idx < active count
+            uint8_t cr_idx = slot - BT_REMOTES_MENU_ITEM_COUNT;
+            if(cr_idx >= app->active_custom_remote_count) continue;
+            snprintf(
+                s_cr_labels[cr_idx], sizeof(s_cr_labels[cr_idx]),
+                "*%s", app->active_custom_remotes[cr_idx]);
+            all_entries[total].label = s_cr_labels[cr_idx];
+            all_entries[total].index = slot;
+            all_order[total]         = slot;
+            total++;
+            cr_placed[cr_idx] = true;
+        }
     }
 
+    // Append any active custom remotes that weren't placed in menu_order yet
+    // (e.g. newly activated since the last save).
     for(uint8_t i = 0; i < app->active_custom_remote_count; i++) {
+        if(cr_placed[i]) continue;
+        uint8_t slot = (uint8_t)(BT_REMOTES_MENU_ITEM_COUNT + i);
         snprintf(s_cr_labels[i], sizeof(s_cr_labels[i]), "*%s", app->active_custom_remotes[i]);
         all_entries[total].label = s_cr_labels[i];
-        all_entries[total].index = (uint8_t)(BT_REMOTES_MENU_ITEM_COUNT + i);
-        all_order[total]         = (uint8_t)(BT_REMOTES_MENU_ITEM_COUNT + i);
+        all_entries[total].index = slot;
+        all_order[total]         = slot;
         total++;
     }
 

@@ -38,6 +38,8 @@ void bt_remotes_load_app_cfg(Hid* app) {
     // menu_order and menu_hidden are per-profile — loaded by bt_remotes_profile_activate.
     // Initialise to safe defaults here so the struct is never uninitialised.
     for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) app->menu_order[i] = i;
+    for(uint8_t i = BT_REMOTES_MENU_ITEM_COUNT; i < BT_REMOTES_MENU_ORDER_LEN; i++)
+        app->menu_order[i] = 0xFF; // sentinel: custom-remote slot not yet placed
     app->menu_hidden = 0;
     app->profile_order_str[0] = '\0'; // empty = no saved profile order
 
@@ -146,9 +148,9 @@ void bt_remotes_save_profile_menu_cfg(Hid* app) {
         flipper_format_write_header_cstr(fff, BT_REMOTES_CFG_FILE_TYPE, BT_REMOTES_CFG_VERSION);
         flipper_format_write_string_cstr(fff, "name", app->ble_hid_cfg.name);
         flipper_format_write_hex(fff, "mac", app->ble_hid_cfg.mac, BT_REMOTES_MAC_SIZE);
-        uint32_t order_u32[BT_REMOTES_MENU_ITEM_COUNT];
-        for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) order_u32[i] = app->menu_order[i];
-        flipper_format_write_uint32(fff, "menu_order", order_u32, BT_REMOTES_MENU_ITEM_COUNT);
+        uint32_t order_u32[BT_REMOTES_MENU_ORDER_LEN];
+        for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) order_u32[i] = app->menu_order[i];
+        flipper_format_write_uint32(fff, "menu_order", order_u32, BT_REMOTES_MENU_ORDER_LEN);
         uint32_t hidden_u32 = app->menu_hidden;
         flipper_format_write_uint32(fff, "menu_hidden", &hidden_u32, 1);
         flipper_format_file_close(fff);
@@ -368,7 +370,10 @@ bool bt_remotes_profile_activate(Hid* app) {
     // Load per-profile menu settings (menu_order, menu_hidden).
     // These live in the profile .cfg — missing keys in old-format files get safe defaults.
     {
+        // Safe defaults: fixed items in natural order, custom-remote slots empty.
         for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) app->menu_order[i] = i;
+        for(uint8_t i = BT_REMOTES_MENU_ITEM_COUNT; i < BT_REMOTES_MENU_ORDER_LEN; i++)
+            app->menu_order[i] = 0xFF;
         app->menu_hidden = 0;
 
         FlipperFormat* mfff = flipper_format_file_alloc(app->storage);
@@ -378,14 +383,28 @@ bool bt_remotes_profile_activate(Hid* app) {
             if(!flipper_format_file_open_existing(mfff, furi_string_get_cstr(src_cfg))) break;
             if(!flipper_format_read_header(mfff, mtmp, &mver)) break;
 
-            uint32_t order_u32[BT_REMOTES_MENU_ITEM_COUNT];
-            for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) order_u32[i] = i;
+            // Try the new 32-entry format first; fall back to the old 16-entry format.
+            uint32_t order_u32[BT_REMOTES_MENU_ORDER_LEN];
+            for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) order_u32[i] = 0xFF;
             if(flipper_format_read_uint32(
-                   mfff, "menu_order", order_u32, BT_REMOTES_MENU_ITEM_COUNT)) {
-                for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) {
-                    app->menu_order[i] = (uint8_t)(
-                        order_u32[i] < BT_REMOTES_MENU_ITEM_COUNT ? order_u32[i] : i);
+                   mfff, "menu_order", order_u32, BT_REMOTES_MENU_ORDER_LEN)) {
+                // New format: validate and copy all 32 slots.
+                for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) {
+                    uint8_t v = (uint8_t)order_u32[i];
+                    // Valid values: fixed indices 0‥15, custom-remote indices 16‥31, 0xFF sentinel.
+                    app->menu_order[i] = (v < BT_REMOTES_MENU_ORDER_LEN || v == 0xFF) ? v : 0xFF;
                 }
+            } else {
+                // Old format (16 entries): migrate — custom-remote slots default to 0xFF.
+                flipper_format_rewind(mfff);
+                if(flipper_format_read_uint32(
+                       mfff, "menu_order", order_u32, BT_REMOTES_MENU_ITEM_COUNT)) {
+                    for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) {
+                        app->menu_order[i] = (uint8_t)(
+                            order_u32[i] < BT_REMOTES_MENU_ITEM_COUNT ? order_u32[i] : i);
+                    }
+                }
+                // Slots 16‥31 already initialised to 0xFF above.
             }
             flipper_format_rewind(mfff);
             uint32_t hidden_u32 = 0;
