@@ -21,6 +21,7 @@ enum BtRemotesStartIndex {
     BtRemotesStartIndexMouseJigglerStealth,
     BtRemotesStartIndexPushToTalk,
     BtRemotesStartIndexCustomActions,
+    BtRemotesStartIndexCustomRemotes,
     BtRemotesStartIndexSettings,
 };
 
@@ -44,6 +45,7 @@ const BtRemotesMenuEntry bt_remotes_menu_default[BT_REMOTES_MENU_ITEM_COUNT] = {
     {"Mouse Jiggler Stealth", BtRemotesStartIndexMouseJigglerStealth},
     {"PushToTalk",            BtRemotesStartIndexPushToTalk},
     {"Ducky Scripts",         BtRemotesStartIndexCustomActions},
+    {"Custom Remotes",        BtRemotesStartIndexCustomRemotes},
     {"Settings",              BtRemotesStartIndexSettings},
 };
 
@@ -82,28 +84,40 @@ static void
 void bt_remotes_scene_start_on_enter(void* context) {
     Hid* app = context;
 
-    // Build the visible item list by walking menu_order and skipping hidden items.
-    // bt_remotes_menu_default[idx].label is valid for idx in [0, BT_REMOTES_MENU_ITEM_COUNT).
-    BtRemotesMenuEntry visible_entries[BT_REMOTES_MENU_ITEM_COUNT];
-    uint8_t            visible_order[BT_REMOTES_MENU_ITEM_COUNT];
-    uint8_t            visible_count = 0;
+    // Refresh custom remote list and active state (may have changed while in sub-scenes)
+    bt_remotes_custom_remote_load_list(app);
+
+    // Build combined table: reorderable fixed items first, then non-reorderable active
+    // custom remotes appended at the end.
+    BtRemotesMenuEntry all_entries[BT_REMOTES_MENU_ITEM_COUNT + BT_REMOTES_CUSTOM_REMOTE_MAX];
+    uint8_t            all_order[BT_REMOTES_MENU_ITEM_COUNT + BT_REMOTES_CUSTOM_REMOTE_MAX];
+    uint8_t            total = 0;
 
     for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) {
         uint8_t idx = app->menu_order[i];
-        if(idx >= BT_REMOTES_MENU_ITEM_COUNT) continue;    // safety
-        if(app->menu_hidden & (1u << idx)) continue;        // skip hidden
-        visible_entries[visible_count].index = idx;
-        visible_entries[visible_count].label = bt_remotes_menu_default[idx].label;
-        visible_order[visible_count]         = idx;
-        visible_count++;
+        if(idx >= BT_REMOTES_MENU_ITEM_COUNT) continue; // safety
+        if(app->menu_hidden & (1u << idx)) continue;     // skip hidden
+        all_entries[total] = bt_remotes_menu_default[idx];
+        all_order[total]   = idx;
+        total++;
+    }
+
+    uint8_t reorderable_count = total; // active custom remotes are NOT reorderable
+
+    for(uint8_t i = 0; i < app->active_custom_remote_count; i++) {
+        // app->active_custom_remotes[i] is app-lifetime storage — safe as label pointer
+        all_entries[total].label = app->active_custom_remotes[i];
+        all_entries[total].index = (uint8_t)(BT_REMOTES_MENU_ITEM_COUNT + i);
+        all_order[total]         = (uint8_t)(BT_REMOTES_MENU_ITEM_COUNT + i);
+        total++;
     }
 
     hid_remote_menu_set_items(
         app->hid_remote_menu,
-        visible_entries,
-        visible_order,
-        visible_count,
-        0); // all visible items are reorderable
+        all_entries,
+        all_order,
+        total,
+        total - reorderable_count); // fixed_count = number of pinned items at the end
     hid_remote_menu_set_select_callback(app->hid_remote_menu, bt_remotes_start_select_cb, app);
     hid_remote_menu_set_reorder_callback(
         app->hid_remote_menu, bt_remotes_start_reorder_cb, app);
@@ -133,11 +147,23 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
         scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, event.event);
         consumed = true;
 
-        if(event.event == BtRemotesStartIndexSettings) {
+        if(event.event >= BT_REMOTES_MENU_ITEM_COUNT) {
+            // Active custom remote selected — load it and open the remote view
+            uint8_t cr_idx = (uint8_t)(event.event - BT_REMOTES_MENU_ITEM_COUNT);
+            if(cr_idx < app->active_custom_remote_count) {
+                strlcpy(
+                    app->editing_remote.name,
+                    app->active_custom_remotes[cr_idx],
+                    sizeof(app->editing_remote.name));
+                scene_manager_next_scene(app->scene_manager, BtRemotesSceneCustomRemoteView);
+            }
+        } else if(event.event == BtRemotesStartIndexSettings) {
             bt_remotes_stop_ble(app);
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneSettings);
         } else if(event.event == BtRemotesStartIndexCustomActions) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneCustomActions);
+        } else if(event.event == BtRemotesStartIndexCustomRemotes) {
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneCustomRemotes);
         } else {
             HidView view_id;
 

@@ -21,6 +21,7 @@
 #include <gui/modules/text_input.h>
 #include <gui/modules/file_browser.h>
 #include "views/hid_remote_menu.h"
+#include "views/hid_custom_remote.h"
 #include "helpers/ducky_runner.h"
 #include "views/hid_keynote.h"
 #include "views/hid_keyboard.h"
@@ -43,13 +44,18 @@
 
 #define BT_REMOTES_PROFILE_NAME_LEN  32
 #define BT_REMOTES_PROFILE_MAX_COUNT 16
-#define BT_REMOTES_MENU_ITEM_COUNT   15
+#define BT_REMOTES_MENU_ITEM_COUNT   16   // 15 built-in remotes + Custom Remotes hub
 
 #define BT_REMOTES_PROFILES_DIR APP_DATA_PATH("profiles")
 #define BT_REMOTES_CFG_PATH     APP_DATA_PATH(".bt_hid.cfg")
 #define BT_REMOTES_APP_CFG_PATH APP_DATA_PATH("app.cfg")
 #define BT_REMOTES_CFG_EXT      ".cfg"
 #define BT_REMOTES_KEYS_EXT     ".keys"
+
+// Custom Remotes storage
+#define BT_REMOTES_CUSTOM_REMOTE_DIR APP_DATA_PATH("remotes")
+#define BT_REMOTES_CUSTOM_REMOTE_EXT ".remote"
+#define BT_REMOTES_CUSTOM_REMOTE_MAX 16
 
 typedef struct Hid Hid;
 
@@ -80,7 +86,8 @@ struct Hid {
     HidTikTok* hid_tiktok;
     HidPushToTalk* hid_ptt;
     HidPushToTalkMenu* hid_ptt_menu;
-    HidRemoteMenu* hid_remote_menu;
+    HidRemoteMenu*   hid_remote_menu;
+    HidCustomRemote* hid_custom_remote;
     // Profile management
     char active_profile[BT_REMOTES_PROFILE_NAME_LEN];
     char pending_name[BT_REMOTES_PROFILE_NAME_LEN]; // old name held during profile rename
@@ -91,7 +98,7 @@ struct Hid {
     // 0=Neither, 1=Disconnect, 2=Connect, 3=Both
     uint8_t vibro_mode;
     uint8_t  menu_order[BT_REMOTES_MENU_ITEM_COUNT]; // persistent visual order for Start menu
-    uint16_t menu_hidden; // bitmask: bit i set → BtRemotesStartIndex i hidden in Start menu
+    uint32_t menu_hidden; // bitmask: bit i set → BtRemotesStartIndex i hidden in Start menu
     // Profile display order: profile names pipe-separated, loaded from app.cfg
     // profile_list[] is reordered to match this on every profile_load_list call
     char profile_order_str[BT_REMOTES_PROFILE_MAX_COUNT * (BT_REMOTES_PROFILE_NAME_LEN + 1)];
@@ -100,6 +107,13 @@ struct Hid {
     FuriString*  file_browser_result; // receives the selected file path
     DuckyRunner* ducky_runner;
     char pending_script_path[256]; // full path to the selected .txt script, copied from result
+    // Custom Remotes
+    char    custom_remote_names[BT_REMOTES_CUSTOM_REMOTE_MAX][BT_REMOTES_CUSTOM_REMOTE_NAME_LEN];
+    uint8_t custom_remote_count;
+    char    active_custom_remotes[BT_REMOTES_CUSTOM_REMOTE_MAX][BT_REMOTES_CUSTOM_REMOTE_NAME_LEN];
+    uint8_t active_custom_remote_count;
+    CustomRemoteDef editing_remote;       // remote currently being created / edited / viewed
+    uint8_t         editing_remote_input_idx; // which slot is being assigned in file browser
 };
 
 // BLE lifecycle
@@ -130,6 +144,14 @@ bool bt_remotes_profile_activate(Hid* app);
 bool bt_remotes_profile_delete(Hid* app);
 bool bt_remotes_profile_rename(Hid* app);
 bool bt_remotes_profile_reset(Hid* app);
+
+// Custom Remote operations
+void bt_remotes_custom_remote_load_list(Hid* app);
+bool bt_remotes_custom_remote_load(Hid* app, const char* name);
+bool bt_remotes_custom_remote_save(Hid* app);
+bool bt_remotes_custom_remote_delete(Hid* app, const char* name);
+void bt_remotes_active_remotes_load(Hid* app);
+void bt_remotes_active_remotes_save(Hid* app);
 
 // Default Start-menu item table — defined in bt_remotes_scene_start.c, shared with
 // bt_remotes_scene_hide_items.c.  Entry [i].index == i always (table is in enum order).

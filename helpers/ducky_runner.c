@@ -253,6 +253,10 @@ static void ducky_type_string(DuckyRunner* runner, const char* text) {
         uint16_t keycode = HID_ASCII_TO_KEY((uint8_t)*text);
         if(keycode != HID_KEYBOARD_NONE) {
             ble_profile_hid_kb_press(runner->profile, keycode);
+            // Small gap ensures the press report is transmitted in its own BLE
+            // connection event before the release, preventing character drops at
+            // high typing speeds over BLE.
+            furi_delay_ms(2);
             ble_profile_hid_kb_release(runner->profile, keycode);
         }
         text++;
@@ -482,6 +486,12 @@ static bool ducky_exec_line(DuckyRunner* runner, const char* raw) {
     if(strncmp(line, "BLE_ID ",         7) == 0) return true;
     if(strncmp(line, "ATTACKMODE",     10) == 0) return true;
     if(strncmp(line, "LED",             3) == 0) return true;
+    // ALTCHAR / ALTSTRING / ALTCODE are Windows Alt+numpad sequences that require
+    // USB (not BLE) or platform-specific handling — skip rather than fall through
+    // to ducky_press_combo which would mis-type the first character of the keyword.
+    if(strncmp(line, "ALTCHAR ",        8) == 0) return true;
+    if(strncmp(line, "ALTSTRING ",     10) == 0) return true;
+    if(strncmp(line, "ALTCODE ",        8) == 0) return true;
 
     // Everything else: treat as a modifier+key combo (e.g. "CTRL ALT DELETE") -
     ducky_press_combo(runner, line);

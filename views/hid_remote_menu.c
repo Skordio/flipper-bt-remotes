@@ -6,7 +6,7 @@
 
 #define TAG "HidRemoteMenu"
 
-#define REMOTE_MENU_MAX_ITEMS 20 // 16 profiles + 3 fixed (Help/New/Settings) + margin
+#define REMOTE_MENU_MAX_ITEMS 32 // 16 fixed items + 16 active custom remotes
 #define REMOTE_MENU_VISIBLE   5   // rows shown on screen at once
 #define REMOTE_MENU_ROW_H     11  // pixel height per row
 #define REMOTE_MENU_Y_START   3   // y of first visible row's baseline area
