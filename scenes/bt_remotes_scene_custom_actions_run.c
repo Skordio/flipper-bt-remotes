@@ -82,7 +82,7 @@ bool bt_remotes_scene_custom_actions_run_on_event(void* context, SceneManagerEve
         if(event.event == CustomActionsRunEventDone) {
             popup_reset(app->popup);
             popup_set_header(app->popup, "Done!", 64, 22, AlignCenter, AlignCenter);
-            popup_set_timeout(app->popup, 1500);
+            popup_set_timeout(app->popup, 200);
             popup_set_context(app->popup, app);
             popup_set_callback(app->popup, custom_actions_run_popup_cb);
             popup_enable_timeout(app->popup);

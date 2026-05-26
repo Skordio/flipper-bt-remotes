@@ -17,9 +17,9 @@ enum {
 static void hide_items_cb(void* context, uint32_t index) {
     Hid* app = context;
     // index is the BtRemotesStartIndex value of the tapped item
-    app->menu_hidden ^= (uint16_t)(1u << index);
+    app->menu_hidden ^= (1u << index);
     // Belt-and-suspenders: Settings must never be hidden
-    app->menu_hidden &= ~(uint16_t)(1u << HIDE_ITEMS_SETTINGS_IDX);
+    app->menu_hidden &= ~(1u << HIDE_ITEMS_SETTINGS_IDX);
     bt_remotes_save_profile_menu_cfg(app);
     // Record which item was toggled so on_event can restore the cursor after rebuild
     scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneHideItems, index);
@@ -36,9 +36,10 @@ static void build_submenu(Hid* app) {
     submenu_reset(app->submenu);
     submenu_set_header(app->submenu, "Hide Remote Types");
     uint8_t slot = 0;
-    for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) {
+    for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) {
         uint8_t idx = app->menu_order[i];
-        if(idx >= BT_REMOTES_MENU_ITEM_COUNT) continue; // safety
+        if(idx == 0xFF) continue;                        // empty sentinel
+        if(idx >= BT_REMOTES_MENU_ITEM_COUNT) continue; // custom-remote slot — not hideable
         if(idx == HIDE_ITEMS_SETTINGS_IDX) continue;    // Settings is always shown
         bool hidden = (app->menu_hidden >> idx) & 1;
         // bt_remotes_menu_default[idx] is valid because index == enum value == array position
@@ -57,8 +58,9 @@ static void build_submenu(Hid* app) {
 // so the cursor can be restored after a toggle+rebuild cycle.
 static uint8_t find_submenu_pos(Hid* app, uint8_t target_idx) {
     uint8_t pos = 0;
-    for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) {
+    for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) {
         uint8_t idx = app->menu_order[i];
+        if(idx == 0xFF) continue;
         if(idx >= BT_REMOTES_MENU_ITEM_COUNT) continue;
         if(idx == HIDE_ITEMS_SETTINGS_IDX) continue;
         if(idx == target_idx) return pos;
