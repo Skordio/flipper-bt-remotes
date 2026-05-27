@@ -179,6 +179,10 @@ void bt_remotes_scene_start_on_enter(void* context) {
     hid_remote_menu_set_reorder_callback(
         app->hid_remote_menu, bt_remotes_start_reorder_cb, app);
 
+    hid_remote_menu_set_selected_index(
+        app->hid_remote_menu,
+        (uint8_t)scene_manager_get_scene_state(app->scene_manager, BtRemotesSceneStart));
+
     view_dispatcher_switch_to_view(app->view_dispatcher, HidViewRemoteMenu);
 }
 
@@ -196,6 +200,7 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
     }
 
     if(event.type == SceneManagerEventTypeCustom) {
+        scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, event.event);
         consumed = true;
 
         if(event.event >= BT_REMOTES_MENU_ITEM_COUNT) {

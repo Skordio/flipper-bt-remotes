@@ -147,6 +147,7 @@ bool bt_remotes_scene_profile_select_on_event(void* context, SceneManagerEvent e
         consumed = true;
 
         if(event.event == BtRemotesProfileSelectEventAutoAdvance) {
+            scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, 0);
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneStart);
 
         } else if(event.event == BtRemotesProfileSelectEventChosen) {
@@ -163,6 +164,7 @@ bool bt_remotes_scene_profile_select_on_event(void* context, SceneManagerEvent e
                 // Load per-profile active custom remotes before entering Start
                 bt_remotes_active_remotes_load(app);
                 bt_remotes_start_ble(app);
+                scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, 0);
                 scene_manager_next_scene(app->scene_manager, BtRemotesSceneStart);
             }
 
