@@ -143,7 +143,7 @@ static void hid_remote_menu_draw_cb(Canvas* canvas, void* model_ptr) {
     // Scroll indicator on the right edge
     if(render_count > REMOTE_MENU_VISIBLE) {
         uint8_t bar_h = 64 * REMOTE_MENU_VISIBLE / render_count;
-        uint8_t bar_y = 64 * disp_cursor / render_count;
+        uint8_t bar_y = 64 * (uint8_t)top / render_count;
         if(bar_y + bar_h > 63) bar_y = 63 - bar_h;
         canvas_draw_line(canvas, 127, 0, 127, 63);
         canvas_draw_box(canvas, 126, bar_y, 2, bar_h > 0 ? bar_h : 1);
