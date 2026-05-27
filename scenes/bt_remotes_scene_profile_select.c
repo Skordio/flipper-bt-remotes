@@ -161,8 +161,6 @@ bool bt_remotes_scene_profile_select_on_event(void* context, SceneManagerEvent e
                 app->active_profile[0] = '\0';
                 // Stay on profile select — view is still visible
             } else {
-                // Load per-profile active custom remotes before entering Start
-                bt_remotes_active_remotes_load(app);
                 bt_remotes_start_ble(app);
                 scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, 0);
                 scene_manager_next_scene(app->scene_manager, BtRemotesSceneStart);
