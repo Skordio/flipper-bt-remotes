@@ -510,205 +510,6 @@ bool bt_remotes_profile_reset(Hid* app) {
 }
 
 // ---------------------------------------------------------------------------
-// Custom Remote operations
-// ---------------------------------------------------------------------------
-
-#define BT_REMOTES_CUSTOM_REMOTE_FILE_TYPE    "Flipper BT Custom Remote"
-#define BT_REMOTES_CUSTOM_REMOTE_FILE_VERSION (1)
-#define BT_REMOTES_ACTIVE_REMOTES_FILE_TYPE    "Flipper BT Custom Remote List"
-#define BT_REMOTES_ACTIVE_REMOTES_FILE_VERSION (1)
-
-// FlipperFormat key names for each input slot (indexed by CustomRemoteInputSlot)
-static const char* const cr_slot_keys[CustomRemoteInputCount] = {
-    "tap_up",   "tap_down",  "tap_left",  "tap_right",
-    "hold_up",  "hold_down", "hold_left", "hold_right",
-    "tap_ok",   "hold_ok",   "tap_back",
-};
-
-void bt_remotes_custom_remote_load_list(Hid* app) {
-    app->custom_remote_count = 0;
-    storage_simply_mkdir(app->storage, BT_REMOTES_CUSTOM_REMOTE_DIR);
-
-    File*    dir = storage_file_alloc(app->storage);
-    FileInfo info;
-    char     name[BT_REMOTES_CUSTOM_REMOTE_NAME_LEN + 8];
-
-    if(storage_dir_open(dir, BT_REMOTES_CUSTOM_REMOTE_DIR)) {
-        while(storage_dir_read(dir, &info, name, sizeof(name))) {
-            if(info.flags & FSF_DIRECTORY) continue;
-            if(name[0] == '.') continue;
-            if(app->custom_remote_count >= BT_REMOTES_CUSTOM_REMOTE_MAX) break;
-
-            size_t len     = strlen(name);
-            size_t ext_len = strlen(BT_REMOTES_CUSTOM_REMOTE_EXT);
-            if(len <= ext_len) continue;
-            if(strcmp(name + len - ext_len, BT_REMOTES_CUSTOM_REMOTE_EXT) != 0) continue;
-
-            name[len - ext_len] = '\0';
-            strlcpy(
-                app->custom_remote_names[app->custom_remote_count],
-                name,
-                BT_REMOTES_CUSTOM_REMOTE_NAME_LEN);
-            app->custom_remote_count++;
-        }
-        storage_dir_close(dir);
-    }
-    storage_file_free(dir);
-    FURI_LOG_D(TAG, "Custom remote list: %u remotes", app->custom_remote_count);
-}
-
-bool bt_remotes_custom_remote_load(Hid* app, const char* name) {
-    strlcpy(app->editing_remote.name, name, BT_REMOTES_CUSTOM_REMOTE_NAME_LEN);
-    memset(app->editing_remote.scripts, 0, sizeof(app->editing_remote.scripts));
-
-    FuriString* path = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_CUSTOM_REMOTE_DIR, name, BT_REMOTES_CUSTOM_REMOTE_EXT);
-
-    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
-    FuriString*    tmp = furi_string_alloc();
-    uint32_t       ver = 0;
-    bool           ok  = false;
-
-    do {
-        if(!flipper_format_file_open_existing(fff, furi_string_get_cstr(path))) break;
-        if(!flipper_format_read_header(fff, tmp, &ver)) break;
-        if(strcmp(furi_string_get_cstr(tmp), BT_REMOTES_CUSTOM_REMOTE_FILE_TYPE) != 0) break;
-        ok = true;
-        for(uint8_t i = 0; i < CustomRemoteInputCount; i++) {
-            flipper_format_rewind(fff);
-            if(flipper_format_read_string(fff, cr_slot_keys[i], tmp)) {
-                strlcpy(
-                    app->editing_remote.scripts[i],
-                    furi_string_get_cstr(tmp),
-                    BT_REMOTES_CUSTOM_REMOTE_SCRIPT_LEN);
-            }
-        }
-    } while(0);
-
-    furi_string_free(tmp);
-    flipper_format_free(fff);
-    furi_string_free(path);
-    if(!ok) FURI_LOG_E(TAG, "Custom remote load failed: %s", name);
-    return ok;
-}
-
-bool bt_remotes_custom_remote_save(Hid* app) {
-    storage_simply_mkdir(app->storage, BT_REMOTES_CUSTOM_REMOTE_DIR);
-
-    FuriString* path = furi_string_alloc_printf(
-        "%s/%s%s",
-        BT_REMOTES_CUSTOM_REMOTE_DIR,
-        app->editing_remote.name,
-        BT_REMOTES_CUSTOM_REMOTE_EXT);
-
-    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
-    bool           ok  = false;
-
-    if(flipper_format_file_open_always(fff, furi_string_get_cstr(path))) {
-        ok = flipper_format_write_header_cstr(
-            fff, BT_REMOTES_CUSTOM_REMOTE_FILE_TYPE, BT_REMOTES_CUSTOM_REMOTE_FILE_VERSION);
-        for(uint8_t i = 0; ok && i < CustomRemoteInputCount; i++) {
-            ok = flipper_format_write_string_cstr(
-                fff, cr_slot_keys[i], app->editing_remote.scripts[i]);
-        }
-        flipper_format_file_close(fff);
-    }
-    flipper_format_free(fff);
-    furi_string_free(path);
-    if(!ok) FURI_LOG_E(TAG, "Custom remote save failed: %s", app->editing_remote.name);
-    return ok;
-}
-
-void bt_remotes_active_remotes_save(Hid* app) {
-    if(app->active_profile[0] == '\0') return;
-
-    FuriString* path = furi_string_alloc_printf(
-        "%s/%s.remotes", BT_REMOTES_PROFILES_DIR, app->active_profile);
-
-    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
-    if(flipper_format_file_open_always(fff, furi_string_get_cstr(path))) {
-        flipper_format_write_header_cstr(
-            fff, BT_REMOTES_ACTIVE_REMOTES_FILE_TYPE, BT_REMOTES_ACTIVE_REMOTES_FILE_VERSION);
-        uint32_t count = app->active_custom_remote_count;
-        flipper_format_write_uint32(fff, "count", &count, 1);
-        for(uint8_t i = 0; i < app->active_custom_remote_count; i++) {
-            char key[20];
-            snprintf(key, sizeof(key), "remote_%u", (unsigned)i);
-            flipper_format_write_string_cstr(fff, key, app->active_custom_remotes[i]);
-        }
-        flipper_format_file_close(fff);
-    }
-    flipper_format_free(fff);
-    furi_string_free(path);
-}
-
-bool bt_remotes_custom_remote_delete(Hid* app, const char* name) {
-    FuriString* path = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_CUSTOM_REMOTE_DIR, name, BT_REMOTES_CUSTOM_REMOTE_EXT);
-    FS_Error err = storage_common_remove(app->storage, furi_string_get_cstr(path));
-    furi_string_free(path);
-
-    // Remove from active list if present
-    bool was_active = false;
-    for(uint8_t i = 0; i < app->active_custom_remote_count; i++) {
-        if(strcmp(app->active_custom_remotes[i], name) == 0) {
-            was_active = true;
-            for(uint8_t j = i; j + 1 < app->active_custom_remote_count; j++) {
-                strlcpy(
-                    app->active_custom_remotes[j],
-                    app->active_custom_remotes[j + 1],
-                    BT_REMOTES_CUSTOM_REMOTE_NAME_LEN);
-            }
-            app->active_custom_remote_count--;
-            break;
-        }
-    }
-    if(was_active) bt_remotes_active_remotes_save(app);
-
-    return (err == FSE_OK || err == FSE_NOT_EXIST);
-}
-
-void bt_remotes_active_remotes_load(Hid* app) {
-    app->active_custom_remote_count = 0;
-    if(app->active_profile[0] == '\0') return;
-
-    FuriString* path = furi_string_alloc_printf(
-        "%s/%s.remotes", BT_REMOTES_PROFILES_DIR, app->active_profile);
-
-    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
-    FuriString*    tmp = furi_string_alloc();
-    uint32_t       ver = 0;
-
-    do {
-        if(!flipper_format_file_open_existing(fff, furi_string_get_cstr(path))) break;
-        if(!flipper_format_read_header(fff, tmp, &ver)) break;
-        if(strcmp(furi_string_get_cstr(tmp), BT_REMOTES_ACTIVE_REMOTES_FILE_TYPE) != 0) break;
-
-        uint32_t count = 0;
-        if(!flipper_format_read_uint32(fff, "count", &count, 1)) break;
-        if(count > BT_REMOTES_CUSTOM_REMOTE_MAX) count = BT_REMOTES_CUSTOM_REMOTE_MAX;
-
-        for(uint32_t i = 0; i < count; i++) {
-            char key[20];
-            snprintf(key, sizeof(key), "remote_%u", (unsigned)i);
-            flipper_format_rewind(fff);
-            if(flipper_format_read_string(fff, key, tmp)) {
-                strlcpy(
-                    app->active_custom_remotes[app->active_custom_remote_count],
-                    furi_string_get_cstr(tmp),
-                    BT_REMOTES_CUSTOM_REMOTE_NAME_LEN);
-                app->active_custom_remote_count++;
-            }
-        }
-    } while(0);
-
-    furi_string_free(tmp);
-    flipper_format_free(fff);
-    furi_string_free(path);
-    FURI_LOG_D(TAG, "Active remotes loaded: %u", app->active_custom_remote_count);
-}
-
-// ---------------------------------------------------------------------------
 // BLE lifecycle
 // ---------------------------------------------------------------------------
 
@@ -960,12 +761,6 @@ static Hid* bt_remotes_alloc(void) {
     app->pair_save_timer =
         furi_timer_alloc(bt_remotes_pair_save_timer_cb, FuriTimerTypePeriodic, app);
 
-    app->hid_custom_remote = hid_custom_remote_alloc();
-    view_dispatcher_add_view(
-        app->view_dispatcher,
-        HidViewCustomRemote,
-        hid_custom_remote_get_view(app->hid_custom_remote));
-
     return app;
 }
 
@@ -1019,8 +814,6 @@ static void bt_remotes_free(Hid* app) {
     furi_string_free(app->file_browser_result);
     ducky_runner_free(app->ducky_runner);
     furi_timer_free(app->pair_save_timer);
-    view_dispatcher_remove_view(app->view_dispatcher, HidViewCustomRemote);
-    hid_custom_remote_free(app->hid_custom_remote);
 
     scene_manager_free(app->scene_manager);
     view_dispatcher_free(app->view_dispatcher);
@@ -1049,7 +842,6 @@ int32_t bt_remotes_app(void* p) {
         APP_DATA_PATH(HID_BT_KEYS_STORAGE_NAME));
 
     storage_simply_mkdir(app->storage, BT_REMOTES_PROFILES_DIR);
-    storage_simply_mkdir(app->storage, BT_REMOTES_CUSTOM_REMOTE_DIR);
 
     // Load app-level config (default BT name for new profiles)
     bt_remotes_load_app_cfg(app);
