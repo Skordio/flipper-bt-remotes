@@ -85,9 +85,6 @@ void bt_remotes_scene_settings_on_enter(void* context) {
     Hid* app = context;
 
     build_settings_menu(app);
-    submenu_set_selected_item(
-        app->submenu,
-        scene_manager_get_scene_state(app->scene_manager, BtRemotesSceneSettings));
     view_dispatcher_switch_to_view(app->view_dispatcher, HidViewSubmenu);
 }
 
@@ -104,7 +101,6 @@ bool bt_remotes_scene_settings_on_event(void* context, SceneManagerEvent event) 
     }
 
     if(event.type == SceneManagerEventTypeCustom) {
-        scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneSettings, event.event);
         consumed = true;
 
         if(event.event == BtRemotesSettingsIndexBluetoothName) {

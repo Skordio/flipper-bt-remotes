@@ -76,10 +76,6 @@ static uint8_t find_submenu_pos(Hid* app, uint8_t target_idx) {
 void bt_remotes_scene_hide_items_on_enter(void* context) {
     Hid* app = context;
     build_submenu(app);
-    // Restore cursor: 0 on first entry, or last-toggled item's position on rebuild re-entry
-    uint8_t last_idx = (uint8_t)scene_manager_get_scene_state(
-        app->scene_manager, BtRemotesSceneHideItems);
-    submenu_set_selected_item(app->submenu, find_submenu_pos(app, last_idx));
     view_dispatcher_switch_to_view(app->view_dispatcher, HidViewSubmenu);
 }
 
