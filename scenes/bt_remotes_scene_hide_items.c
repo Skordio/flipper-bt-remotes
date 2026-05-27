@@ -54,20 +54,6 @@ static void build_submenu(Hid* app) {
     }
 }
 
-// Return the submenu position (0-based) of the item whose BtRemotesStartIndex == target_idx,
-// so the cursor can be restored after a toggle+rebuild cycle.
-static uint8_t find_submenu_pos(Hid* app, uint8_t target_idx) {
-    uint8_t pos = 0;
-    for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) {
-        uint8_t idx = app->menu_order[i];
-        if(idx == 0xFF) continue;
-        if(idx >= BT_REMOTES_MENU_ITEM_COUNT) continue;
-        if(idx == HIDE_ITEMS_SETTINGS_IDX) continue;
-        if(idx == target_idx) return pos;
-        pos++;
-    }
-    return 0; // fall back to top if not found
-}
 
 // ---------------------------------------------------------------------------
 // Scene handlers
@@ -87,7 +73,7 @@ bool bt_remotes_scene_hide_items_on_event(void* context, SceneManagerEvent event
         build_submenu(app);
         uint8_t last_idx = (uint8_t)scene_manager_get_scene_state(
             app->scene_manager, BtRemotesSceneHideItems);
-        submenu_set_selected_item(app->submenu, find_submenu_pos(app, last_idx));
+        submenu_set_selected_item(app->submenu, last_idx);
         consumed = true;
     }
     return consumed;
