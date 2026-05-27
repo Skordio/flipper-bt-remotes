@@ -347,10 +347,7 @@ void hid_remote_menu_set_items(
                 }
             }
 
-            // Clamp cursor to the effective visible range
-            uint8_t eff = hid_remote_menu_eff_count(model);
-            uint8_t max_c = (eff > 0) ? (eff - 1) : 0;
-            model->cursor = clamp8(model->cursor, 0, (count > 0) ? max_c : 0);
+            model->cursor = 0;
         },
         false);
 }
