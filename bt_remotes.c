@@ -7,6 +7,9 @@
 
 #define TAG "BtRemotes"
 
+#define PAIR_SAVE_POLL_MS      200
+#define PAIR_SAVE_MAX_ATTEMPTS 25 // 5 seconds of polling
+
 #define BT_REMOTES_CFG_FILE_TYPE     "Flipper BT Remote Settings File"
 #define BT_REMOTES_CFG_VERSION       (1)
 #define BT_REMOTES_APP_CFG_FILE_TYPE "Flipper BT Remotes App Config"
@@ -709,6 +712,25 @@ void bt_remotes_active_remotes_load(Hid* app) {
 // BLE lifecycle
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Post-pairing auto-save timer
+// ---------------------------------------------------------------------------
+
+// Runs on the FuriTimer thread every PAIR_SAVE_POLL_MS after a first-time BLE connect.
+// Polls for .bt_hid.keys (written by the BT stack when SMP bonding completes) and saves
+// the profile as soon as it appears.  Stops itself on success or after max attempts.
+static void bt_remotes_pair_save_timer_cb(void* context) {
+    Hid* app = context;
+    app->pair_save_attempts++;
+    if(bt_remotes_profile_save(app)) {
+        furi_timer_stop(app->pair_save_timer);
+        FURI_LOG_I(TAG, "Profile auto-saved after pairing (attempt %u)", app->pair_save_attempts);
+    } else if(app->pair_save_attempts >= PAIR_SAVE_MAX_ATTEMPTS) {
+        furi_timer_stop(app->pair_save_timer);
+        FURI_LOG_W(TAG, "Pair-save polling timed out");
+    }
+}
+
 // Forward declaration so bt_remotes_start_ble can register it
 static void bt_remotes_connection_status_changed_callback(BtStatus status, void* context);
 
@@ -734,6 +756,7 @@ void bt_remotes_start_ble(Hid* app) {
 void bt_remotes_stop_ble(Hid* app) {
     if(!app->ble_started) return;
 
+    furi_timer_stop(app->pair_save_timer);
     bt_set_status_changed_callback(app->bt, NULL, NULL);
     notification_internal_message(app->notifications, &sequence_reset_blue);
     bt_disconnect(app->bt);
@@ -755,27 +778,36 @@ static void bt_remotes_connection_status_changed_callback(BtStatus status, void*
     notification_internal_message(
         hid->notifications, connected ? &sequence_set_blue_255 : &sequence_reset_blue);
     if(connected && (hid->vibro_mode == 2 || hid->vibro_mode == 3)) {
-        // Connect or Both
         notification_message(hid->notifications, &sequence_single_vibro);
     } else if(!connected && (hid->vibro_mode == 1 || hid->vibro_mode == 3)) {
-        // Disconnect or Both
         notification_message(hid->notifications, &sequence_single_vibro);
     }
-    // Save on every status transition while a profile is active.
-    //
-    // On a *reconnect* the keys file already exists when BtStatusConnected fires,
-    // so the save succeeds there.
-    //
-    // On a *first-time pairing* the BLE link layer connects before SMP
-    // bonding completes, so BtStatusConnected fires before the keys file is
-    // written.  The second transition (connected → advertising, i.e. disconnect)
-    // fires after bonding is complete and the keys are on disk, so saving there
-    // catches the first-time case.
-    //
-    // bt_remotes_profile_save is a safe no-op (returns false immediately) when
-    // the keys file does not exist, so calling it unconditionally is harmless.
+
     if(hid->active_profile[0] != '\0') {
-        bt_remotes_profile_save(hid);
+        if(connected) {
+            // Check whether this profile already has saved keys on disk.
+            // If yes → reconnect: keys are already correct, save immediately to capture
+            //   any key material refreshed by the stack during re-bonding.
+            // If no  → first-time pairing: the BLE link layer connected before SMP bonding
+            //   finished, so .bt_hid.keys doesn't exist yet.  Start the polling timer;
+            //   it will save as soon as the BT stack writes the keys file.
+            FuriString* prof_keys = furi_string_alloc_printf(
+                "%s/%s%s", BT_REMOTES_PROFILES_DIR, hid->active_profile, BT_REMOTES_KEYS_EXT);
+            bool already_saved =
+                storage_file_exists(hid->storage, furi_string_get_cstr(prof_keys));
+            furi_string_free(prof_keys);
+
+            if(already_saved) {
+                bt_remotes_profile_save(hid);
+            } else {
+                hid->pair_save_attempts = 0;
+                furi_timer_start(hid->pair_save_timer, PAIR_SAVE_POLL_MS);
+                FURI_LOG_I(TAG, "First-time pairing — polling for keys");
+            }
+        } else {
+            // Disconnected: cancel any in-progress pairing poll
+            furi_timer_stop(hid->pair_save_timer);
+        }
     }
     hid_keynote_set_connected_status(hid->hid_keynote, connected);
     hid_keyboard_set_connected_status(hid->hid_keyboard, connected);
@@ -925,6 +957,9 @@ static Hid* bt_remotes_alloc(void) {
 
     app->ducky_runner = ducky_runner_alloc();
 
+    app->pair_save_timer =
+        furi_timer_alloc(bt_remotes_pair_save_timer_cb, FuriTimerTypePeriodic, app);
+
     app->hid_custom_remote = hid_custom_remote_alloc();
     view_dispatcher_add_view(
         app->view_dispatcher,
@@ -983,6 +1018,7 @@ static void bt_remotes_free(Hid* app) {
     file_browser_free(app->file_browser);
     furi_string_free(app->file_browser_result);
     ducky_runner_free(app->ducky_runner);
+    furi_timer_free(app->pair_save_timer);
     view_dispatcher_remove_view(app->view_dispatcher, HidViewCustomRemote);
     hid_custom_remote_free(app->hid_custom_remote);
 

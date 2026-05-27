@@ -119,6 +119,9 @@ struct Hid {
     uint8_t active_custom_remote_count;
     CustomRemoteDef editing_remote;       // remote currently being created / edited / viewed
     uint8_t         editing_remote_input_idx; // which slot is being assigned in file browser
+    // Post-pairing auto-save: polls for .bt_hid.keys after first-time BLE connect
+    FuriTimer* pair_save_timer;
+    uint8_t    pair_save_attempts;
 };
 
 // BLE lifecycle
