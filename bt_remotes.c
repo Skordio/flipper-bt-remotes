@@ -562,10 +562,10 @@ bool bt_remotes_collection_load(Hid* app, const char* name) {
         if(!flipper_format_file_open_existing(fff, furi_string_get_cstr(path))) break;
         if(!flipper_format_read_header(fff, tmp, &ver)) break;
         if(strcmp(furi_string_get_cstr(tmp), BT_REMOTES_COLLECTION_FILE_TYPE) != 0) break;
-        ok = true;
 
         uint32_t count = 0;
         if(!flipper_format_read_uint32(fff, "count", &count, 1)) break;
+        ok = true;
         if(count > BT_REMOTES_COLLECTION_SCRIPT_MAX) count = BT_REMOTES_COLLECTION_SCRIPT_MAX;
 
         for(uint32_t i = 0; i < count; i++) {

@@ -2,11 +2,9 @@
 
 static void collection_delete_dialog_cb(DialogExResult result, void* context) {
     Hid* app = context;
-    if(result == DialogExResultRight) {
-        view_dispatcher_send_custom_event(app->view_dispatcher, 1);
-    } else {
-        scene_manager_previous_scene(app->scene_manager);
-    }
+    // 1 = confirmed delete, 0 = cancel
+    view_dispatcher_send_custom_event(
+        app->view_dispatcher, result == DialogExResultRight ? 1 : 0);
 }
 
 void bt_remotes_scene_collection_delete_on_enter(void* context) {
@@ -27,12 +25,18 @@ void bt_remotes_scene_collection_delete_on_enter(void* context) {
 bool bt_remotes_scene_collection_delete_on_event(void* context, SceneManagerEvent event) {
     Hid* app = context;
 
-    if(event.type == SceneManagerEventTypeCustom && event.event == 1) {
-        bt_remotes_collection_delete(app, app->editing_collection_name);
-        bt_remotes_collection_load_list(app);
-        // Return to collection list, skipping the intermediate manage/run menus
-        scene_manager_search_and_switch_to_previous_scene(
-            app->scene_manager, BtRemotesSceneCollectionList);
+    if(event.type == SceneManagerEventTypeCustom) {
+        if(event.event == 1) {
+            bt_remotes_collection_delete(app, app->editing_collection_name);
+            bt_remotes_collection_load_list(app);
+            scene_manager_search_and_switch_to_previous_scene(
+                app->scene_manager, BtRemotesSceneCollectionList);
+        } else {
+            // Cancel — restore manage submenu level in CollectionList before popping
+            scene_manager_set_scene_state(
+                app->scene_manager, BtRemotesSceneCollectionList, 2); // CL_STATE_MGRMENU
+            scene_manager_previous_scene(app->scene_manager);
+        }
         return true;
     }
 

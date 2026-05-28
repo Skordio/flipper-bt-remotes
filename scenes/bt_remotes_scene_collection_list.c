@@ -40,8 +40,17 @@ static void build_mgrmenu(Hid* app) {
 void bt_remotes_scene_collection_list_on_enter(void* context) {
     Hid* app = context;
     bt_remotes_collection_load_list(app);
-    scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneCollectionList, CL_STATE_LIST);
-    build_list(app);
+    uint32_t state =
+        scene_manager_get_scene_state(app->scene_manager, BtRemotesSceneCollectionList);
+    if(state == CL_STATE_MGRMENU) {
+        build_mgrmenu(app);
+    } else if(state == CL_STATE_RUNMGR) {
+        build_runmgr(app);
+    } else {
+        scene_manager_set_scene_state(
+            app->scene_manager, BtRemotesSceneCollectionList, CL_STATE_LIST);
+        build_list(app);
+    }
     view_dispatcher_switch_to_view(app->view_dispatcher, HidViewSubmenu);
 }
 
