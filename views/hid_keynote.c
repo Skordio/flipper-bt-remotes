@@ -240,8 +240,25 @@ static void hid_keynote_process(HidKeynote* hid_keynote, InputEvent* event) {
                 }
             } else if(event->type == InputTypeShort) {
                 if(event->key == InputKeyBack) {
-                    hid_hal_keyboard_press(hid_keynote->hid, HID_KEYBOARD_DELETE);
-                    hid_hal_keyboard_release(hid_keynote->hid, HID_KEYBOARD_DELETE);
+                    uint16_t kb_key = 0;
+                    switch(hid_keynote->hid->keynote_back_key) {
+                    case KeynoteBackKeyLeftArrow:
+                        kb_key = HID_KEYBOARD_LEFT_ARROW;
+                        break;
+                    case KeynoteBackKeyEscape:
+                        kb_key = HID_KEYBOARD_ESCAPE;
+                        break;
+                    case KeynoteBackKeyNone:
+                        kb_key = 0;
+                        break;
+                    default:
+                        kb_key = HID_KEYBOARD_DELETE;
+                        break;
+                    }
+                    if(kb_key) {
+                        hid_hal_keyboard_press(hid_keynote->hid, kb_key);
+                        hid_hal_keyboard_release(hid_keynote->hid, kb_key);
+                    }
                     hid_hal_consumer_key_press(hid_keynote->hid, HID_CONSUMER_AC_BACK);
                     hid_hal_consumer_key_release(hid_keynote->hid, HID_CONSUMER_AC_BACK);
                 }

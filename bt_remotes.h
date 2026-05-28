@@ -60,6 +60,17 @@
 #define BT_REMOTES_COLLECTION_MAX        16
 #define BT_REMOTES_COLLECTION_SCRIPT_MAX 32
 
+// Keynote back-button key options (short press of Flipper Back button)
+typedef enum {
+    KeynoteBackKeyDelete    = 0, // HID_KEYBOARD_DELETE (default, current behavior)
+    KeynoteBackKeyLeftArrow = 1, // HID_KEYBOARD_LEFT_ARROW
+    KeynoteBackKeyEscape    = 2, // HID_KEYBOARD_ESCAPE
+    KeynoteBackKeyNone      = 3, // no keyboard key (consumer AC_BACK only)
+} KeynoteBackKey;
+
+#define KEYNOTE_BACK_KEY_DEFAULT KeynoteBackKeyDelete
+#define KEYNOTE_BACK_KEY_COUNT   4
+
 // Start-menu item indices — shared by bt_remotes_scene_start.c and bt_remotes_scene_main.c.
 typedef enum {
     BtRemotesStartIndexKeynote             = 0,
@@ -123,6 +134,8 @@ struct Hid {
     char default_ble_name[FURI_HAL_BT_ADV_NAME_LENGTH]; // default BT name applied to new profiles
     char profile_list[BT_REMOTES_PROFILE_MAX_COUNT][BT_REMOTES_PROFILE_NAME_LEN];
     uint8_t profile_count;
+    // Per-profile remote-type settings
+    uint8_t keynote_back_key; // KeynoteBackKey enum — which key short-press Back sends in Keynote
     // App-level settings
     // 0=Neither, 1=Disconnect, 2=Connect, 3=Both
     uint8_t vibro_mode;

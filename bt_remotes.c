@@ -156,6 +156,8 @@ void bt_remotes_save_profile_menu_cfg(Hid* app) {
         flipper_format_write_uint32(fff, "menu_order", order_u32, BT_REMOTES_MENU_ORDER_LEN);
         uint32_t hidden_u32 = app->menu_hidden;
         flipper_format_write_uint32(fff, "menu_hidden", &hidden_u32, 1);
+        uint32_t keynote_back_key_u32 = app->keynote_back_key;
+        flipper_format_write_uint32(fff, "keynote_back_key", &keynote_back_key_u32, 1);
         flipper_format_file_close(fff);
     }
     flipper_format_free(fff);
@@ -416,6 +418,15 @@ bool bt_remotes_profile_activate(Hid* app) {
                 // Settings and Custom Remotes items must never be hidden
                 app->menu_hidden &= ~(uint32_t)(1u << (BT_REMOTES_MENU_ITEM_COUNT - 1));
                 app->menu_hidden &= ~(uint32_t)(1u << (BT_REMOTES_MENU_ITEM_COUNT - 2));
+            }
+            flipper_format_rewind(mfff);
+            uint32_t keynote_back_key_u32 = KEYNOTE_BACK_KEY_DEFAULT;
+            if(flipper_format_read_uint32(mfff, "keynote_back_key", &keynote_back_key_u32, 1)) {
+                if(keynote_back_key_u32 >= KEYNOTE_BACK_KEY_COUNT)
+                    keynote_back_key_u32 = KEYNOTE_BACK_KEY_DEFAULT;
+                app->keynote_back_key = (uint8_t)keynote_back_key_u32;
+            } else {
+                app->keynote_back_key = KEYNOTE_BACK_KEY_DEFAULT;
             }
         } while(0);
         furi_string_free(mtmp);
