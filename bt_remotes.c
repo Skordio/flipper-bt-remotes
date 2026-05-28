@@ -510,6 +510,203 @@ bool bt_remotes_profile_reset(Hid* app) {
 }
 
 // ---------------------------------------------------------------------------
+// Collection operations
+// ---------------------------------------------------------------------------
+
+#define BT_REMOTES_COLLECTION_FILE_TYPE    "Flipper BT Ducky Collection"
+#define BT_REMOTES_COLLECTION_FILE_VERSION (1)
+#define BT_REMOTES_PINS_FILE_TYPE          "Flipper BT Collection Pins"
+#define BT_REMOTES_PINS_FILE_VERSION       (1)
+
+void bt_remotes_collection_load_list(Hid* app) {
+    app->collection_count = 0;
+
+    File*    dir = storage_file_alloc(app->storage);
+    FileInfo info;
+    char     name[BT_REMOTES_COLLECTION_NAME_LEN + 16];
+
+    if(storage_dir_open(dir, BT_REMOTES_COLLECTION_DIR)) {
+        while(storage_dir_read(dir, &info, name, sizeof(name))) {
+            if(info.flags & FSF_DIRECTORY) continue;
+            if(name[0] == '.') continue;
+            if(app->collection_count >= BT_REMOTES_COLLECTION_MAX) break;
+            size_t len     = strlen(name);
+            size_t ext_len = strlen(BT_REMOTES_COLLECTION_EXT);
+            if(len <= ext_len) continue;
+            if(strcmp(name + len - ext_len, BT_REMOTES_COLLECTION_EXT) != 0) continue;
+            name[len - ext_len] = '\0';
+            strlcpy(
+                app->collection_names[app->collection_count],
+                name,
+                BT_REMOTES_COLLECTION_NAME_LEN);
+            app->collection_count++;
+        }
+        storage_dir_close(dir);
+    }
+    storage_file_free(dir);
+}
+
+bool bt_remotes_collection_load(Hid* app, const char* name) {
+    strlcpy(app->editing_collection_name, name, BT_REMOTES_COLLECTION_NAME_LEN);
+    app->editing_collection_script_count = 0;
+
+    FuriString* path = furi_string_alloc_printf(
+        "%s/%s%s", BT_REMOTES_COLLECTION_DIR, name, BT_REMOTES_COLLECTION_EXT);
+
+    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
+    FuriString*    tmp = furi_string_alloc();
+    uint32_t       ver = 0;
+    bool           ok  = false;
+
+    do {
+        if(!flipper_format_file_open_existing(fff, furi_string_get_cstr(path))) break;
+        if(!flipper_format_read_header(fff, tmp, &ver)) break;
+        if(strcmp(furi_string_get_cstr(tmp), BT_REMOTES_COLLECTION_FILE_TYPE) != 0) break;
+        ok = true;
+
+        uint32_t count = 0;
+        if(!flipper_format_read_uint32(fff, "count", &count, 1)) break;
+        if(count > BT_REMOTES_COLLECTION_SCRIPT_MAX) count = BT_REMOTES_COLLECTION_SCRIPT_MAX;
+
+        for(uint32_t i = 0; i < count; i++) {
+            char key[20];
+            snprintf(key, sizeof(key), "script_%u", (unsigned)i);
+            flipper_format_rewind(fff);
+            if(flipper_format_read_string(fff, key, tmp)) {
+                strlcpy(
+                    app->editing_collection_scripts[app->editing_collection_script_count],
+                    furi_string_get_cstr(tmp),
+                    256);
+                app->editing_collection_script_count++;
+            }
+        }
+    } while(0);
+
+    furi_string_free(tmp);
+    flipper_format_free(fff);
+    furi_string_free(path);
+    return ok;
+}
+
+bool bt_remotes_collection_save(Hid* app) {
+    storage_simply_mkdir(app->storage, BT_REMOTES_COLLECTION_DIR);
+
+    FuriString* path = furi_string_alloc_printf(
+        "%s/%s%s",
+        BT_REMOTES_COLLECTION_DIR,
+        app->editing_collection_name,
+        BT_REMOTES_COLLECTION_EXT);
+
+    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
+    bool           ok  = false;
+
+    if(flipper_format_file_open_always(fff, furi_string_get_cstr(path))) {
+        ok = flipper_format_write_header_cstr(
+            fff, BT_REMOTES_COLLECTION_FILE_TYPE, BT_REMOTES_COLLECTION_FILE_VERSION);
+        uint32_t count = app->editing_collection_script_count;
+        ok = ok && flipper_format_write_uint32(fff, "count", &count, 1);
+        for(uint8_t i = 0; ok && i < app->editing_collection_script_count; i++) {
+            char key[20];
+            snprintf(key, sizeof(key), "script_%u", (unsigned)i);
+            ok = flipper_format_write_string_cstr(
+                fff, key, app->editing_collection_scripts[i]);
+        }
+        flipper_format_file_close(fff);
+    }
+    flipper_format_free(fff);
+    furi_string_free(path);
+    return ok;
+}
+
+bool bt_remotes_collection_delete(Hid* app, const char* name) {
+    FuriString* path = furi_string_alloc_printf(
+        "%s/%s%s", BT_REMOTES_COLLECTION_DIR, name, BT_REMOTES_COLLECTION_EXT);
+    FS_Error err = storage_common_remove(app->storage, furi_string_get_cstr(path));
+    furi_string_free(path);
+
+    // Remove from pinned list if present
+    bool was_pinned = false;
+    for(uint8_t i = 0; i < app->pinned_count; i++) {
+        if(strcmp(app->pinned_collections[i], name) == 0) {
+            was_pinned = true;
+            for(uint8_t j = i; j + 1 < app->pinned_count; j++) {
+                strlcpy(
+                    app->pinned_collections[j],
+                    app->pinned_collections[j + 1],
+                    BT_REMOTES_COLLECTION_NAME_LEN);
+            }
+            app->pinned_count--;
+            break;
+        }
+    }
+    if(was_pinned) bt_remotes_pinned_save(app);
+
+    return (err == FSE_OK || err == FSE_NOT_EXIST);
+}
+
+void bt_remotes_pinned_load(Hid* app) {
+    app->pinned_count = 0;
+    if(app->active_profile[0] == '\0') return;
+
+    FuriString* path = furi_string_alloc_printf(
+        "%s/%s.pins", BT_REMOTES_PROFILES_DIR, app->active_profile);
+
+    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
+    FuriString*    tmp = furi_string_alloc();
+    uint32_t       ver = 0;
+
+    do {
+        if(!flipper_format_file_open_existing(fff, furi_string_get_cstr(path))) break;
+        if(!flipper_format_read_header(fff, tmp, &ver)) break;
+        if(strcmp(furi_string_get_cstr(tmp), BT_REMOTES_PINS_FILE_TYPE) != 0) break;
+
+        uint32_t count = 0;
+        if(!flipper_format_read_uint32(fff, "count", &count, 1)) break;
+        if(count > BT_REMOTES_PINNED_MAX) count = BT_REMOTES_PINNED_MAX;
+
+        for(uint32_t i = 0; i < count; i++) {
+            char key[24];
+            snprintf(key, sizeof(key), "collection_%u", (unsigned)i);
+            flipper_format_rewind(fff);
+            if(flipper_format_read_string(fff, key, tmp)) {
+                strlcpy(
+                    app->pinned_collections[app->pinned_count],
+                    furi_string_get_cstr(tmp),
+                    BT_REMOTES_COLLECTION_NAME_LEN);
+                app->pinned_count++;
+            }
+        }
+    } while(0);
+
+    furi_string_free(tmp);
+    flipper_format_free(fff);
+    furi_string_free(path);
+}
+
+void bt_remotes_pinned_save(Hid* app) {
+    if(app->active_profile[0] == '\0') return;
+
+    FuriString* path = furi_string_alloc_printf(
+        "%s/%s.pins", BT_REMOTES_PROFILES_DIR, app->active_profile);
+
+    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
+    if(flipper_format_file_open_always(fff, furi_string_get_cstr(path))) {
+        flipper_format_write_header_cstr(
+            fff, BT_REMOTES_PINS_FILE_TYPE, BT_REMOTES_PINS_FILE_VERSION);
+        uint32_t count = app->pinned_count;
+        flipper_format_write_uint32(fff, "count", &count, 1);
+        for(uint8_t i = 0; i < app->pinned_count; i++) {
+            char key[20];
+            snprintf(key, sizeof(key), "collection_%u", (unsigned)i);
+            flipper_format_write_string_cstr(fff, key, app->pinned_collections[i]);
+        }
+        flipper_format_file_close(fff);
+    }
+    flipper_format_free(fff);
+    furi_string_free(path);
+}
+
+// ---------------------------------------------------------------------------
 // BLE lifecycle
 // ---------------------------------------------------------------------------
 
@@ -842,6 +1039,7 @@ int32_t bt_remotes_app(void* p) {
         APP_DATA_PATH(HID_BT_KEYS_STORAGE_NAME));
 
     storage_simply_mkdir(app->storage, BT_REMOTES_PROFILES_DIR);
+    storage_simply_mkdir(app->storage, BT_REMOTES_COLLECTION_DIR);
 
     // Load app-level config (default BT name for new profiles)
     bt_remotes_load_app_cfg(app);

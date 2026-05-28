@@ -64,7 +64,7 @@ static void
     for(uint8_t i = 0; i < count && k < BT_REMOTES_MENU_ORDER_LEN; i++) {
         app->menu_order[k++] = new_order[i];
     }
-    // Append hidden items at the end so they can be found when un-hidden
+    // Append hidden fixed items so they can be un-hidden later
     for(uint8_t idx = 0;
         idx < BT_REMOTES_MENU_ITEM_COUNT && k < BT_REMOTES_MENU_ORDER_LEN;
         idx++) {
@@ -82,18 +82,48 @@ static void
 void bt_remotes_scene_start_on_enter(void* context) {
     Hid* app = context;
 
-    BtRemotesMenuEntry entries[BT_REMOTES_MENU_ITEM_COUNT];
-    uint8_t            order[BT_REMOTES_MENU_ITEM_COUNT];
+    // Max items: BT_REMOTES_MENU_ITEM_COUNT fixed + BT_REMOTES_PINNED_MAX pinned
+    BtRemotesMenuEntry entries[BT_REMOTES_MENU_ORDER_LEN];
+    uint8_t            order[BT_REMOTES_MENU_ORDER_LEN];
     uint8_t            total = 0;
 
-    for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) {
+    // Track which pinned collections are already placed via menu_order
+    bool pinned_placed[BT_REMOTES_PINNED_MAX];
+    for(uint8_t i = 0; i < BT_REMOTES_PINNED_MAX; i++) pinned_placed[i] = false;
+
+    for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN && total < BT_REMOTES_MENU_ORDER_LEN; i++) {
         uint8_t slot = app->menu_order[i];
         if(slot == 0xFF) continue;
-        if(slot >= BT_REMOTES_MENU_ITEM_COUNT) continue;
-        if(app->menu_hidden & (1u << slot)) continue;
-        entries[total] = bt_remotes_menu_default[slot];
-        order[total]   = slot;
-        total++;
+
+        if(slot < BT_REMOTES_MENU_ITEM_COUNT) {
+            // Fixed built-in item
+            if(app->menu_hidden & (1u << slot)) continue;
+            entries[total] = bt_remotes_menu_default[slot];
+            order[total]   = slot;
+            total++;
+        } else {
+            // Pinned collection slot
+            uint8_t pidx = slot - BT_REMOTES_MENU_ITEM_COUNT;
+            if(pidx >= app->pinned_count) continue;
+            entries[total].label = app->pinned_collections[pidx];
+            entries[total].index = slot;
+            order[total]         = slot;
+            pinned_placed[pidx]  = true;
+            total++;
+        }
+    }
+
+    // Append any newly-pinned collections not yet tracked in menu_order
+    for(uint8_t pidx = 0;
+        pidx < app->pinned_count && total < BT_REMOTES_MENU_ORDER_LEN;
+        pidx++) {
+        if(!pinned_placed[pidx]) {
+            uint8_t slot         = BT_REMOTES_MENU_ITEM_COUNT + pidx;
+            entries[total].label = app->pinned_collections[pidx];
+            entries[total].index = slot;
+            order[total]         = slot;
+            total++;
+        }
     }
 
     hid_remote_menu_set_items(
@@ -101,7 +131,7 @@ void bt_remotes_scene_start_on_enter(void* context) {
         entries,
         order,
         total,
-        0); // fixed_count = 0: all items are fully reorderable
+        0); // all items fully reorderable
     hid_remote_menu_set_select_callback(app->hid_remote_menu, bt_remotes_start_select_cb, app);
     hid_remote_menu_set_reorder_callback(
         app->hid_remote_menu, bt_remotes_start_reorder_cb, app);
@@ -118,7 +148,6 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
     bool consumed = false;
 
     if(event.type == SceneManagerEventTypeBack) {
-        // Stop BLE, clear the active profile, and return to profile select
         bt_remotes_stop_ble(app);
         app->active_profile[0] = '\0';
         scene_manager_search_and_switch_to_previous_scene(
@@ -135,6 +164,13 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneSettings);
         } else if(event.event == BtRemotesStartIndexCustomActions) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneCustomActions);
+        } else if(event.event >= BT_REMOTES_MENU_ITEM_COUNT) {
+            // Pinned collection slot
+            uint8_t pidx = event.event - BT_REMOTES_MENU_ITEM_COUNT;
+            if(pidx < app->pinned_count) {
+                bt_remotes_collection_load(app, app->pinned_collections[pidx]);
+                scene_manager_next_scene(app->scene_manager, BtRemotesSceneCollectionView);
+            }
         } else {
             HidView view_id;
 
@@ -194,5 +230,4 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
 
 void bt_remotes_scene_start_on_exit(void* context) {
     UNUSED(context);
-    // HidRemoteMenu has no reset needed
 }

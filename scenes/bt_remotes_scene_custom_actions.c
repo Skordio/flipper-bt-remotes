@@ -1,60 +1,106 @@
 #include "../bt_remotes.h"
 #include "../helpers/ducky_runner.h"
 
-// ---------------------------------------------------------------------------
-// FileBrowser callback — fired on the main thread when a file is chosen
-// ---------------------------------------------------------------------------
+#define CA_STATE_SUBMENU 0
+#define CA_STATE_BROWSER 1
+
+enum CustomActionsSubmenuIdx {
+    CustomActionsIdxBrowse = 0,
+    CustomActionsIdxCollections = 1,
+};
+
+static void bt_remotes_custom_actions_submenu_cb(void* context, uint32_t index) {
+    Hid* app = context;
+    view_dispatcher_send_custom_event(app->view_dispatcher, index);
+}
 
 static void bt_remotes_file_browser_cb(void* context) {
     Hid* app = context;
-    // The selected path is already in app->file_browser_result; just notify
-    // the scene manager so on_event can pick it up.
-    view_dispatcher_send_custom_event(app->view_dispatcher, 0);
+    view_dispatcher_send_custom_event(app->view_dispatcher, 1);
 }
 
-// ---------------------------------------------------------------------------
-// Scene handlers
-// ---------------------------------------------------------------------------
+static void build_hub_submenu(Hid* app) {
+    submenu_reset(app->submenu);
+    submenu_set_header(app->submenu, "Ducky Scripts");
+    submenu_add_item(
+        app->submenu,
+        "Browse Files",
+        CustomActionsIdxBrowse,
+        bt_remotes_custom_actions_submenu_cb,
+        app);
+    submenu_add_item(
+        app->submenu,
+        "Collections",
+        CustomActionsIdxCollections,
+        bt_remotes_custom_actions_submenu_cb,
+        app);
+    submenu_set_selected_item(app->submenu, 0);
+}
 
 void bt_remotes_scene_custom_actions_on_enter(void* context) {
     Hid* app = context;
 
-    file_browser_configure(
-        app->file_browser,
-        ".txt",           // only list .txt files
-        DUCKY_SCRIPT_DIR, // root of the browser — user cannot navigate above this
-        true,             // skip_assets: hide "assets" directories
-        true,             // hide_dot_files
-        NULL,             // file icon: use default
-        true);            // hide_ext: show filenames without the .txt suffix
+    scene_manager_set_scene_state(
+        app->scene_manager, BtRemotesSceneCustomActions, CA_STATE_SUBMENU);
 
-    file_browser_set_callback(app->file_browser, bt_remotes_file_browser_cb, app);
-
-    // Start browsing at the root; reuse the result string as the initial path
-    furi_string_set(app->file_browser_result, DUCKY_SCRIPT_DIR);
-    file_browser_start(app->file_browser, app->file_browser_result);
-
-    view_dispatcher_switch_to_view(app->view_dispatcher, HidViewFileBrowser);
+    build_hub_submenu(app);
+    view_dispatcher_switch_to_view(app->view_dispatcher, HidViewSubmenu);
 }
 
 bool bt_remotes_scene_custom_actions_on_event(void* context, SceneManagerEvent event) {
     Hid* app = context;
+    uint32_t state =
+        scene_manager_get_scene_state(app->scene_manager, BtRemotesSceneCustomActions);
 
-    if(event.type == SceneManagerEventTypeCustom) {
-        // A .txt file was selected — copy the full path and run it
-        strlcpy(
-            app->pending_script_path,
-            furi_string_get_cstr(app->file_browser_result),
-            sizeof(app->pending_script_path));
-        scene_manager_next_scene(app->scene_manager, BtRemotesSceneCustomActionsRun);
-        return true;
+    if(state == CA_STATE_BROWSER) {
+        if(event.type == SceneManagerEventTypeCustom && event.event == 1) {
+            strlcpy(
+                app->pending_script_path,
+                furi_string_get_cstr(app->file_browser_result),
+                sizeof(app->pending_script_path));
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneCustomActionsRun);
+            return true;
+        }
+        if(event.type == SceneManagerEventTypeBack) {
+            // Return to hub submenu instead of popping scene
+            file_browser_stop(app->file_browser);
+            scene_manager_set_scene_state(
+                app->scene_manager, BtRemotesSceneCustomActions, CA_STATE_SUBMENU);
+            build_hub_submenu(app);
+            view_dispatcher_switch_to_view(app->view_dispatcher, HidViewSubmenu);
+            return true;
+        }
+        return false;
     }
 
-    // Back at the browser root: let the scene manager pop this scene
+    // CA_STATE_SUBMENU
+    if(event.type == SceneManagerEventTypeCustom) {
+        if(event.event == CustomActionsIdxBrowse) {
+            scene_manager_set_scene_state(
+                app->scene_manager, BtRemotesSceneCustomActions, CA_STATE_BROWSER);
+            file_browser_configure(
+                app->file_browser, ".txt", DUCKY_SCRIPT_DIR, true, true, NULL, true);
+            file_browser_set_callback(app->file_browser, bt_remotes_file_browser_cb, app);
+            furi_string_set(app->file_browser_result, DUCKY_SCRIPT_DIR);
+            file_browser_start(app->file_browser, app->file_browser_result);
+            view_dispatcher_switch_to_view(app->view_dispatcher, HidViewFileBrowser);
+            return true;
+        } else if(event.event == CustomActionsIdxCollections) {
+            bt_remotes_collection_load_list(app);
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneCollectionList);
+            return true;
+        }
+    }
+
     return false;
 }
 
 void bt_remotes_scene_custom_actions_on_exit(void* context) {
     Hid* app = context;
-    file_browser_stop(app->file_browser);
+    uint32_t state =
+        scene_manager_get_scene_state(app->scene_manager, BtRemotesSceneCustomActions);
+    if(state == CA_STATE_BROWSER) {
+        file_browser_stop(app->file_browser);
+    }
+    submenu_reset(app->submenu);
 }
