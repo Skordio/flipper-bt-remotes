@@ -44,13 +44,21 @@
 #define BT_REMOTES_PROFILE_NAME_LEN  32
 #define BT_REMOTES_PROFILE_MAX_COUNT 16
 #define BT_REMOTES_MENU_ITEM_COUNT   15
-#define BT_REMOTES_MENU_ORDER_LEN    BT_REMOTES_MENU_ITEM_COUNT
+#define BT_REMOTES_PINNED_MAX        16
+#define BT_REMOTES_MENU_ORDER_LEN    (BT_REMOTES_MENU_ITEM_COUNT + BT_REMOTES_PINNED_MAX)
 
 #define BT_REMOTES_PROFILES_DIR APP_DATA_PATH("profiles")
 #define BT_REMOTES_CFG_PATH     APP_DATA_PATH(".bt_hid.cfg")
 #define BT_REMOTES_APP_CFG_PATH APP_DATA_PATH("app.cfg")
 #define BT_REMOTES_CFG_EXT      ".cfg"
 #define BT_REMOTES_KEYS_EXT     ".keys"
+
+// Ducky Script Collections
+#define BT_REMOTES_COLLECTION_DIR        APP_DATA_PATH("collections")
+#define BT_REMOTES_COLLECTION_EXT        ".collection"
+#define BT_REMOTES_COLLECTION_NAME_LEN   32
+#define BT_REMOTES_COLLECTION_MAX        16
+#define BT_REMOTES_COLLECTION_SCRIPT_MAX 32
 
 typedef struct Hid Hid;
 
@@ -82,6 +90,14 @@ struct Hid {
     HidPushToTalk* hid_ptt;
     HidPushToTalkMenu* hid_ptt_menu;
     HidRemoteMenu*   hid_remote_menu;
+    // Collections
+    char    collection_names[BT_REMOTES_COLLECTION_MAX][BT_REMOTES_COLLECTION_NAME_LEN];
+    uint8_t collection_count;
+    char    pinned_collections[BT_REMOTES_PINNED_MAX][BT_REMOTES_COLLECTION_NAME_LEN];
+    uint8_t pinned_count;
+    char    editing_collection_name[BT_REMOTES_COLLECTION_NAME_LEN];
+    char    editing_collection_scripts[BT_REMOTES_COLLECTION_SCRIPT_MAX][256];
+    uint8_t editing_collection_script_count;
     // Profile management
     char active_profile[BT_REMOTES_PROFILE_NAME_LEN];
     char pending_name[BT_REMOTES_PROFILE_NAME_LEN]; // old name held during profile rename
@@ -106,6 +122,10 @@ struct Hid {
     FuriTimer* pair_save_timer;
     uint8_t    pair_save_attempts;
 };
+
+// Shared name validator: checks non-empty and no forbidden filesystem chars.
+// Returns false and sets error on failure.  Collision check is caller's responsibility.
+bool bt_remotes_validate_name(const char* text, FuriString* error);
 
 // BLE lifecycle
 void bt_remotes_start_ble(Hid* app);
@@ -135,6 +155,14 @@ bool bt_remotes_profile_activate(Hid* app);
 bool bt_remotes_profile_delete(Hid* app);
 bool bt_remotes_profile_rename(Hid* app);
 bool bt_remotes_profile_reset(Hid* app);
+
+// Collection operations
+void bt_remotes_collection_load_list(Hid* app);
+bool bt_remotes_collection_load(Hid* app, const char* name);
+bool bt_remotes_collection_save(Hid* app);
+bool bt_remotes_collection_delete(Hid* app, const char* name);
+void bt_remotes_pinned_load(Hid* app);
+void bt_remotes_pinned_save(Hid* app);
 
 // Default Start-menu item table — defined in bt_remotes_scene_start.c, shared with
 // bt_remotes_scene_hide_items.c.  Entry [i].index == i always (table is in enum order).
