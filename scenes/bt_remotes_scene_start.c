@@ -60,6 +60,13 @@ static void
 void bt_remotes_scene_start_on_enter(void* context) {
     Hid* app = context;
 
+    // While browsing the Start menu (no remote active), keep the iOS keyboard visible.
+    if(app->ble_hid_cfg.phone_kb_suppress) {
+        bt_remotes_stop_ble(app);
+        app->ble_hid_cfg.phone_kb_suppress = false;
+        bt_remotes_start_ble(app);
+    }
+
     // Max items: BT_REMOTES_MENU_ITEM_COUNT fixed + BT_REMOTES_PINNED_MAX pinned
     BtRemotesMenuEntry entries[BT_REMOTES_MENU_ORDER_LEN];
     uint8_t            order[BT_REMOTES_MENU_ORDER_LEN];
