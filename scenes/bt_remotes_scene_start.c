@@ -156,22 +156,27 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
     }
 
     if(event.type == SceneManagerEventTypeCustom) {
-        scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, event.event);
-        consumed = true;
-
         if(event.event == BtRemotesStartIndexSettings) {
+            scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, event.event);
             bt_remotes_stop_ble(app);
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneSettings);
+            consumed = true;
         } else if(event.event == BtRemotesStartIndexCustomActions) {
+            scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, event.event);
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneCustomActions);
+            consumed = true;
         } else if(event.event >= BT_REMOTES_MENU_ITEM_COUNT) {
             // Pinned collection slot
             uint8_t pidx = event.event - BT_REMOTES_MENU_ITEM_COUNT;
             if(pidx < app->pinned_count) {
+                scene_manager_set_scene_state(
+                    app->scene_manager, BtRemotesSceneStart, event.event);
                 bt_remotes_collection_load(app, app->pinned_collections[pidx]);
                 scene_manager_next_scene(app->scene_manager, BtRemotesSceneCollectionView);
+                consumed = true;
             }
         } else {
+            scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, event.event);
             HidView view_id;
 
             switch(event.event) {
@@ -222,6 +227,7 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
 
             scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneMain, view_id);
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneMain);
+            consumed = true;
         }
     }
 

@@ -19,28 +19,15 @@ static bool
     bt_remotes_scene_profile_new_validator(const char* text, FuriString* error, void* context) {
     Hid* app = context;
 
-    if(text[0] == '\0') {
-        furi_string_set(error, "Name cannot\nbe empty");
+    if(!bt_remotes_validate_name(text, error)) return false;
+
+    FuriString* path = furi_string_alloc_printf(
+        "%s/%s%s", BT_REMOTES_PROFILES_DIR, text, BT_REMOTES_CFG_EXT);
+    bool exists = storage_file_exists(app->storage, furi_string_get_cstr(path));
+    furi_string_free(path);
+    if(exists) {
+        furi_string_set(error, "Name already\nin use");
         return false;
-    }
-
-    const char* invalid = "<>:\"/\\|?*";
-    for(size_t i = 0; text[i]; i++) {
-        if(strchr(invalid, text[i])) {
-            furi_string_printf(error, "Char '%c' not\nallowed", text[i]);
-            return false;
-        }
-    }
-
-    if(text[0] != '\0') {
-        FuriString* path = furi_string_alloc_printf(
-            "%s/%s%s", BT_REMOTES_PROFILES_DIR, text, BT_REMOTES_CFG_EXT);
-        bool exists = storage_file_exists(app->storage, furi_string_get_cstr(path));
-        furi_string_free(path);
-        if(exists) {
-            furi_string_set(error, "Name already\nin use");
-            return false;
-        }
     }
 
     return true;

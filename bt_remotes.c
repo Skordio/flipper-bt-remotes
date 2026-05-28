@@ -705,6 +705,25 @@ void bt_remotes_pinned_save(Hid* app) {
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Shared utilities
+// ---------------------------------------------------------------------------
+
+bool bt_remotes_validate_name(const char* text, FuriString* error) {
+    if(text[0] == '\0') {
+        furi_string_set(error, "Name cannot\nbe empty");
+        return false;
+    }
+    const char* invalid = "<>:\"/\\|?*";
+    for(size_t i = 0; text[i]; i++) {
+        if(strchr(invalid, text[i])) {
+            furi_string_printf(error, "Char '%c' not\nallowed", text[i]);
+            return false;
+        }
+    }
+    return true;
+}
+
 // BLE lifecycle
 // ---------------------------------------------------------------------------
 

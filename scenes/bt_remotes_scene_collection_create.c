@@ -9,20 +9,8 @@ static bool
     collection_create_validator(const char* text, FuriString* error, void* context) {
     Hid* app = context;
 
-    if(text[0] == '\0') {
-        furi_string_set(error, "Name cannot\nbe empty");
-        return false;
-    }
+    if(!bt_remotes_validate_name(text, error)) return false;
 
-    const char* invalid = "<>:\"/\\|?*";
-    for(size_t i = 0; text[i]; i++) {
-        if(strchr(invalid, text[i])) {
-            furi_string_printf(error, "Char '%c' not\nallowed", text[i]);
-            return false;
-        }
-    }
-
-    // Check for duplicate name
     for(uint8_t i = 0; i < app->collection_count; i++) {
         if(strcmp(app->collection_names[i], text) == 0) {
             furi_string_set(error, "Name already\nin use");

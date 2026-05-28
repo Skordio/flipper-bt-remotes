@@ -123,6 +123,10 @@ struct Hid {
     uint8_t    pair_save_attempts;
 };
 
+// Shared name validator: checks non-empty and no forbidden filesystem chars.
+// Returns false and sets error on failure.  Collision check is caller's responsibility.
+bool bt_remotes_validate_name(const char* text, FuriString* error);
+
 // BLE lifecycle
 void bt_remotes_start_ble(Hid* app);
 void bt_remotes_stop_ble(Hid* app);
