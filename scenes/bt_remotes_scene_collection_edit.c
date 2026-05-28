@@ -121,6 +121,13 @@ bool bt_remotes_scene_collection_edit_on_event(void* context, SceneManagerEvent 
     }
 
     // CE_STATE_SUBMENU
+    if(event.type == SceneManagerEventTypeBack) {
+        // Always return to CollectionList, even if we were pushed from CollectionCreate
+        scene_manager_search_and_switch_to_previous_scene(
+            app->scene_manager, BtRemotesSceneCollectionList);
+        return true;
+    }
+
     if(event.type == SceneManagerEventTypeCustom) {
         if(event.event == CE_IDX_ADD) {
             scene_manager_set_scene_state(
