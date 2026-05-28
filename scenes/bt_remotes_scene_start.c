@@ -3,28 +3,6 @@
 #include "../views/hid_remote_menu.h"
 
 // ---------------------------------------------------------------------------
-// Item index enum — these are the "values" carried through event dispatch
-// ---------------------------------------------------------------------------
-
-enum BtRemotesStartIndex {
-    BtRemotesStartIndexKeynote,
-    BtRemotesStartIndexKeynoteVertical,
-    BtRemotesStartIndexKeyboard,
-    BtRemotesStartIndexNumpad,
-    BtRemotesStartIndexMedia,
-    BtRemotesStartIndexMusicMacOs,
-    BtRemotesStartIndexMovie,
-    BtRemotesStartIndexTikTok,
-    BtRemotesStartIndexMouse,
-    BtRemotesStartIndexMouseClicker,
-    BtRemotesStartIndexMouseJiggler,
-    BtRemotesStartIndexMouseJigglerStealth,
-    BtRemotesStartIndexPushToTalk,
-    BtRemotesStartIndexCustomActions,
-    BtRemotesStartIndexSettings,
-};
-
-// ---------------------------------------------------------------------------
 // Static default item table — labels parallel to the enum values above
 // ---------------------------------------------------------------------------
 
@@ -166,17 +144,19 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneCustomActions);
             consumed = true;
         } else if(event.event >= BT_REMOTES_MENU_ITEM_COUNT) {
-            // Pinned collection slot
+            // Pinned collection slot — treat as Ducky Scripts for keyboard mode purposes
             uint8_t pidx = event.event - BT_REMOTES_MENU_ITEM_COUNT;
             if(pidx < app->pinned_count) {
                 scene_manager_set_scene_state(
                     app->scene_manager, BtRemotesSceneStart, event.event);
+                app->current_remote_idx = BtRemotesStartIndexCustomActions;
                 bt_remotes_collection_load(app, app->pinned_collections[pidx]);
                 scene_manager_next_scene(app->scene_manager, BtRemotesSceneCollectionView);
                 consumed = true;
             }
         } else {
             scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, event.event);
+            app->current_remote_idx = (uint8_t)event.event;
             HidView view_id;
 
             switch(event.event) {

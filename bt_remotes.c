@@ -120,6 +120,11 @@ static void bt_remotes_load_cfg(Hid* app) {
             flipper_format_rewind(fff);
         }
         flipper_format_read_hex(fff, "mac", app->ble_hid_cfg.mac, sizeof(app->ble_hid_cfg.mac));
+        flipper_format_rewind(fff);
+        uint32_t suppress_u32 = 0;
+        if(flipper_format_read_uint32(fff, "phone_kb_suppress", &suppress_u32, 1)) {
+            app->ble_hid_cfg.phone_kb_suppress = (suppress_u32 != 0);
+        }
     } while(0);
 
     furi_string_free(tmp);
@@ -132,6 +137,8 @@ void bt_hid_save_cfg(Hid* app) {
         flipper_format_write_header_cstr(fff, BT_REMOTES_CFG_FILE_TYPE, BT_REMOTES_CFG_VERSION);
         flipper_format_write_string_cstr(fff, "name", app->ble_hid_cfg.name);
         flipper_format_write_hex(fff, "mac", app->ble_hid_cfg.mac, BT_REMOTES_MAC_SIZE);
+        uint32_t suppress_u32 = app->ble_hid_cfg.phone_kb_suppress ? 1 : 0;
+        flipper_format_write_uint32(fff, "phone_kb_suppress", &suppress_u32, 1);
         flipper_format_file_close(fff);
     }
     flipper_format_free(fff);
@@ -151,11 +158,15 @@ void bt_remotes_save_profile_menu_cfg(Hid* app) {
         flipper_format_write_header_cstr(fff, BT_REMOTES_CFG_FILE_TYPE, BT_REMOTES_CFG_VERSION);
         flipper_format_write_string_cstr(fff, "name", app->ble_hid_cfg.name);
         flipper_format_write_hex(fff, "mac", app->ble_hid_cfg.mac, BT_REMOTES_MAC_SIZE);
+        uint32_t suppress_u32 = app->ble_hid_cfg.phone_kb_suppress ? 1 : 0;
+        flipper_format_write_uint32(fff, "phone_kb_suppress", &suppress_u32, 1);
         uint32_t order_u32[BT_REMOTES_MENU_ORDER_LEN];
         for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) order_u32[i] = app->menu_order[i];
         flipper_format_write_uint32(fff, "menu_order", order_u32, BT_REMOTES_MENU_ORDER_LEN);
         uint32_t hidden_u32 = app->menu_hidden;
         flipper_format_write_uint32(fff, "menu_hidden", &hidden_u32, 1);
+        uint32_t kb_suppress_u32 = app->remote_kb_suppress;
+        flipper_format_write_uint32(fff, "remote_kb_suppress", &kb_suppress_u32, 1);
         flipper_format_file_close(fff);
     }
     flipper_format_free(fff);
@@ -417,10 +428,18 @@ bool bt_remotes_profile_activate(Hid* app) {
                 app->menu_hidden &= ~(uint32_t)(1u << (BT_REMOTES_MENU_ITEM_COUNT - 1));
                 app->menu_hidden &= ~(uint32_t)(1u << (BT_REMOTES_MENU_ITEM_COUNT - 2));
             }
+            flipper_format_rewind(mfff);
+            uint32_t kb_suppress_u32 = BT_REMOTES_KB_SUPPRESS_DEFAULT;
+            if(flipper_format_read_uint32(mfff, "remote_kb_suppress", &kb_suppress_u32, 1)) {
+                app->remote_kb_suppress = (uint16_t)kb_suppress_u32;
+            } else {
+                app->remote_kb_suppress = BT_REMOTES_KB_SUPPRESS_DEFAULT;
+            }
         } while(0);
         furi_string_free(mtmp);
         flipper_format_free(mfff);
     }
+    app->current_remote_idx = 0xFF;
 
     furi_string_free(src_cfg);
     furi_string_free(src_keys);

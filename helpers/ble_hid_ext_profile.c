@@ -1,6 +1,7 @@
 #include "ble_hid_ext_profile.h"
 
 #include <furi.h>
+#include <ble/ble.h>
 
 static FuriHalBleProfileBase* ble_profile_hid_ext_start(FuriHalBleProfileParams profile_params) {
     UNUSED(profile_params);
@@ -32,6 +33,10 @@ static void
     }
     if(has_mac) {
         memcpy(config->mac_address, hid_ext_profile_params->mac, GAP_MAC_ADDR_SIZE);
+    }
+
+    if(hid_ext_profile_params->phone_kb_suppress) {
+        config->appearance_char = GAP_APPEARANCE_MOUSE;
     }
 }
 

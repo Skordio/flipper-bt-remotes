@@ -60,6 +60,30 @@
 #define BT_REMOTES_COLLECTION_MAX        16
 #define BT_REMOTES_COLLECTION_SCRIPT_MAX 32
 
+// Default per-remote iOS keyboard suppression mask:
+// bits 0-1 (Keynote/KeynoteV), 2 (Keyboard), 3 (Numpad), 6 (Movie), 13 (Ducky Scripts)
+#define BT_REMOTES_KB_SUPPRESS_DEFAULT 0x204Fu
+
+// Start-menu item indices — shared by bt_remotes_scene_start.c, bt_remotes_scene_main.c,
+// bt_remotes_scene_kb_mode.c, and bt_remotes.c (profile cfg read/write).
+typedef enum {
+    BtRemotesStartIndexKeynote             = 0,
+    BtRemotesStartIndexKeynoteVertical     = 1,
+    BtRemotesStartIndexKeyboard            = 2,
+    BtRemotesStartIndexNumpad              = 3,
+    BtRemotesStartIndexMedia               = 4,
+    BtRemotesStartIndexMusicMacOs          = 5,
+    BtRemotesStartIndexMovie               = 6,
+    BtRemotesStartIndexTikTok              = 7,
+    BtRemotesStartIndexMouse               = 8,
+    BtRemotesStartIndexMouseClicker        = 9,
+    BtRemotesStartIndexMouseJiggler        = 10,
+    BtRemotesStartIndexMouseJigglerStealth = 11,
+    BtRemotesStartIndexPushToTalk          = 12,
+    BtRemotesStartIndexCustomActions       = 13,
+    BtRemotesStartIndexSettings            = 14,
+} BtRemotesStartIndex;
+
 typedef struct Hid Hid;
 
 struct Hid {
@@ -104,6 +128,10 @@ struct Hid {
     char default_ble_name[FURI_HAL_BT_ADV_NAME_LENGTH]; // default BT name applied to new profiles
     char profile_list[BT_REMOTES_PROFILE_MAX_COUNT][BT_REMOTES_PROFILE_NAME_LEN];
     uint8_t profile_count;
+    // iOS keyboard suppression: per-remote bitmask (bit i = BtRemotesStartIndex i suppresses)
+    uint16_t remote_kb_suppress;
+    // Index of the remote currently being entered (set in start_on_event, read in main_on_enter)
+    uint8_t  current_remote_idx;
     // App-level settings
     // 0=Neither, 1=Disconnect, 2=Connect, 3=Both
     uint8_t vibro_mode;
