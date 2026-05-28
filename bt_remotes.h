@@ -60,9 +60,8 @@
 #define BT_REMOTES_COLLECTION_MAX        16
 #define BT_REMOTES_COLLECTION_SCRIPT_MAX 32
 
-// Default per-remote iOS keyboard suppression mask:
-// bits 0-1 (Keynote/KeynoteV), 2 (Keyboard), 3 (Numpad), 6 (Movie), 13 (Ducky Scripts)
-#define BT_REMOTES_KB_SUPPRESS_DEFAULT 0x204Fu
+// Default per-remote iOS keyboard suppression mask: 0 = show keyboard for all remotes
+#define BT_REMOTES_KB_SUPPRESS_DEFAULT 0x0000u
 
 // Start-menu item indices — shared by bt_remotes_scene_start.c, bt_remotes_scene_main.c,
 // bt_remotes_scene_kb_mode.c, and bt_remotes.c (profile cfg read/write).
