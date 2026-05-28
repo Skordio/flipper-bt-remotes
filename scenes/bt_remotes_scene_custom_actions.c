@@ -86,7 +86,6 @@ bool bt_remotes_scene_custom_actions_on_event(void* context, SceneManagerEvent e
             view_dispatcher_switch_to_view(app->view_dispatcher, HidViewFileBrowser);
             return true;
         } else if(event.event == CustomActionsIdxCollections) {
-            bt_remotes_collection_load_list(app);
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneCollectionList);
             return true;
         }

@@ -571,7 +571,6 @@ bool bt_remotes_collection_load(Hid* app, const char* name) {
         for(uint32_t i = 0; i < count; i++) {
             char key[20];
             snprintf(key, sizeof(key), "script_%u", (unsigned)i);
-            flipper_format_rewind(fff);
             if(flipper_format_read_string(fff, key, tmp)) {
                 strlcpy(
                     app->editing_collection_scripts[app->editing_collection_script_count],
@@ -667,7 +666,6 @@ void bt_remotes_pinned_load(Hid* app) {
         for(uint32_t i = 0; i < count; i++) {
             char key[24];
             snprintf(key, sizeof(key), "collection_%u", (unsigned)i);
-            flipper_format_rewind(fff);
             if(flipper_format_read_string(fff, key, tmp)) {
                 strlcpy(
                     app->pinned_collections[app->pinned_count],
