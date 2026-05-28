@@ -12,7 +12,6 @@ enum BtRemotesSettingsIndex {
     BtRemotesSettingsIndexDisconnectVibro,
     BtRemotesSettingsIndexHideItems,
     BtRemotesSettingsIndexResetMenu,
-    BtRemotesSettingsIndexKBMode,
     BtRemotesSettingsIndexRenameProfile,
     BtRemotesSettingsIndexUnpair,
     BtRemotesSettingsIndexSaveProfile,
@@ -53,12 +52,6 @@ static void build_settings_menu(Hid* app) {
             app->submenu,
             "Reset Menu Order",
             BtRemotesSettingsIndexResetMenu,
-            bt_remotes_scene_settings_submenu_cb,
-            app);
-        submenu_add_item(
-            app->submenu,
-            "iOS Keyboard Mode",
-            BtRemotesSettingsIndexKBMode,
             bt_remotes_scene_settings_submenu_cb,
             app);
         submenu_add_item(
@@ -119,8 +112,6 @@ bool bt_remotes_scene_settings_on_event(void* context, SceneManagerEvent event) 
             submenu_set_selected_item(app->submenu, BtRemotesSettingsIndexDisconnectVibro);
         } else if(event.event == BtRemotesSettingsIndexHideItems) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneHideItems);
-        } else if(event.event == BtRemotesSettingsIndexKBMode) {
-            scene_manager_next_scene(app->scene_manager, BtRemotesSceneKbMode);
         } else if(event.event == BtRemotesSettingsIndexResetMenu) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneResetMenu);
         } else if(event.event == BtRemotesSettingsIndexRenameProfile) {

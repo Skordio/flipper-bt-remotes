@@ -60,13 +60,6 @@ static void
 void bt_remotes_scene_start_on_enter(void* context) {
     Hid* app = context;
 
-    // While browsing the Start menu (no remote active), keep the iOS keyboard visible.
-    if(app->ble_hid_cfg.phone_kb_suppress) {
-        bt_remotes_stop_ble(app);
-        app->ble_hid_cfg.phone_kb_suppress = false;
-        bt_remotes_start_ble(app);
-    }
-
     // Max items: BT_REMOTES_MENU_ITEM_COUNT fixed + BT_REMOTES_PINNED_MAX pinned
     BtRemotesMenuEntry entries[BT_REMOTES_MENU_ORDER_LEN];
     uint8_t            order[BT_REMOTES_MENU_ORDER_LEN];
@@ -156,14 +149,12 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
             if(pidx < app->pinned_count) {
                 scene_manager_set_scene_state(
                     app->scene_manager, BtRemotesSceneStart, event.event);
-                app->current_remote_idx = BtRemotesStartIndexCustomActions;
                 bt_remotes_collection_load(app, app->pinned_collections[pidx]);
                 scene_manager_next_scene(app->scene_manager, BtRemotesSceneCollectionView);
                 consumed = true;
             }
         } else {
             scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, event.event);
-            app->current_remote_idx = (uint8_t)event.event;
             HidView view_id;
 
             switch(event.event) {

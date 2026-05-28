@@ -60,11 +60,7 @@
 #define BT_REMOTES_COLLECTION_MAX        16
 #define BT_REMOTES_COLLECTION_SCRIPT_MAX 32
 
-// Default per-remote iOS keyboard suppression mask: 0 = show keyboard for all remotes
-#define BT_REMOTES_KB_SUPPRESS_DEFAULT 0x0000u
-
-// Start-menu item indices — shared by bt_remotes_scene_start.c, bt_remotes_scene_main.c,
-// bt_remotes_scene_kb_mode.c, and bt_remotes.c (profile cfg read/write).
+// Start-menu item indices — shared by bt_remotes_scene_start.c and bt_remotes_scene_main.c.
 typedef enum {
     BtRemotesStartIndexKeynote             = 0,
     BtRemotesStartIndexKeynoteVertical     = 1,
@@ -127,10 +123,6 @@ struct Hid {
     char default_ble_name[FURI_HAL_BT_ADV_NAME_LENGTH]; // default BT name applied to new profiles
     char profile_list[BT_REMOTES_PROFILE_MAX_COUNT][BT_REMOTES_PROFILE_NAME_LEN];
     uint8_t profile_count;
-    // iOS keyboard suppression: per-remote bitmask (bit i = BtRemotesStartIndex i suppresses)
-    uint16_t remote_kb_suppress;
-    // Index of the remote currently being entered (set in start_on_event, read in main_on_enter)
-    uint8_t  current_remote_idx;
     // App-level settings
     // 0=Neither, 1=Disconnect, 2=Connect, 3=Both
     uint8_t vibro_mode;
