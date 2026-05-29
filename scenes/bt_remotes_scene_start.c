@@ -174,6 +174,10 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
                 break;
             case BtRemotesStartIndexMedia:
                 view_id = HidViewMedia;
+                hid_media_set_mode(
+                    app->hid_media,
+                    app->media_mode == MediaModeImproved,
+                    app->media_mouse_switch);
                 break;
             case BtRemotesStartIndexMusicMacOs:
                 view_id = HidViewMusicMacOs;

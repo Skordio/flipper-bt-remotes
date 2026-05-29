@@ -22,6 +22,8 @@ typedef struct {
     bool ok_pressed;
     bool connected;
     bool back_pressed;
+    bool improved; // Improved mode active — show enhanced title
+    bool mouse_switch; // Mouse switcher on — Back icon indicates mouse mode
 } HidMediaModel;
 
 static void hid_media_draw_arrow(Canvas* canvas, uint8_t x, uint8_t y, CanvasDirection dir) {
@@ -51,7 +53,8 @@ static void hid_media_draw_callback(Canvas* canvas, void* context) {
 #endif
 
     canvas_set_font(canvas, FontPrimary);
-    elements_multiline_text_aligned(canvas, 17, 3, AlignLeft, AlignTop, "Media");
+    elements_multiline_text_aligned(
+        canvas, 17, 3, AlignLeft, AlignTop, model->improved ? "Media+" : "Media");
     canvas_set_font(canvas, FontSecondary);
 
     // Keypad circles
@@ -113,14 +116,19 @@ static void hid_media_draw_callback(Canvas* canvas, void* context) {
     canvas_draw_line(canvas, 86, 26, 86, 30);
     canvas_set_color(canvas, ColorBlack);
 
-    // Exit
+    // Exit / Mouse-switch
     if(model->back_pressed) {
         canvas_set_bitmap_mode(canvas, true);
         canvas_draw_icon(canvas, 107, 33, &I_Pressed_Button_19x19);
         canvas_set_bitmap_mode(canvas, false);
         canvas_set_color(canvas, ColorWhite);
     }
-    canvas_draw_icon(canvas, 111, 38, &I_Pin_back_arrow_10x10);
+    if(model->mouse_switch) {
+        // Tap Back opens the mouse sub-view; hold still exits
+        canvas_draw_icon(canvas, 112, 39, &I_Left_mouse_icon_9x9);
+    } else {
+        canvas_draw_icon(canvas, 111, 38, &I_Pin_back_arrow_10x10);
+    }
     canvas_set_color(canvas, ColorBlack);
 
     canvas_draw_icon(canvas, 0, 54, &I_Pin_back_arrow_10x8);
@@ -259,4 +267,16 @@ void hid_media_set_connected_status(HidMedia* hid_media, bool connected) {
     furi_assert(hid_media);
     with_view_model(
         hid_media->view, HidMediaModel * model, { model->connected = connected; }, true);
+}
+
+void hid_media_set_mode(HidMedia* hid_media, bool improved, bool mouse_switch) {
+    furi_assert(hid_media);
+    with_view_model(
+        hid_media->view,
+        HidMediaModel * model,
+        {
+            model->improved = improved;
+            model->mouse_switch = mouse_switch;
+        },
+        true);
 }
