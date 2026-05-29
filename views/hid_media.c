@@ -141,10 +141,13 @@ static void hid_media_process_press(HidMedia* hid_media, InputEvent* event) {
                 hid_hal_consumer_key_press(hid_media->hid, HID_CONSUMER_VOLUME_DECREMENT);
             } else if(event->key == InputKeyLeft) {
                 model->left_pressed = true;
-                hid_hal_consumer_key_press(hid_media->hid, HID_CONSUMER_SCAN_PREVIOUS_TRACK);
+                // Improved mode classifies tap (Short=seek) vs hold (Long=prev track) on release
+                if(hid_media->hid->media_mode == MediaModeLegacy)
+                    hid_hal_consumer_key_press(hid_media->hid, HID_CONSUMER_SCAN_PREVIOUS_TRACK);
             } else if(event->key == InputKeyRight) {
                 model->right_pressed = true;
-                hid_hal_consumer_key_press(hid_media->hid, HID_CONSUMER_SCAN_NEXT_TRACK);
+                if(hid_media->hid->media_mode == MediaModeLegacy)
+                    hid_hal_consumer_key_press(hid_media->hid, HID_CONSUMER_SCAN_NEXT_TRACK);
             } else if(event->key == InputKeyOk) {
                 model->ok_pressed = true;
                 hid_hal_consumer_key_press(hid_media->hid, HID_CONSUMER_PLAY_PAUSE);
@@ -168,10 +171,12 @@ static void hid_media_process_release(HidMedia* hid_media, InputEvent* event) {
                 hid_hal_consumer_key_release(hid_media->hid, HID_CONSUMER_VOLUME_DECREMENT);
             } else if(event->key == InputKeyLeft) {
                 model->left_pressed = false;
-                hid_hal_consumer_key_release(hid_media->hid, HID_CONSUMER_SCAN_PREVIOUS_TRACK);
+                if(hid_media->hid->media_mode == MediaModeLegacy)
+                    hid_hal_consumer_key_release(hid_media->hid, HID_CONSUMER_SCAN_PREVIOUS_TRACK);
             } else if(event->key == InputKeyRight) {
                 model->right_pressed = false;
-                hid_hal_consumer_key_release(hid_media->hid, HID_CONSUMER_SCAN_NEXT_TRACK);
+                if(hid_media->hid->media_mode == MediaModeLegacy)
+                    hid_hal_consumer_key_release(hid_media->hid, HID_CONSUMER_SCAN_NEXT_TRACK);
             } else if(event->key == InputKeyOk) {
                 model->ok_pressed = false;
                 hid_hal_consumer_key_release(hid_media->hid, HID_CONSUMER_PLAY_PAUSE);
@@ -188,13 +193,40 @@ static bool hid_media_input_callback(InputEvent* event, void* context) {
     bool consumed = false;
 
     if(event->type == InputTypeLong && event->key == InputKeyBack) {
+        // Hold Back to exit (all modes); leave unconsumed so it bubbles to the scene manager
         hid_hal_keyboard_release_all(hid_media->hid);
+    } else if(
+        event->type == InputTypeShort && event->key == InputKeyBack &&
+        hid_media->hid->media_mouse_switch) {
+        // Short Back opens the mouse sub-view; its Back returns here (HidViewMedia)
+        hid_mouse_set_back_to_view(hid_media->hid->hid_mouse, true, HidViewMedia);
+        view_dispatcher_switch_to_view(hid_media->hid->view_dispatcher, HidViewMouse);
+        consumed = true;
     } else {
         consumed = true;
         if(event->type == InputTypePress) {
             hid_media_process_press(hid_media, event);
         } else if(event->type == InputTypeRelease) {
             hid_media_process_release(hid_media, event);
+        } else if(hid_media->hid->media_mode == MediaModeImproved) {
+            // Improved mode: tap L/R = seek (arrow keys), hold L/R = previous/next track
+            if(event->type == InputTypeShort) {
+                if(event->key == InputKeyLeft) {
+                    hid_hal_keyboard_press(hid_media->hid, HID_KEYBOARD_LEFT_ARROW);
+                    hid_hal_keyboard_release(hid_media->hid, HID_KEYBOARD_LEFT_ARROW);
+                } else if(event->key == InputKeyRight) {
+                    hid_hal_keyboard_press(hid_media->hid, HID_KEYBOARD_RIGHT_ARROW);
+                    hid_hal_keyboard_release(hid_media->hid, HID_KEYBOARD_RIGHT_ARROW);
+                }
+            } else if(event->type == InputTypeLong) {
+                if(event->key == InputKeyLeft) {
+                    hid_hal_consumer_key_press(hid_media->hid, HID_CONSUMER_SCAN_PREVIOUS_TRACK);
+                    hid_hal_consumer_key_release(hid_media->hid, HID_CONSUMER_SCAN_PREVIOUS_TRACK);
+                } else if(event->key == InputKeyRight) {
+                    hid_hal_consumer_key_press(hid_media->hid, HID_CONSUMER_SCAN_NEXT_TRACK);
+                    hid_hal_consumer_key_release(hid_media->hid, HID_CONSUMER_SCAN_NEXT_TRACK);
+                }
+            }
         }
     }
 

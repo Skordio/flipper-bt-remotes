@@ -158,6 +158,10 @@ void bt_remotes_save_profile_menu_cfg(Hid* app) {
         flipper_format_write_uint32(fff, "menu_hidden", &hidden_u32, 1);
         uint32_t keynote_back_key_u32 = app->keynote_back_key;
         flipper_format_write_uint32(fff, "keynote_back_key", &keynote_back_key_u32, 1);
+        uint32_t media_mode_u32 = app->media_mode;
+        flipper_format_write_uint32(fff, "media_mode", &media_mode_u32, 1);
+        uint32_t media_mouse_switch_u32 = app->media_mouse_switch;
+        flipper_format_write_uint32(fff, "media_mouse_switch", &media_mouse_switch_u32, 1);
         flipper_format_file_close(fff);
     }
     flipper_format_free(fff);
@@ -427,6 +431,21 @@ bool bt_remotes_profile_activate(Hid* app) {
                 app->keynote_back_key = (uint8_t)keynote_back_key_u32;
             } else {
                 app->keynote_back_key = KEYNOTE_BACK_KEY_DEFAULT;
+            }
+            flipper_format_rewind(mfff);
+            uint32_t media_mode_u32 = MEDIA_MODE_DEFAULT;
+            if(flipper_format_read_uint32(mfff, "media_mode", &media_mode_u32, 1)) {
+                if(media_mode_u32 >= MEDIA_MODE_COUNT) media_mode_u32 = MEDIA_MODE_DEFAULT;
+                app->media_mode = (uint8_t)media_mode_u32;
+            } else {
+                app->media_mode = MEDIA_MODE_DEFAULT;
+            }
+            flipper_format_rewind(mfff);
+            uint32_t media_mouse_switch_u32 = MEDIA_MOUSE_SWITCH_DEFAULT;
+            if(flipper_format_read_uint32(mfff, "media_mouse_switch", &media_mouse_switch_u32, 1)) {
+                app->media_mouse_switch = media_mouse_switch_u32 ? 1 : 0;
+            } else {
+                app->media_mouse_switch = MEDIA_MOUSE_SWITCH_DEFAULT;
             }
         } while(0);
         furi_string_free(mtmp);

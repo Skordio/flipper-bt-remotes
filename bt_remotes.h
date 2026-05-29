@@ -71,6 +71,18 @@ typedef enum {
 #define KEYNOTE_BACK_KEY_DEFAULT KeynoteBackKeyDelete
 #define KEYNOTE_BACK_KEY_COUNT   4
 
+// Media remote behavior mode (per-profile)
+typedef enum {
+    MediaModeLegacy   = 0, // L/R = prev/next track (current behavior)
+    MediaModeImproved = 1, // tap L/R = seek arrows, hold L/R = prev/next track
+} MediaMode;
+
+#define MEDIA_MODE_DEFAULT MediaModeLegacy
+#define MEDIA_MODE_COUNT   2
+
+// Media remote mouse switcher: short Back opens the mouse sub-view (independent of mode)
+#define MEDIA_MOUSE_SWITCH_DEFAULT 0
+
 // Start-menu item indices — shared by bt_remotes_scene_start.c and bt_remotes_scene_main.c.
 typedef enum {
     BtRemotesStartIndexKeynote             = 0,
@@ -136,6 +148,8 @@ struct Hid {
     uint8_t profile_count;
     // Per-profile remote-type settings
     uint8_t keynote_back_key; // KeynoteBackKey enum — which key short-press Back sends in Keynote
+    uint8_t media_mode; // MediaMode enum — Legacy vs Improved media remote behavior
+    uint8_t media_mouse_switch; // 0 = off, 1 = on — short Back opens mouse sub-view
     // App-level settings
     // 0=Neither, 1=Disconnect, 2=Connect, 3=Both
     uint8_t vibro_mode;

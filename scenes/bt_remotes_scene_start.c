@@ -186,6 +186,9 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
                 break;
             case BtRemotesStartIndexMouse:
                 view_id = HidViewMouse;
+                // Standalone Mouse remote: short Back = right-click (reset the shared
+                // instance in case the Media remote left it in return-to-Media mode)
+                hid_mouse_set_back_to_view(app->hid_mouse, false, 0);
                 break;
             case BtRemotesStartIndexMouseClicker:
                 view_id = HidViewMouseClicker;

@@ -9,6 +9,8 @@
 struct HidMouse {
     View* view;
     Hid* hid;
+    bool back_to_parent; // short Back switches to parent_view_id instead of right-click
+    uint32_t parent_view_id;
 };
 
 typedef struct {
@@ -20,6 +22,7 @@ typedef struct {
     bool left_mouse_held;
     bool right_mouse_pressed;
     bool connected;
+    bool back_to_parent; // mirror of struct flag, for the Back-button hint/icon
     uint8_t acceleration;
 } HidMouseModel;
 
@@ -108,7 +111,12 @@ static void hid_mouse_draw_callback(Canvas* canvas, void* context) {
         canvas_set_bitmap_mode(canvas, false);
         canvas_set_color(canvas, ColorWhite);
     }
-    canvas_draw_icon(canvas, 112, 38, &I_Right_mouse_icon_9x9);
+    if(model->back_to_parent) {
+        // Short Back returns to the Media remote rather than right-clicking
+        canvas_draw_icon(canvas, 112, 39, &I_Pin_back_arrow_10x8);
+    } else {
+        canvas_draw_icon(canvas, 112, 38, &I_Right_mouse_icon_9x9);
+    }
     canvas_set_color(canvas, ColorBlack);
 }
 
@@ -210,6 +218,12 @@ static bool hid_mouse_input_callback(InputEvent* event, void* context) {
                 model->left_mouse_pressed = false;
             },
             false);
+    } else if(
+        event->type == InputTypeShort && event->key == InputKeyBack && hid_mouse->back_to_parent) {
+        // Short Back returns to the parent view (e.g. Media) instead of right-clicking.
+        // Switch outside with_view_model to avoid holding the model lock across the dispatch.
+        view_dispatcher_switch_to_view(hid_mouse->hid->view_dispatcher, hid_mouse->parent_view_id);
+        consumed = true;
     } else {
         hid_mouse_process(hid_mouse, event);
         consumed = true;
@@ -222,6 +236,8 @@ HidMouse* hid_mouse_alloc(Hid* hid) {
     HidMouse* hid_mouse = malloc(sizeof(HidMouse));
     hid_mouse->view = view_alloc();
     hid_mouse->hid = hid;
+    hid_mouse->back_to_parent = false;
+    hid_mouse->parent_view_id = 0;
     view_set_context(hid_mouse->view, hid_mouse);
     view_allocate_model(hid_mouse->view, ViewModelTypeLocking, sizeof(HidMouseModel));
     view_set_draw_callback(hid_mouse->view, hid_mouse_draw_callback);
@@ -244,4 +260,12 @@ void hid_mouse_set_connected_status(HidMouse* hid_mouse, bool connected) {
     furi_assert(hid_mouse);
     with_view_model(
         hid_mouse->view, HidMouseModel * model, { model->connected = connected; }, true);
+}
+
+void hid_mouse_set_back_to_view(HidMouse* hid_mouse, bool enabled, uint32_t view_id) {
+    furi_assert(hid_mouse);
+    hid_mouse->back_to_parent = enabled;
+    hid_mouse->parent_view_id = view_id;
+    with_view_model(
+        hid_mouse->view, HidMouseModel * model, { model->back_to_parent = enabled; }, true);
 }
