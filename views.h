@@ -18,6 +18,7 @@ typedef enum {
     HidViewPushToTalkMenu,
     HidViewPushToTalkHelp,
     HidViewDialog,
+    HidViewHelp,
     HidViewPopup,
     HidViewTextInput,
     HidViewFileBrowser,

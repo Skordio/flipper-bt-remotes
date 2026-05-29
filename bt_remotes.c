@@ -925,6 +925,10 @@ static Hid* bt_remotes_alloc(void) {
     view_dispatcher_add_view(
         app->view_dispatcher, HidViewPopup, popup_get_view(app->popup));
 
+    app->help_widget = widget_alloc();
+    view_dispatcher_add_view(
+        app->view_dispatcher, HidViewHelp, widget_get_view(app->help_widget));
+
     app->hid_keynote = hid_keynote_alloc(app);
     view_dispatcher_add_view(
         app->view_dispatcher, HidViewKeynote, hid_keynote_get_view(app->hid_keynote));
@@ -1025,6 +1029,8 @@ static void bt_remotes_free(Hid* app) {
     text_input_free(app->text_input);
     view_dispatcher_remove_view(app->view_dispatcher, HidViewPopup);
     popup_free(app->popup);
+    view_dispatcher_remove_view(app->view_dispatcher, HidViewHelp);
+    widget_free(app->help_widget);
     view_dispatcher_remove_view(app->view_dispatcher, HidViewKeynote);
     hid_keynote_free(app->hid_keynote);
     view_dispatcher_remove_view(app->view_dispatcher, HidViewKeyboard);

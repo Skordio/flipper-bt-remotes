@@ -13,7 +13,7 @@ static void bt_remotes_scene_remote_type_settings_cb(void* context, uint32_t ind
 void bt_remotes_scene_remote_type_settings_on_enter(void* context) {
     Hid* app = context;
     submenu_reset(app->submenu);
-    submenu_set_header(app->submenu, "Remote Type Settings");
+    submenu_set_header(app->submenu, "Per-Remote Settings");
     submenu_add_item(
         app->submenu,
         "Keynote",

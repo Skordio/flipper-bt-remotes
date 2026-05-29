@@ -20,6 +20,7 @@
 #include <gui/modules/popup.h>
 #include <gui/modules/text_input.h>
 #include <gui/modules/file_browser.h>
+#include <gui/modules/widget.h>
 #include "views/hid_remote_menu.h"
 #include "helpers/ducky_runner.h"
 #include "views/hid_keynote.h"
@@ -118,6 +119,7 @@ struct Hid {
     DialogEx* dialog;
     TextInput* text_input;
     Popup* popup;
+    Widget* help_widget; // scrollable text pages for the Help scene
     HidKeynote* hid_keynote;
     HidKeyboard* hid_keyboard;
     HidNumpad* hid_numpad;

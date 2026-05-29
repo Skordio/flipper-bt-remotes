@@ -51,7 +51,7 @@ static void build_settings_menu(Hid* app) {
             app);
         submenu_add_item(
             app->submenu,
-            "Remote Type Settings",
+            "Per-Remote Settings",
             BtRemotesSettingsIndexRemoteTypeSettings,
             bt_remotes_scene_settings_submenu_cb,
             app);
