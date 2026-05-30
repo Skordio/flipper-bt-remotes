@@ -81,7 +81,10 @@ static const char* const help_pages[] = {
     "- Mode: Legacy (Left/Right skip tracks) or Improved (TAP Left/Right to "
     "seek within a video, HOLD to skip tracks).\n"
     "- Mouse Switcher: when On, a short Back opens a mouse view; a short Back "
-    "there returns to Media. Hold Back still exits.",
+    "there returns to Media. Hold Back still exits.\n\n"
+    "TIKTOK / YT SHORTS\n"
+    "- Scroll Mode: Wheel (scroll-wheel) or Gesture (emulated finger swipe) for "
+    "moving Up/Down between videos.",
 
     // 6: Ducky Scripts & Collections
     "DUCKY SCRIPTS & COLLECTIONS\n"

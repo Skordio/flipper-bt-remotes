@@ -20,6 +20,7 @@ typedef struct {
     bool connected;
     bool is_cursor_set;
     bool back_mouse_pressed;
+    bool gesture_mode; // Up/Down use swipe gestures instead of the scroll wheel
 } HidTikTokModel;
 
 static void hid_tiktok_draw_callback(Canvas* canvas, void* context) {
@@ -39,6 +40,11 @@ static void hid_tiktok_draw_callback(Canvas* canvas, void* context) {
     elements_multiline_text_aligned(canvas, 17, 3, AlignLeft, AlignTop, "TikTok /");
     elements_multiline_text_aligned(canvas, 3, 18, AlignLeft, AlignTop, "YT Shorts");
     canvas_set_font(canvas, FontSecondary);
+
+    // Gesture-mode indicator (Up/Down emulate finger swipes)
+    if(model->gesture_mode) {
+        elements_multiline_text_aligned(canvas, 3, 33, AlignLeft, AlignTop, "Swipe mode");
+    }
 
     // Keypad circles
     canvas_draw_icon(canvas, 58, 3, &I_OutCircles_70x51);
@@ -124,6 +130,42 @@ static void hid_tiktok_reset_cursor(HidTikTok* hid_tiktok) {
     furi_delay_ms(50);
 }
 
+// Emulate a finger swipe via a mouse click-drag.
+//   dir = -1 : drag up   (content scrolls up  -> NEXT video)
+//   dir = +1 : drag down (content scrolls down -> PREVIOUS video)
+// Re-anchors the cursor to a known corner each call (the host clamps movement at
+// the edge), then moves INWARD off that edge to a start point with room to drag,
+// then press -> stepped drag -> release. Delays pace one packet per BLE
+// connection interval, mirroring hid_tiktok_reset_cursor.
+static void hid_tiktok_gesture_swipe(HidTikTok* hid_tiktok, int dir) {
+    // Anchor to the corner the drag starts from: an up-drag starts low (bottom),
+    // a down-drag starts high (top). Horizontal anchor is the left edge.
+    const int8_t v_anchor = (int8_t)(-dir * 127);
+    for(size_t i = 0; i < 8; i++) {
+        hid_hal_mouse_move(hid_tiktok->hid, -127, v_anchor);
+        furi_delay_ms(40);
+    }
+    // Move inward to the start point: toward horizontal center, and well off the
+    // anchored edge so the swipe doesn't begin in a screen-edge gesture zone.
+    // The vertical margin (~180) is split into two moves to stay within int8_t.
+    hid_hal_mouse_move(hid_tiktok->hid, 70, 0);
+    furi_delay_ms(20);
+    hid_hal_mouse_move(hid_tiktok->hid, 0, (int8_t)(dir * 90));
+    furi_delay_ms(20);
+    hid_hal_mouse_move(hid_tiktok->hid, 0, (int8_t)(dir * 90));
+    furi_delay_ms(20);
+
+    // Touch down, drag in the swipe direction across the screen, touch up.
+    hid_hal_mouse_press(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
+    furi_delay_ms(40);
+    for(size_t i = 0; i < 10; i++) {
+        hid_hal_mouse_move(hid_tiktok->hid, 0, (int8_t)(dir * 35));
+        furi_delay_ms(15);
+    }
+    furi_delay_ms(40);
+    hid_hal_mouse_release(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
+}
+
 static void
     hid_tiktok_process_press(HidTikTok* hid_tiktok, HidTikTokModel* model, InputEvent* event) {
     if(event->key == InputKeyUp) {
@@ -193,20 +235,30 @@ static bool hid_tiktok_input_callback(InputEvent* event, void* context) {
                     hid_hal_mouse_release(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
                     consumed = true;
                 } else if(event->key == InputKeyUp) {
-                    // Emulate up swipe
-                    hid_hal_mouse_scroll(hid_tiktok->hid, -12);
-                    hid_hal_mouse_scroll(hid_tiktok->hid, -24);
-                    hid_hal_mouse_scroll(hid_tiktok->hid, -38);
-                    hid_hal_mouse_scroll(hid_tiktok->hid, -24);
-                    hid_hal_mouse_scroll(hid_tiktok->hid, -12);
+                    if(hid_tiktok->hid->tiktok_scroll_mode == TikTokScrollGesture) {
+                        // Up button -> previous video (drag the feed down)
+                        hid_tiktok_gesture_swipe(hid_tiktok, 1);
+                    } else {
+                        // Emulate up swipe with the scroll wheel
+                        hid_hal_mouse_scroll(hid_tiktok->hid, -12);
+                        hid_hal_mouse_scroll(hid_tiktok->hid, -24);
+                        hid_hal_mouse_scroll(hid_tiktok->hid, -38);
+                        hid_hal_mouse_scroll(hid_tiktok->hid, -24);
+                        hid_hal_mouse_scroll(hid_tiktok->hid, -12);
+                    }
                     consumed = true;
                 } else if(event->key == InputKeyDown) {
-                    // Emulate down swipe
-                    hid_hal_mouse_scroll(hid_tiktok->hid, 12);
-                    hid_hal_mouse_scroll(hid_tiktok->hid, 24);
-                    hid_hal_mouse_scroll(hid_tiktok->hid, 38);
-                    hid_hal_mouse_scroll(hid_tiktok->hid, 24);
-                    hid_hal_mouse_scroll(hid_tiktok->hid, 12);
+                    if(hid_tiktok->hid->tiktok_scroll_mode == TikTokScrollGesture) {
+                        // Down button -> next video (drag the feed up)
+                        hid_tiktok_gesture_swipe(hid_tiktok, -1);
+                    } else {
+                        // Emulate down swipe with the scroll wheel
+                        hid_hal_mouse_scroll(hid_tiktok->hid, 12);
+                        hid_hal_mouse_scroll(hid_tiktok->hid, 24);
+                        hid_hal_mouse_scroll(hid_tiktok->hid, 38);
+                        hid_hal_mouse_scroll(hid_tiktok->hid, 24);
+                        hid_hal_mouse_scroll(hid_tiktok->hid, 12);
+                    }
                     consumed = true;
                 } else if(event->key == InputKeyBack) {
                     // Pause
@@ -261,4 +313,10 @@ void hid_tiktok_set_connected_status(HidTikTok* hid_tiktok, bool connected) {
             model->is_cursor_set = false;
         },
         true);
+}
+
+void hid_tiktok_set_mode(HidTikTok* hid_tiktok, bool gesture) {
+    furi_assert(hid_tiktok);
+    with_view_model(
+        hid_tiktok->view, HidTikTokModel * model, { model->gesture_mode = gesture; }, true);
 }

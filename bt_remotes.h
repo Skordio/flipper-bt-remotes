@@ -84,6 +84,15 @@ typedef enum {
 // Media remote mouse switcher: short Back opens the mouse sub-view (independent of mode)
 #define MEDIA_MOUSE_SWITCH_DEFAULT 0
 
+// TikTok / YT Shorts scroll behavior (per-profile)
+typedef enum {
+    TikTokScrollWheel   = 0, // scroll-wheel burst (current behavior)
+    TikTokScrollGesture = 1, // emulated finger swipe (mouse click-drag)
+} TikTokScrollMode;
+
+#define TIKTOK_SCROLL_MODE_DEFAULT TikTokScrollWheel
+#define TIKTOK_SCROLL_MODE_COUNT   2
+
 // Start-menu item indices — shared by bt_remotes_scene_start.c and bt_remotes_scene_main.c.
 typedef enum {
     BtRemotesStartIndexKeynote             = 0,
@@ -152,6 +161,7 @@ struct Hid {
     uint8_t keynote_back_key; // KeynoteBackKey enum — which key short-press Back sends in Keynote
     uint8_t media_mode; // MediaMode enum — Legacy vs Improved media remote behavior
     uint8_t media_mouse_switch; // 0 = off, 1 = on — short Back opens mouse sub-view
+    uint8_t tiktok_scroll_mode; // TikTokScrollMode enum — Wheel vs Gesture scrolling
     // App-level settings
     // 0=Neither, 1=Disconnect, 2=Connect, 3=Both
     uint8_t vibro_mode;

@@ -162,6 +162,8 @@ void bt_remotes_save_profile_menu_cfg(Hid* app) {
         flipper_format_write_uint32(fff, "media_mode", &media_mode_u32, 1);
         uint32_t media_mouse_switch_u32 = app->media_mouse_switch;
         flipper_format_write_uint32(fff, "media_mouse_switch", &media_mouse_switch_u32, 1);
+        uint32_t tiktok_scroll_mode_u32 = app->tiktok_scroll_mode;
+        flipper_format_write_uint32(fff, "tiktok_scroll_mode", &tiktok_scroll_mode_u32, 1);
         flipper_format_file_close(fff);
     }
     flipper_format_free(fff);
@@ -446,6 +448,15 @@ bool bt_remotes_profile_activate(Hid* app) {
                 app->media_mouse_switch = media_mouse_switch_u32 ? 1 : 0;
             } else {
                 app->media_mouse_switch = MEDIA_MOUSE_SWITCH_DEFAULT;
+            }
+            flipper_format_rewind(mfff);
+            uint32_t tiktok_scroll_mode_u32 = TIKTOK_SCROLL_MODE_DEFAULT;
+            if(flipper_format_read_uint32(mfff, "tiktok_scroll_mode", &tiktok_scroll_mode_u32, 1)) {
+                if(tiktok_scroll_mode_u32 >= TIKTOK_SCROLL_MODE_COUNT)
+                    tiktok_scroll_mode_u32 = TIKTOK_SCROLL_MODE_DEFAULT;
+                app->tiktok_scroll_mode = (uint8_t)tiktok_scroll_mode_u32;
+            } else {
+                app->tiktok_scroll_mode = TIKTOK_SCROLL_MODE_DEFAULT;
             }
         } while(0);
         furi_string_free(mtmp);

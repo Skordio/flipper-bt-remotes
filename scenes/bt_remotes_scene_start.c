@@ -187,6 +187,8 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
                 break;
             case BtRemotesStartIndexTikTok:
                 view_id = BtHidViewTikTok;
+                hid_tiktok_set_mode(
+                    app->hid_tiktok, app->tiktok_scroll_mode == TikTokScrollGesture);
                 break;
             case BtRemotesStartIndexMouse:
                 view_id = HidViewMouse;

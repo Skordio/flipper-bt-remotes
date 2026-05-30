@@ -3,6 +3,7 @@
 enum BtRemotesRemoteTypeIndex {
     BtRemotesRemoteTypeIndexKeynote = 0,
     BtRemotesRemoteTypeIndexMedia   = 1,
+    BtRemotesRemoteTypeIndexTikTok  = 2,
 };
 
 static void bt_remotes_scene_remote_type_settings_cb(void* context, uint32_t index) {
@@ -26,6 +27,12 @@ void bt_remotes_scene_remote_type_settings_on_enter(void* context) {
         BtRemotesRemoteTypeIndexMedia,
         bt_remotes_scene_remote_type_settings_cb,
         app);
+    submenu_add_item(
+        app->submenu,
+        "TikTok / YT Shorts",
+        BtRemotesRemoteTypeIndexTikTok,
+        bt_remotes_scene_remote_type_settings_cb,
+        app);
     view_dispatcher_switch_to_view(app->view_dispatcher, HidViewSubmenu);
 }
 
@@ -38,6 +45,9 @@ bool bt_remotes_scene_remote_type_settings_on_event(void* context, SceneManagerE
             consumed = true;
         } else if(event.event == BtRemotesRemoteTypeIndexMedia) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneMediaSettings);
+            consumed = true;
+        } else if(event.event == BtRemotesRemoteTypeIndexTikTok) {
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneTikTokSettings);
             consumed = true;
         }
     }
