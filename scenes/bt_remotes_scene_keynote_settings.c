@@ -7,8 +7,17 @@ static const char* const keynote_back_key_labels[KEYNOTE_BACK_KEY_COUNT] = {
     "None",
 };
 
+// "Help" sits one past the real key options.
+#define KEYNOTE_SETTINGS_INDEX_HELP KEYNOTE_BACK_KEY_COUNT
+
 static void keynote_settings_cb(void* context, uint32_t index) {
     Hid* app = context;
+    if(index == KEYNOTE_SETTINGS_INDEX_HELP) {
+        scene_manager_set_scene_state(
+            app->scene_manager, BtRemotesSceneRemoteSettingsHelp, RemoteSettingsHelpKeynote);
+        scene_manager_next_scene(app->scene_manager, BtRemotesSceneRemoteSettingsHelp);
+        return;
+    }
     app->keynote_back_key = (uint8_t)index;
     bt_remotes_save_profile_menu_cfg(app);
     scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneKeynoteSettings, index);
@@ -29,6 +38,8 @@ static void build_keynote_submenu(Hid* app) {
             keynote_back_key_labels[i]);
         submenu_add_item(app->submenu, keynote_labels[i], i, keynote_settings_cb, app);
     }
+    submenu_add_item(
+        app->submenu, "Help", KEYNOTE_SETTINGS_INDEX_HELP, keynote_settings_cb, app);
 }
 
 void bt_remotes_scene_keynote_settings_on_enter(void* context) {

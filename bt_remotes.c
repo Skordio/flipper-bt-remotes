@@ -164,6 +164,12 @@ void bt_remotes_save_profile_menu_cfg(Hid* app) {
         flipper_format_write_uint32(fff, "media_mouse_switch", &media_mouse_switch_u32, 1);
         uint32_t tiktok_scroll_mode_u32 = app->tiktok_scroll_mode;
         flipper_format_write_uint32(fff, "tiktok_scroll_mode", &tiktok_scroll_mode_u32, 1);
+        uint32_t tiktok_gesture_inset_u32 = app->tiktok_gesture_inset;
+        flipper_format_write_uint32(fff, "tiktok_gesture_inset", &tiktok_gesture_inset_u32, 1);
+        uint32_t tiktok_gesture_margin_u32 = app->tiktok_gesture_margin;
+        flipper_format_write_uint32(fff, "tiktok_gesture_margin", &tiktok_gesture_margin_u32, 1);
+        uint32_t tiktok_gesture_swipe_u32 = app->tiktok_gesture_swipe;
+        flipper_format_write_uint32(fff, "tiktok_gesture_swipe", &tiktok_gesture_swipe_u32, 1);
         flipper_format_file_close(fff);
     }
     flipper_format_free(fff);
@@ -457,6 +463,42 @@ bool bt_remotes_profile_activate(Hid* app) {
                 app->tiktok_scroll_mode = (uint8_t)tiktok_scroll_mode_u32;
             } else {
                 app->tiktok_scroll_mode = TIKTOK_SCROLL_MODE_DEFAULT;
+            }
+            flipper_format_rewind(mfff);
+            uint32_t tiktok_gesture_inset_u32 = TIKTOK_GESTURE_INSET_DEFAULT;
+            if(flipper_format_read_uint32(
+                   mfff, "tiktok_gesture_inset", &tiktok_gesture_inset_u32, 1)) {
+                if(tiktok_gesture_inset_u32 < TIKTOK_GESTURE_INSET_MIN)
+                    tiktok_gesture_inset_u32 = TIKTOK_GESTURE_INSET_MIN;
+                if(tiktok_gesture_inset_u32 > TIKTOK_GESTURE_INSET_MAX)
+                    tiktok_gesture_inset_u32 = TIKTOK_GESTURE_INSET_MAX;
+                app->tiktok_gesture_inset = (uint16_t)tiktok_gesture_inset_u32;
+            } else {
+                app->tiktok_gesture_inset = TIKTOK_GESTURE_INSET_DEFAULT;
+            }
+            flipper_format_rewind(mfff);
+            uint32_t tiktok_gesture_margin_u32 = TIKTOK_GESTURE_MARGIN_DEFAULT;
+            if(flipper_format_read_uint32(
+                   mfff, "tiktok_gesture_margin", &tiktok_gesture_margin_u32, 1)) {
+                if(tiktok_gesture_margin_u32 < TIKTOK_GESTURE_MARGIN_MIN)
+                    tiktok_gesture_margin_u32 = TIKTOK_GESTURE_MARGIN_MIN;
+                if(tiktok_gesture_margin_u32 > TIKTOK_GESTURE_MARGIN_MAX)
+                    tiktok_gesture_margin_u32 = TIKTOK_GESTURE_MARGIN_MAX;
+                app->tiktok_gesture_margin = (uint16_t)tiktok_gesture_margin_u32;
+            } else {
+                app->tiktok_gesture_margin = TIKTOK_GESTURE_MARGIN_DEFAULT;
+            }
+            flipper_format_rewind(mfff);
+            uint32_t tiktok_gesture_swipe_u32 = TIKTOK_GESTURE_SWIPE_DEFAULT;
+            if(flipper_format_read_uint32(
+                   mfff, "tiktok_gesture_swipe", &tiktok_gesture_swipe_u32, 1)) {
+                if(tiktok_gesture_swipe_u32 < TIKTOK_GESTURE_SWIPE_MIN)
+                    tiktok_gesture_swipe_u32 = TIKTOK_GESTURE_SWIPE_MIN;
+                if(tiktok_gesture_swipe_u32 > TIKTOK_GESTURE_SWIPE_MAX)
+                    tiktok_gesture_swipe_u32 = TIKTOK_GESTURE_SWIPE_MAX;
+                app->tiktok_gesture_swipe = (uint16_t)tiktok_gesture_swipe_u32;
+            } else {
+                app->tiktok_gesture_swipe = TIKTOK_GESTURE_SWIPE_DEFAULT;
             }
         } while(0);
         furi_string_free(mtmp);
@@ -923,6 +965,11 @@ static Hid* bt_remotes_alloc(void) {
     app->submenu = submenu_alloc();
     view_dispatcher_add_view(
         app->view_dispatcher, HidViewSubmenu, submenu_get_view(app->submenu));
+    app->var_item_list = variable_item_list_alloc();
+    view_dispatcher_add_view(
+        app->view_dispatcher,
+        HidViewVariableItemList,
+        variable_item_list_get_view(app->var_item_list));
 
     app->dialog = dialog_ex_alloc();
     view_dispatcher_add_view(
@@ -1034,6 +1081,8 @@ static void bt_remotes_free(Hid* app) {
 
     view_dispatcher_remove_view(app->view_dispatcher, HidViewSubmenu);
     submenu_free(app->submenu);
+    view_dispatcher_remove_view(app->view_dispatcher, HidViewVariableItemList);
+    variable_item_list_free(app->var_item_list);
     view_dispatcher_remove_view(app->view_dispatcher, HidViewDialog);
     dialog_ex_free(app->dialog);
     view_dispatcher_remove_view(app->view_dispatcher, HidViewTextInput);

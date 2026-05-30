@@ -16,6 +16,7 @@
 #include <storage/storage.h>
 
 #include <gui/modules/submenu.h>
+#include <gui/modules/variable_item_list.h>
 #include <gui/modules/dialog_ex.h>
 #include <gui/modules/popup.h>
 #include <gui/modules/text_input.h>
@@ -93,6 +94,36 @@ typedef enum {
 #define TIKTOK_SCROLL_MODE_DEFAULT TikTokScrollWheel
 #define TIKTOK_SCROLL_MODE_COUNT   2
 
+// TikTok gesture-swipe tunable motion values (per-profile, px). Each is a
+// Left/Right-adjustable setting; min..max in steps. Defaults equal the original
+// hardcoded swipe constants, so existing profiles behave identically.
+//   Inward Margin: horizontal inset before the vertical swipe (single int8 move)
+#define TIKTOK_GESTURE_INSET_MIN     20
+#define TIKTOK_GESTURE_INSET_MAX     300
+#define TIKTOK_GESTURE_INSET_STEP    10
+#define TIKTOK_GESTURE_INSET_DEFAULT 70
+//   Edge Margin: vertical travel off the top/bottom edge before the button is held
+#define TIKTOK_GESTURE_MARGIN_MIN     20
+#define TIKTOK_GESTURE_MARGIN_MAX     300
+#define TIKTOK_GESTURE_MARGIN_STEP    20
+#define TIKTOK_GESTURE_MARGIN_DEFAULT 180
+//   Swipe Length: drag distance while the button is held
+#define TIKTOK_GESTURE_SWIPE_MIN     100
+#define TIKTOK_GESTURE_SWIPE_MAX     600
+#define TIKTOK_GESTURE_SWIPE_STEP    50
+#define TIKTOK_GESTURE_SWIPE_DEFAULT 350
+// Number of selectable values for each range (used as VariableItemList counts).
+#define TIKTOK_GESTURE_VALUE_COUNT(min, max, step) (((max) - (min)) / (step) + 1)
+
+// Topics for the shared Per-Remote Settings Help scene
+// (bt_remotes_scene_remote_settings_help.c). The launching settings scene stores
+// the topic as that scene's state before pushing it.
+typedef enum {
+    RemoteSettingsHelpKeynote = 0,
+    RemoteSettingsHelpMedia   = 1,
+    RemoteSettingsHelpTikTok  = 2,
+} RemoteSettingsHelpTopic;
+
 // Start-menu item indices — shared by bt_remotes_scene_start.c and bt_remotes_scene_main.c.
 typedef enum {
     BtRemotesStartIndexKeynote             = 0,
@@ -125,6 +156,7 @@ struct Hid {
     ViewDispatcher* view_dispatcher;
     SceneManager* scene_manager;
     Submenu* submenu;
+    VariableItemList* var_item_list; // adjustable rows for TikTok gesture settings
     DialogEx* dialog;
     TextInput* text_input;
     Popup* popup;
@@ -162,6 +194,9 @@ struct Hid {
     uint8_t media_mode; // MediaMode enum — Legacy vs Improved media remote behavior
     uint8_t media_mouse_switch; // 0 = off, 1 = on — short Back opens mouse sub-view
     uint8_t tiktok_scroll_mode; // TikTokScrollMode enum — Wheel vs Gesture scrolling
+    uint16_t tiktok_gesture_inset;  // px — horizontal inset before the vertical swipe
+    uint16_t tiktok_gesture_margin; // px — vertical travel off the edge before press
+    uint16_t tiktok_gesture_swipe;  // px — drag distance while the button is held
     // App-level settings
     // 0=Neither, 1=Disconnect, 2=Connect, 3=Both
     uint8_t vibro_mode;

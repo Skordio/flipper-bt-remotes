@@ -84,7 +84,10 @@ static const char* const help_pages[] = {
     "there returns to Media. Hold Back still exits.\n\n"
     "TIKTOK / YT SHORTS\n"
     "- Scroll Mode: Wheel (scroll-wheel) or Gesture (emulated finger swipe) for "
-    "moving Up/Down between videos.",
+    "moving Up/Down between videos.\n"
+    "- In Gesture mode you can tune the swipe for your phone: Inward Margin (how "
+    "far in from the side it starts), Edge Margin (how far off the top/bottom "
+    "edge before holding), and Swipe Length (drag distance while held).",
 
     // 6: Ducky Scripts & Collections
     "DUCKY SCRIPTS & COLLECTIONS\n"

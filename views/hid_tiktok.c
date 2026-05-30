@@ -130,6 +130,30 @@ static void hid_tiktok_reset_cursor(HidTikTok* hid_tiktok) {
     furi_delay_ms(50);
 }
 
+// Emit a single-axis move of total px (signed) split into int8_t-safe chunks of
+// at most |chunk| px, pacing each packet by delay_ms (one per connection
+// interval). Exactly one of dx/dy is non-zero per call; pass the total on that
+// axis as `total` and the desired sign is carried by `total`.
+static void hid_tiktok_move_axis(
+    HidTikTok* hid_tiktok,
+    bool       horizontal,
+    int        total,
+    int        chunk,
+    uint32_t   delay_ms) {
+    while(total != 0) {
+        int step = total;
+        if(step > chunk) step = chunk;
+        if(step < -chunk) step = -chunk;
+        if(horizontal) {
+            hid_hal_mouse_move(hid_tiktok->hid, (int8_t)step, 0);
+        } else {
+            hid_hal_mouse_move(hid_tiktok->hid, 0, (int8_t)step);
+        }
+        furi_delay_ms(delay_ms);
+        total -= step;
+    }
+}
+
 // Emulate a finger swipe via a mouse click-drag.
 //   dir = -1 : drag up   (content scrolls up  -> NEXT video)
 //   dir = +1 : drag down (content scrolls down -> PREVIOUS video)
@@ -137,7 +161,16 @@ static void hid_tiktok_reset_cursor(HidTikTok* hid_tiktok) {
 // the edge), then moves INWARD off that edge to a start point with room to drag,
 // then press -> stepped drag -> release. Delays pace one packet per BLE
 // connection interval, mirroring hid_tiktok_reset_cursor.
+// The three distances are per-profile settings (defaults match the original
+// hardcoded 70 / 180 / 350):
+//   tiktok_gesture_inset  — horizontal inset off the side edge (may exceed int8)
+//   tiktok_gesture_margin — vertical travel off the top/bottom edge before press
+//   tiktok_gesture_swipe  — drag distance while the button is held
 static void hid_tiktok_gesture_swipe(HidTikTok* hid_tiktok, int dir) {
+    const int inset  = hid_tiktok->hid->tiktok_gesture_inset;
+    const int margin = hid_tiktok->hid->tiktok_gesture_margin;
+    const int swipe  = hid_tiktok->hid->tiktok_gesture_swipe;
+
     // Anchor to the corner the drag starts from: an up-drag starts low (bottom),
     // a down-drag starts high (top). Horizontal anchor is the left edge.
     const int8_t v_anchor = (int8_t)(-dir * 127);
@@ -147,21 +180,18 @@ static void hid_tiktok_gesture_swipe(HidTikTok* hid_tiktok, int dir) {
     }
     // Move inward to the start point: toward horizontal center, and well off the
     // anchored edge so the swipe doesn't begin in a screen-edge gesture zone.
-    // The vertical margin (~180) is split into two moves to stay within int8_t.
-    hid_hal_mouse_move(hid_tiktok->hid, 70, 0);
+    // Both the inset and the vertical margin are emitted in <=90px chunks (the
+    // inset can exceed the int8_t per-move cap).
+    hid_tiktok_move_axis(hid_tiktok, true, inset, 90, 20);
     furi_delay_ms(20);
-    hid_hal_mouse_move(hid_tiktok->hid, 0, (int8_t)(dir * 90));
-    furi_delay_ms(20);
-    hid_hal_mouse_move(hid_tiktok->hid, 0, (int8_t)(dir * 90));
-    furi_delay_ms(20);
+    hid_tiktok_move_axis(hid_tiktok, false, dir * margin, 90, 20);
 
     // Touch down, drag in the swipe direction across the screen, touch up.
+    // The drag is emitted in 35px steps (~10 steps at the 350 default) for a
+    // smooth, evenly paced gesture.
     hid_hal_mouse_press(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
     furi_delay_ms(40);
-    for(size_t i = 0; i < 10; i++) {
-        hid_hal_mouse_move(hid_tiktok->hid, 0, (int8_t)(dir * 35));
-        furi_delay_ms(15);
-    }
+    hid_tiktok_move_axis(hid_tiktok, false, dir * swipe, 35, 15);
     furi_delay_ms(40);
     hid_hal_mouse_release(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
 }

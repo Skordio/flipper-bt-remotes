@@ -3,6 +3,7 @@
 enum BtRemotesMediaSettingsIndex {
     BtRemotesMediaSettingsIndexMode        = 0,
     BtRemotesMediaSettingsIndexMouseSwitch = 1,
+    BtRemotesMediaSettingsIndexHelp        = 2,
 };
 
 static char media_labels[2][28];
@@ -39,6 +40,9 @@ static void build_media_submenu(Hid* app) {
         BtRemotesMediaSettingsIndexMouseSwitch,
         media_settings_cb,
         app);
+
+    submenu_add_item(
+        app->submenu, "Help", BtRemotesMediaSettingsIndexHelp, media_settings_cb, app);
 }
 
 void bt_remotes_scene_media_settings_on_enter(void* context) {
@@ -63,6 +67,11 @@ bool bt_remotes_scene_media_settings_on_event(void* context, SceneManagerEvent e
             bt_remotes_save_profile_menu_cfg(app);
             build_media_submenu(app);
             submenu_set_selected_item(app->submenu, BtRemotesMediaSettingsIndexMouseSwitch);
+            consumed = true;
+        } else if(event.event == BtRemotesMediaSettingsIndexHelp) {
+            scene_manager_set_scene_state(
+                app->scene_manager, BtRemotesSceneRemoteSettingsHelp, RemoteSettingsHelpMedia);
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneRemoteSettingsHelp);
             consumed = true;
         }
     }
