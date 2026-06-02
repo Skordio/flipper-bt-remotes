@@ -1,5 +1,8 @@
 # BT Remotes
 
+> 🤖 **AI was used heavily in the development of this app.** If that matters to you, take it into
+> account when using the app and reviewing the code.
+
 Turn your Flipper Zero into a **Bluetooth remote** for your computer, phone, or TV. BT Remotes
 makes the Flipper act as a Bluetooth keyboard, mouse, media controller, and more — with multiple
 saved profiles so it can remember several paired devices and switch between them instantly.
@@ -112,13 +115,6 @@ On the SD card under `apps_data/bt_remotes/`:
 
 - Profiles use a randomized static Bluetooth address so each one looks like a separate device.
 - "Unpair" / "Reset" in a profile's Settings clear the saved pairing if a host gets confused.
-
----
-
-## A note on development
-
-AI was used heavily in the development of this app. If that matters to you, take it into account
-when using the app and reviewing the code.
 
 ---
 
