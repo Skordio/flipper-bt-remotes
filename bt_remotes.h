@@ -24,6 +24,7 @@
 #include <gui/modules/widget.h>
 #include "views/hid_remote_menu.h"
 #include "helpers/ducky_runner.h"
+#include "helpers/gesture_runner.h"
 #include "views/hid_keynote.h"
 #include "views/hid_keyboard.h"
 #include "views/hid_numpad.h"
@@ -45,9 +46,15 @@
 
 #define BT_REMOTES_PROFILE_NAME_LEN  32
 #define BT_REMOTES_PROFILE_MAX_COUNT 16
-#define BT_REMOTES_MENU_ITEM_COUNT   15
+#define BT_REMOTES_MENU_ITEM_COUNT   16
 #define BT_REMOTES_PINNED_MAX        16
 #define BT_REMOTES_MENU_ORDER_LEN    (BT_REMOTES_MENU_ITEM_COUNT + BT_REMOTES_PINNED_MAX)
+
+// Previous on-disk menu layout (before Custom Gestures was added), used to
+// migrate saved menu_order arrays. Adding the fixed item moved the fixed/pinned
+// boundary 15 -> 16, so old pinned-slot values must be shifted +1 on load.
+#define BT_REMOTES_MENU_ITEM_COUNT_V1 15
+#define BT_REMOTES_MENU_ORDER_LEN_V1  31
 
 #define BT_REMOTES_PROFILES_DIR APP_DATA_PATH("profiles")
 #define BT_REMOTES_CFG_PATH     APP_DATA_PATH(".bt_hid.cfg")
@@ -61,6 +68,12 @@
 #define BT_REMOTES_COLLECTION_NAME_LEN   32
 #define BT_REMOTES_COLLECTION_MAX        16
 #define BT_REMOTES_COLLECTION_SCRIPT_MAX 32
+
+// Custom Gestures (global library; GESTURE_LINE_MAX/_LEN live in gesture_runner.h)
+#define BT_REMOTES_GESTURE_DIR      APP_DATA_PATH("gestures")
+#define BT_REMOTES_GESTURE_EXT      ".gesture"
+#define BT_REMOTES_GESTURE_NAME_LEN 32
+#define BT_REMOTES_GESTURE_MAX      32
 
 // Keynote back-button key options (short press of Flipper Back button)
 typedef enum {
@@ -140,7 +153,12 @@ typedef enum {
     BtRemotesStartIndexMouseJigglerStealth = 11,
     BtRemotesStartIndexPushToTalk          = 12,
     BtRemotesStartIndexCustomActions       = 13,
-    BtRemotesStartIndexSettings            = 14,
+    BtRemotesStartIndexCustomGestures      = 14,
+    // Settings stays the last fixed item (highest index) — hide_items and the
+    // load-time "never hide" guard rely on it being last. Custom Gestures was
+    // inserted just before it; profiles saved by the previous layout are migrated
+    // in bt_remotes_profile_activate (see the menu_order V1 arm).
+    BtRemotesStartIndexSettings            = 15,
 } BtRemotesStartIndex;
 
 typedef struct Hid Hid;
@@ -179,10 +197,17 @@ struct Hid {
     char    collection_names[BT_REMOTES_COLLECTION_MAX][BT_REMOTES_COLLECTION_NAME_LEN];
     uint8_t collection_count;
     char    pinned_collections[BT_REMOTES_PINNED_MAX][BT_REMOTES_COLLECTION_NAME_LEN];
+    uint8_t pinned_kinds[BT_REMOTES_PINNED_MAX]; // 0 = collection, 1 = gesture
     uint8_t pinned_count;
     char    editing_collection_name[BT_REMOTES_COLLECTION_NAME_LEN];
     char    editing_collection_scripts[BT_REMOTES_COLLECTION_SCRIPT_MAX][256];
     uint8_t editing_collection_script_count;
+    // Custom Gestures (global library + editing buffer)
+    char    gesture_names[BT_REMOTES_GESTURE_MAX][BT_REMOTES_GESTURE_NAME_LEN];
+    uint8_t gesture_count;
+    char    editing_gesture_name[BT_REMOTES_GESTURE_NAME_LEN];
+    char    editing_gesture_lines[GESTURE_LINE_MAX][GESTURE_LINE_LEN];
+    uint8_t editing_gesture_line_count;
     // Profile management
     char active_profile[BT_REMOTES_PROFILE_NAME_LEN];
     char pending_name[BT_REMOTES_PROFILE_NAME_LEN]; // old name held during profile rename
@@ -210,6 +235,7 @@ struct Hid {
     FileBrowser* file_browser;
     FuriString*  file_browser_result; // receives the selected file path
     DuckyRunner* ducky_runner;
+    GestureRunner* gesture_runner; // runs Custom Gestures (separate engine)
     char pending_script_path[256]; // full path to the selected .txt script, copied from result
     // Post-pairing auto-save: polls for .bt_hid.keys after first-time BLE connect
     FuriTimer* pair_save_timer;
@@ -256,6 +282,14 @@ bool bt_remotes_collection_save(Hid* app);
 bool bt_remotes_collection_delete(Hid* app, const char* name);
 void bt_remotes_pinned_load(Hid* app);
 void bt_remotes_pinned_save(Hid* app);
+
+// Custom Gesture operations (global library; mirror the collection ops)
+void bt_remotes_gesture_load_list(Hid* app);
+bool bt_remotes_gesture_load(Hid* app, const char* name);
+bool bt_remotes_gesture_save(Hid* app);
+bool bt_remotes_gesture_delete(Hid* app, const char* name);
+// Full path to a gesture file by name (caller supplies buffer).
+void bt_remotes_gesture_path(const char* name, char* out, size_t out_size);
 
 // Default Start-menu item table — defined in bt_remotes_scene_start.c, shared with
 // bt_remotes_scene_hide_items.c.  Entry [i].index == i always (table is in enum order).

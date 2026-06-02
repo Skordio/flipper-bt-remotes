@@ -22,6 +22,10 @@ const BtRemotesMenuEntry bt_remotes_menu_default[BT_REMOTES_MENU_ITEM_COUNT] = {
     {"Mouse Jiggler Stealth", BtRemotesStartIndexMouseJigglerStealth},
     {"PushToTalk",            BtRemotesStartIndexPushToTalk},
     {"Ducky Scripts",         BtRemotesStartIndexCustomActions},
+    {"Custom Gestures",       BtRemotesStartIndexCustomGestures},
+    // Settings stays last so bt_remotes_menu_default[i].index == i (hide_items
+    // relies on entry position == enum index, and several spots assume Settings
+    // is the highest-indexed fixed item).
     {"Settings",              BtRemotesStartIndexSettings},
 };
 
@@ -69,12 +73,18 @@ void bt_remotes_scene_start_on_enter(void* context) {
     bool pinned_placed[BT_REMOTES_PINNED_MAX];
     for(uint8_t i = 0; i < BT_REMOTES_PINNED_MAX; i++) pinned_placed[i] = false;
 
+    // Track which fixed items the saved menu_order already accounts for, so items
+    // added in a firmware update (absent from old saved orders) can be appended.
+    bool fixed_placed[BT_REMOTES_MENU_ITEM_COUNT];
+    for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) fixed_placed[i] = false;
+
     for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN && total < BT_REMOTES_MENU_ORDER_LEN; i++) {
         uint8_t slot = app->menu_order[i];
         if(slot == 0xFF) continue;
 
         if(slot < BT_REMOTES_MENU_ITEM_COUNT) {
             // Fixed built-in item
+            fixed_placed[slot] = true; // accounted for (whether shown or hidden)
             if(app->menu_hidden & (1u << slot)) continue;
             entries[total] = bt_remotes_menu_default[slot];
             order[total]   = slot;
@@ -89,6 +99,18 @@ void bt_remotes_scene_start_on_enter(void* context) {
             pinned_placed[pidx]  = true;
             total++;
         }
+    }
+
+    // Append any fixed items missing from the saved menu_order (e.g. added in a
+    // firmware update, like Custom Gestures), so existing profiles get them
+    // without needing "Reset Menu Order". Hidden items stay hidden.
+    for(uint8_t idx = 0; idx < BT_REMOTES_MENU_ITEM_COUNT && total < BT_REMOTES_MENU_ORDER_LEN;
+        idx++) {
+        if(fixed_placed[idx]) continue;
+        if(app->menu_hidden & (1u << idx)) continue;
+        entries[total] = bt_remotes_menu_default[idx];
+        order[total]   = idx;
+        total++;
     }
 
     // Append any newly-pinned collections not yet tracked in menu_order
@@ -143,14 +165,26 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
             scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, event.event);
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneCustomActions);
             consumed = true;
+        } else if(event.event == BtRemotesStartIndexCustomGestures) {
+            scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, event.event);
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneGestureList);
+            consumed = true;
         } else if(event.event >= BT_REMOTES_MENU_ITEM_COUNT) {
-            // Pinned collection slot — treat as Ducky Scripts for keyboard mode purposes
+            // Pinned slot — route by kind (collection viewer vs gesture runner).
             uint8_t pidx = event.event - BT_REMOTES_MENU_ITEM_COUNT;
             if(pidx < app->pinned_count) {
                 scene_manager_set_scene_state(
                     app->scene_manager, BtRemotesSceneStart, event.event);
-                bt_remotes_collection_load(app, app->pinned_collections[pidx]);
-                scene_manager_next_scene(app->scene_manager, BtRemotesSceneCollectionView);
+                if(app->pinned_kinds[pidx] == 1) {
+                    bt_remotes_gesture_path(
+                        app->pinned_collections[pidx],
+                        app->pending_script_path,
+                        sizeof(app->pending_script_path));
+                    scene_manager_next_scene(app->scene_manager, BtRemotesSceneGestureRun);
+                } else {
+                    bt_remotes_collection_load(app, app->pinned_collections[pidx]);
+                    scene_manager_next_scene(app->scene_manager, BtRemotesSceneCollectionView);
+                }
                 consumed = true;
             }
         } else {

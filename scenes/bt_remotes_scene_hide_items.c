@@ -1,7 +1,8 @@
 #include "../bt_remotes.h"
 
-// The Settings entry is always visible — its index equals BT_REMOTES_MENU_ITEM_COUNT - 1.
-#define HIDE_ITEMS_SETTINGS_IDX ((uint8_t)(BT_REMOTES_MENU_ITEM_COUNT - 1))
+// The Settings entry is always visible. Reference the enum directly rather than
+// COUNT-1 so adding fixed items can never accidentally point this at the wrong row.
+#define HIDE_ITEMS_SETTINGS_IDX ((uint8_t)BtRemotesStartIndexSettings)
 
 // File-scope label buffers — must outlive the submenu display (one slot per hideable item).
 static char hide_labels[BT_REMOTES_MENU_ITEM_COUNT][40];

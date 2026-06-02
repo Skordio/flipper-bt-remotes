@@ -15,7 +15,8 @@ static void build_pin_submenu(Hid* app) {
     for(uint8_t i = 0; i < app->collection_count; i++) {
         bool pinned = false;
         for(uint8_t j = 0; j < app->pinned_count; j++) {
-            if(strcmp(app->collection_names[i], app->pinned_collections[j]) == 0) {
+            if(app->pinned_kinds[j] == 0 &&
+               strcmp(app->collection_names[i], app->pinned_collections[j]) == 0) {
                 pinned = true;
                 break;
             }
@@ -46,10 +47,10 @@ bool bt_remotes_scene_collection_pin_on_event(void* context, SceneManagerEvent e
 
         const char* name = app->collection_names[idx];
 
-        // Find current pin position
+        // Find current pin position (collection-kind entries only)
         int8_t pin_pos = -1;
         for(uint8_t j = 0; j < app->pinned_count; j++) {
-            if(strcmp(app->pinned_collections[j], name) == 0) {
+            if(app->pinned_kinds[j] == 0 && strcmp(app->pinned_collections[j], name) == 0) {
                 pin_pos = (int8_t)j;
                 break;
             }
@@ -62,6 +63,7 @@ bool bt_remotes_scene_collection_pin_on_event(void* context, SceneManagerEvent e
                     app->pinned_collections[j - 1],
                     app->pinned_collections[j],
                     BT_REMOTES_COLLECTION_NAME_LEN);
+                app->pinned_kinds[j - 1] = app->pinned_kinds[j];
             }
             app->pinned_count--;
         } else if(app->pinned_count < BT_REMOTES_PINNED_MAX) {
@@ -70,6 +72,7 @@ bool bt_remotes_scene_collection_pin_on_event(void* context, SceneManagerEvent e
                 app->pinned_collections[app->pinned_count],
                 name,
                 BT_REMOTES_COLLECTION_NAME_LEN);
+            app->pinned_kinds[app->pinned_count] = 0; // collection
             app->pinned_count++;
         }
 

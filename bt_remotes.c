@@ -4,6 +4,8 @@
 #include <furi_hal_random.h>
 #include <notification/notification_messages.h>
 #include <dolphin/dolphin.h>
+#include <dialogs/dialogs.h>
+#include <toolbox/version.h>
 
 #define TAG "BtRemotes"
 
@@ -412,24 +414,53 @@ bool bt_remotes_profile_activate(Hid* app) {
                     app->menu_order[i] = (v < BT_REMOTES_MENU_ORDER_LEN || v == 0xFF) ? v : 0xFF;
                 }
             } else {
-                // Old format (16 entries): migrate — custom-remote slots default to 0xFF.
+                // Previous format (31 entries: 15 fixed + 16 pinned), saved before
+                // Custom Gestures existed. Adding a fixed item moved the
+                // fixed/pinned boundary 15 -> 16, so remap old pinned-slot values
+                // (15..30) by +1. Old fixed index 14 (Settings) is left as 14,
+                // which now denotes Custom Gestures; the real Settings (15) is
+                // re-appended by start_on_enter, landing Custom Gestures just above
+                // Settings for default layouts.
                 flipper_format_rewind(mfff);
+                for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) order_u32[i] = 0xFF;
                 if(flipper_format_read_uint32(
-                       mfff, "menu_order", order_u32, BT_REMOTES_MENU_ITEM_COUNT)) {
-                    for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) {
-                        app->menu_order[i] = (uint8_t)(
-                            order_u32[i] < BT_REMOTES_MENU_ITEM_COUNT ? order_u32[i] : i);
+                       mfff, "menu_order", order_u32, BT_REMOTES_MENU_ORDER_LEN_V1)) {
+                    for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN_V1; i++) {
+                        uint8_t v = (uint8_t)order_u32[i];
+                        if(v == 0xFF) {
+                            app->menu_order[i] = 0xFF;
+                        } else if(
+                            v >= BT_REMOTES_MENU_ITEM_COUNT_V1 &&
+                            v < BT_REMOTES_MENU_ORDER_LEN_V1) {
+                            app->menu_order[i] = (uint8_t)(v + 1); // pinned slot shifted +1
+                        } else if(v < BT_REMOTES_MENU_ITEM_COUNT_V1) {
+                            app->menu_order[i] = v; // fixed item index unchanged
+                        } else {
+                            app->menu_order[i] = 0xFF;
+                        }
+                    }
+                    // New trailing slot (index 31) stays 0xFF.
+                } else {
+                    // Even older format (just the 15 fixed items): migrate; pinned
+                    // slots default to 0xFF.
+                    flipper_format_rewind(mfff);
+                    for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) order_u32[i] = 0xFF;
+                    if(flipper_format_read_uint32(
+                           mfff, "menu_order", order_u32, BT_REMOTES_MENU_ITEM_COUNT_V1)) {
+                        for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT_V1; i++) {
+                            app->menu_order[i] = (uint8_t)(
+                                order_u32[i] < BT_REMOTES_MENU_ITEM_COUNT_V1 ? order_u32[i] : i);
+                        }
                     }
                 }
-                // Slots 16‥31 already initialised to 0xFF above.
             }
             flipper_format_rewind(mfff);
             uint32_t hidden_u32 = 0;
             if(flipper_format_read_uint32(mfff, "menu_hidden", &hidden_u32, 1)) {
                 app->menu_hidden = hidden_u32;
-                // Settings and Custom Remotes items must never be hidden
-                app->menu_hidden &= ~(uint32_t)(1u << (BT_REMOTES_MENU_ITEM_COUNT - 1));
-                app->menu_hidden &= ~(uint32_t)(1u << (BT_REMOTES_MENU_ITEM_COUNT - 2));
+                // Settings must never be hidden (it is the always-last fixed item,
+                // and the only item hide_items keeps out of its toggle list).
+                app->menu_hidden &= ~(uint32_t)(1u << BtRemotesStartIndexSettings);
             }
             flipper_format_rewind(mfff);
             uint32_t keynote_back_key_u32 = KEYNOTE_BACK_KEY_DEFAULT;
@@ -709,13 +740,14 @@ bool bt_remotes_collection_delete(Hid* app, const char* name) {
     // Remove from pinned list if present
     bool was_pinned = false;
     for(uint8_t i = 0; i < app->pinned_count; i++) {
-        if(strcmp(app->pinned_collections[i], name) == 0) {
+        if(app->pinned_kinds[i] == 0 && strcmp(app->pinned_collections[i], name) == 0) {
             was_pinned = true;
             for(uint8_t j = i; j + 1 < app->pinned_count; j++) {
                 strlcpy(
                     app->pinned_collections[j],
                     app->pinned_collections[j + 1],
                     BT_REMOTES_COLLECTION_NAME_LEN);
+                app->pinned_kinds[j] = app->pinned_kinds[j + 1];
             }
             app->pinned_count--;
             break;
@@ -748,12 +780,20 @@ void bt_remotes_pinned_load(Hid* app) {
 
         for(uint32_t i = 0; i < count; i++) {
             char key[24];
+            flipper_format_rewind(fff);
             snprintf(key, sizeof(key), "collection_%u", (unsigned)i);
             if(flipper_format_read_string(fff, key, tmp)) {
                 strlcpy(
                     app->pinned_collections[app->pinned_count],
                     furi_string_get_cstr(tmp),
                     BT_REMOTES_COLLECTION_NAME_LEN);
+                // Per-pin kind (0=collection, 1=gesture); older files omit it and
+                // default to collection for backward compatibility.
+                uint32_t kind = 0;
+                flipper_format_rewind(fff);
+                snprintf(key, sizeof(key), "kind_%u", (unsigned)i);
+                flipper_format_read_uint32(fff, key, &kind, 1);
+                app->pinned_kinds[app->pinned_count] = (uint8_t)(kind ? 1 : 0);
                 app->pinned_count++;
             }
         }
@@ -780,11 +820,138 @@ void bt_remotes_pinned_save(Hid* app) {
             char key[20];
             snprintf(key, sizeof(key), "collection_%u", (unsigned)i);
             flipper_format_write_string_cstr(fff, key, app->pinned_collections[i]);
+            uint32_t kind = app->pinned_kinds[i];
+            snprintf(key, sizeof(key), "kind_%u", (unsigned)i);
+            flipper_format_write_uint32(fff, key, &kind, 1);
         }
         flipper_format_file_close(fff);
     }
     flipper_format_free(fff);
     furi_string_free(path);
+}
+
+// ---------------------------------------------------------------------------
+// Custom Gestures — global library (mirrors the collection load/save pattern)
+// ---------------------------------------------------------------------------
+
+void bt_remotes_gesture_path(const char* name, char* out, size_t out_size) {
+    snprintf(out, out_size, "%s/%s%s", BT_REMOTES_GESTURE_DIR, name, BT_REMOTES_GESTURE_EXT);
+}
+
+void bt_remotes_gesture_load_list(Hid* app) {
+    app->gesture_count = 0;
+
+    File*    dir = storage_file_alloc(app->storage);
+    FileInfo info;
+    char     name[BT_REMOTES_GESTURE_NAME_LEN + 16];
+
+    if(storage_dir_open(dir, BT_REMOTES_GESTURE_DIR)) {
+        while(storage_dir_read(dir, &info, name, sizeof(name))) {
+            if(info.flags & FSF_DIRECTORY) continue;
+            if(name[0] == '.') continue;
+            if(app->gesture_count >= BT_REMOTES_GESTURE_MAX) break;
+            size_t len     = strlen(name);
+            size_t ext_len = strlen(BT_REMOTES_GESTURE_EXT);
+            if(len <= ext_len) continue;
+            if(strcmp(name + len - ext_len, BT_REMOTES_GESTURE_EXT) != 0) continue;
+            name[len - ext_len] = '\0';
+            strlcpy(app->gesture_names[app->gesture_count], name, BT_REMOTES_GESTURE_NAME_LEN);
+            app->gesture_count++;
+        }
+        storage_dir_close(dir);
+    }
+    storage_file_free(dir);
+}
+
+bool bt_remotes_gesture_load(Hid* app, const char* name) {
+    strlcpy(app->editing_gesture_name, name, BT_REMOTES_GESTURE_NAME_LEN);
+    app->editing_gesture_line_count = 0;
+
+    char path[256];
+    bt_remotes_gesture_path(name, path, sizeof(path));
+
+    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
+    FuriString*    tmp = furi_string_alloc();
+    uint32_t       ver = 0;
+    bool           ok  = false;
+
+    do {
+        if(!flipper_format_file_open_existing(fff, path)) break;
+        if(!flipper_format_read_header(fff, tmp, &ver)) break;
+        if(strcmp(furi_string_get_cstr(tmp), GESTURE_FILE_TYPE) != 0) break;
+
+        uint32_t count = 0;
+        if(!flipper_format_read_uint32(fff, "count", &count, 1)) break;
+        ok = true;
+        if(count > GESTURE_LINE_MAX) count = GESTURE_LINE_MAX;
+
+        for(uint32_t i = 0; i < count; i++) {
+            char key[16];
+            flipper_format_rewind(fff);
+            snprintf(key, sizeof(key), "line_%u", (unsigned)i);
+            if(flipper_format_read_string(fff, key, tmp)) {
+                strlcpy(
+                    app->editing_gesture_lines[app->editing_gesture_line_count],
+                    furi_string_get_cstr(tmp),
+                    GESTURE_LINE_LEN);
+                app->editing_gesture_line_count++;
+            }
+        }
+    } while(0);
+
+    furi_string_free(tmp);
+    flipper_format_free(fff);
+    return ok;
+}
+
+bool bt_remotes_gesture_save(Hid* app) {
+    storage_simply_mkdir(app->storage, BT_REMOTES_GESTURE_DIR);
+
+    char path[256];
+    bt_remotes_gesture_path(app->editing_gesture_name, path, sizeof(path));
+
+    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
+    bool           ok  = false;
+
+    if(flipper_format_file_open_always(fff, path)) {
+        ok = flipper_format_write_header_cstr(fff, GESTURE_FILE_TYPE, GESTURE_FILE_VERSION);
+        uint32_t count = app->editing_gesture_line_count;
+        ok = ok && flipper_format_write_uint32(fff, "count", &count, 1);
+        for(uint8_t i = 0; ok && i < app->editing_gesture_line_count; i++) {
+            char key[16];
+            snprintf(key, sizeof(key), "line_%u", (unsigned)i);
+            ok = flipper_format_write_string_cstr(fff, key, app->editing_gesture_lines[i]);
+        }
+        flipper_format_file_close(fff);
+    }
+    flipper_format_free(fff);
+    return ok;
+}
+
+bool bt_remotes_gesture_delete(Hid* app, const char* name) {
+    char path[256];
+    bt_remotes_gesture_path(name, path, sizeof(path));
+    FS_Error err = storage_common_remove(app->storage, path);
+
+    // Remove from pinned list if present (gesture-kind entries only)
+    bool was_pinned = false;
+    for(uint8_t i = 0; i < app->pinned_count; i++) {
+        if(app->pinned_kinds[i] == 1 && strcmp(app->pinned_collections[i], name) == 0) {
+            was_pinned = true;
+            for(uint8_t j = i; j + 1 < app->pinned_count; j++) {
+                strlcpy(
+                    app->pinned_collections[j],
+                    app->pinned_collections[j + 1],
+                    BT_REMOTES_COLLECTION_NAME_LEN);
+                app->pinned_kinds[j] = app->pinned_kinds[j + 1];
+            }
+            app->pinned_count--;
+            break;
+        }
+    }
+    if(was_pinned) bt_remotes_pinned_save(app);
+
+    return (err == FSE_OK || err == FSE_NOT_EXIST);
 }
 
 // ---------------------------------------------------------------------------
@@ -1063,6 +1230,7 @@ static Hid* bt_remotes_alloc(void) {
         file_browser_get_view(app->file_browser));
 
     app->ducky_runner = ducky_runner_alloc();
+    app->gesture_runner = gesture_runner_alloc();
 
     app->pair_save_timer =
         furi_timer_alloc(bt_remotes_pair_save_timer_cb, FuriTimerTypePeriodic, app);
@@ -1123,6 +1291,7 @@ static void bt_remotes_free(Hid* app) {
     file_browser_free(app->file_browser);
     furi_string_free(app->file_browser_result);
     ducky_runner_free(app->ducky_runner);
+    gesture_runner_free(app->gesture_runner);
     furi_timer_free(app->pair_save_timer);
 
     scene_manager_free(app->scene_manager);
@@ -1136,8 +1305,44 @@ static void bt_remotes_free(Hid* app) {
     free(app);
 }
 
+// This app pokes BLE GAP structs (GapConfig.mac_address) that exist only in
+// Momentum firmware — see helpers/ble_hid_ext_profile.c. On stock/other firmware
+// those offsets are wrong and writing through them corrupts memory and hard-faults
+// the device (frozen screen, requires a force-reboot). The firmware API version
+// check can't catch this because struct layout isn't part of the API hash, so we
+// gate at startup on the firmware origin and refuse to run anywhere but Momentum.
+static bool bt_remotes_firmware_supported(void) {
+    const char* origin = version_get_firmware_origin(NULL);
+    return origin && strcmp(origin, "Momentum") == 0;
+}
+
+static void bt_remotes_show_unsupported_firmware(void) {
+    DialogsApp* dialogs = furi_record_open(RECORD_DIALOGS);
+    DialogMessage* message = dialog_message_alloc();
+    dialog_message_set_header(message, "Wrong Firmware", 64, 4, AlignCenter, AlignTop);
+    dialog_message_set_text(
+        message,
+        "BT Remotes needs\nMomentum firmware.\nOther firmware would\ncrash the Flipper.",
+        64,
+        34,
+        AlignCenter,
+        AlignCenter);
+    dialog_message_set_buttons(message, NULL, "OK", NULL);
+    dialog_message_show(dialogs, message);
+    dialog_message_free(message);
+    furi_record_close(RECORD_DIALOGS);
+}
+
 int32_t bt_remotes_app(void* p) {
     UNUSED(p);
+
+    // Refuse to run on non-Momentum firmware before touching any BLE state — a
+    // blocking message instead of the memory-corruption hard-fault described above.
+    if(!bt_remotes_firmware_supported()) {
+        bt_remotes_show_unsupported_firmware();
+        return 0;
+    }
+
     Hid* app = bt_remotes_alloc();
 
     notification_internal_message(app->notifications, &sequence_reset_blue);
