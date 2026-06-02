@@ -53,11 +53,7 @@ saved profiles so it can remember several paired devices and switch between them
 
 BT Remotes is built against Momentum, and relies on a few app-facing resources (some built-in
 icons and UI helpers) that Momentum makes available to apps but other firmwares don't. Because of
-that, other firmwares won't load it — the Flipper shows *"Update Firmware to use with this
-Application"* rather than running it. (This is **not** a Bluetooth limitation: the Bluetooth
-features it uses, including the per-profile custom address, exist on those firmwares too — it's
-just the app packaging that's Momentum-specific for now.) If you see that message, install
-Momentum firmware and try again.
+that, other firmwares won't load it.
 
 ---
 
