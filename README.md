@@ -7,9 +7,10 @@ Turn your Flipper Zero into a **Bluetooth remote** for your computer, phone, or 
 makes the Flipper act as a Bluetooth keyboard, mouse, media controller, and more — with multiple
 saved profiles so it can remember several paired devices and switch between them instantly.
 
-> ⚠️ **Momentum firmware only.** This app uses Bluetooth features that exist only in
-> [Momentum firmware](https://momentum-fw.dev/). On stock or other firmware it will refuse to
-> start (and older builds could crash the Flipper). See [Compatibility](#compatibility).
+> ⚠️ **Momentum firmware only.** This app is built for
+> [Momentum firmware](https://momentum-fw.dev/) and won't install on other firmware — on stock,
+> Unleashed, or RogueMaster the Flipper shows *"Update Firmware to use with this Application"*.
+> See [Compatibility](#compatibility).
 
 ---
 
@@ -47,13 +48,16 @@ saved profiles so it can remember several paired devices and switch between them
 | Firmware | Supported? |
 |---|---|
 | **Momentum** | ✅ Yes — required |
-| Official (stock) | ❌ No — app refuses to start |
-| Other forks (Unleashed, RogueMaster, etc.) | ❌ Not supported |
+| Official (stock) | ❌ Won't install ("Update Firmware to use with this Application") |
+| Other forks (Unleashed, RogueMaster, etc.) | ❌ Won't install |
 
-BT Remotes depends on Momentum's per-profile custom Bluetooth address support, which other
-firmwares don't provide. To keep things safe, the app **checks the firmware at startup** and
-shows a "Wrong Firmware" message instead of running (older versions could otherwise lock up the
-Flipper and need a reboot). If you see that message, flash Momentum firmware and try again.
+BT Remotes is built against Momentum, and relies on a few app-facing resources (some built-in
+icons and UI helpers) that Momentum makes available to apps but other firmwares don't. Because of
+that, other firmwares won't load it — the Flipper shows *"Update Firmware to use with this
+Application"* rather than running it. (This is **not** a Bluetooth limitation: the Bluetooth
+features it uses, including the per-profile custom address, exist on those firmwares too — it's
+just the app packaging that's Momentum-specific for now.) If you see that message, install
+Momentum firmware and try again.
 
 ---
 

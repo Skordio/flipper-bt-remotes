@@ -11,45 +11,47 @@ Ducky Scripts + Collections, a Custom Gestures scripting language, and per-remot
 
 ---
 
-## Firmware Requirement (hard — Momentum only)
+## Firmware Compatibility (Momentum-targeted)
 
-This app **only runs on Momentum firmware** and refuses to start on anything else.
+This app targets **Momentum firmware**. As packaged it will **not load** on stock OFW, Unleashed,
+or RogueMaster — those firmwares reject it at load with **"Update Firmware to use with this
+Application"** (`MissingImports`). There is **no runtime firmware guard**; the loader rejection is
+the de facto gate.
 
-**Why it's a hard requirement, not a preference:** the per-profile custom MAC/BLE-name feature
-relies on `GapConfig.mac_address`, a field Momentum adds to the BLE GAP struct
-(`targets/f7/ble_glue/gap.h`). `helpers/ble_hid_ext_profile.c::ble_profile_hid_ext_get_config`
-writes through `config->mac_address` and `config->adv_name` at **Momentum's** struct offsets. On
-stock OFW (and forks without that field) `GapConfig` has no `mac_address` and `adv_name` sits
-6 bytes earlier, so those writes land past the firmware-allocated struct → memory corruption →
-hard fault → **frozen screen requiring a force-reboot**.
+**The real reason (verified, not the BLE story below).** The FAP imports several **app-API symbols
+that only Momentum exports** to apps. Diffing the built FAP's undefined symbols against each
+firmware's `targets/f7/api_symbols.csv` (`+` = exported to apps) found these blockers:
 
-The FAP loader's firmware-API-version check (`targets/f7/api_symbols.csv`, e.g. `87.x`) **cannot**
-catch this: the API version hashes exported symbol names/signatures, not struct field layout. Two
-firmwares can share an API major yet disagree on `GapConfig`'s offsets, so the app loads and then
-crashes instead of being cleanly rejected.
+| Imported symbol(s) | Stock 1.4.3 | Unleashed | RogueMaster | Momentum |
+|---|---|---|---|---|
+| 16 built-in icons (`I_Ble_connected_15x15`, `I_ButtonUp_7x4`, `I_DolphinDone_80x58`, …) | ❌ | ❌ | ❌ | ✅ |
+| `variable_item_list_set_header` | ❌ | ❌ | ✅ | ✅ |
+| `strtok` (libc) | ❌ (`-`, not app-exported) | ✅ | ✅ | ✅ |
 
-**The guard** (`bt_remotes.c::bt_remotes_app`): before allocating anything or touching BLE,
-`bt_remotes_firmware_supported()` checks `version_get_firmware_origin(NULL) == "Momentum"`
-(Momentum sets `FIRMWARE_ORIGIN = "Momentum"` in `fbt_options.py`; stock returns `"Official"`,
-forks return their own name). If it isn't Momentum, `bt_remotes_show_unsupported_firmware()` shows
-a blocking "Wrong Firmware" dialog and the app exits with `return 0` — a clean message instead of
-the hard-fault. **Do not move BLE/alloc work above this guard**, and keep the origin string in
-sync if Momentum ever rebrands `FIRMWARE_ORIGIN`.
+Any one missing import makes the loader refuse the FAP. The **16 built-in icons are the universal
+blocker** across all three other firmwares.
 
-**Layered behavior in practice** (note: stock OFW and Momentum can share the same API version —
-e.g. both `87.1` — so the loader's version check does NOT block stock):
+**It is NOT a Bluetooth/`GapConfig` problem.** An earlier version of this doc claimed the app was
+Momentum-only because `GapConfig.mac_address` (the per-profile custom BLE address) existed only in
+Momentum. That was wrong: `GapConfig` (with `mac_address`) and `BleGattCharacteristicParams` are
+**byte-identical** across Momentum, stock 1.4.3, Unleashed, and RogueMaster, and stock 1.4.3's
+`gap.c` applies the custom address the same way. The custom-address feature works on all of them —
+the app's BLE code (`helpers/ble_hid_ext_profile.c`) would be ABI-compatible. The block is purely
+the exported app-API surface above.
 
-- **Stock OFW**: Momentum exports `version_get_firmware_origin` to apps (`+` in
-  `targets/f7/api_symbols.csv`); stock OFW keeps it unexported. So a Momentum-built FAP that
-  imports it can't even load on stock — the firmware refuses it with "Update Firmware to use with
-  this Application" (`MissingImports`). Cruder message, but it still prevents the crash; the
-  guard's own dialog never gets to run because the app never loads.
-- **Forks that DO export the symbol but aren't Momentum**: the app loads, the guard runs, and the
-  clean "Wrong Firmware" dialog shows.
-- **Momentum**: runs normally.
+**Path to broader compatibility (not done yet).** This is mostly accidental coupling and is
+fixable:
+- The **16 icons are already bundled** in this app's `assets/`. The code references the *firmware*
+  built-ins (`&I_…`) instead of the app's own bundled copies — switch those references to the
+  bundled icons.
+- Replace **`strtok`** (used in profile-order parsing) with a small inline tokenizer.
+- Avoid **`variable_item_list_set_header`** (drop the header or set it another way).
 
-You cannot show the guard's dialog on a firmware whose symbol table won't load the app in the
-first place — the `MissingImports` refusal is the backstop there.
+After those changes the app would likely load and run on stock / Unleashed / RogueMaster too (the
+BLE ABI already matches), at which point the "Momentum-only" framing could be dropped. Until then,
+treat Momentum as the supported target. To re-check compatibility after any change:
+`arm-none-eabi-nm -u <built>.fap` → diff the undefined symbols against a firmware's
+`api_symbols.csv` `+` entries.
 
 ---
 
@@ -57,7 +59,7 @@ first place — the `MissingImports` refusal is the backstop there.
 
 ```
 bt_remotes/
-├── bt_remotes.c              # Core logic: firmware guard, BLE lifecycle, profile/collection/
+├── bt_remotes.c              # Core logic: BLE lifecycle, profile/collection/
 │                             #   gesture/pins config I/O, app alloc/free/entry
 ├── bt_remotes.h              # Hid struct, all constants, enums, all public function decls
 ├── hid.h                     # 1-line shim (#include "bt_remotes.h") so views/*.c can keep
@@ -277,7 +279,7 @@ the old `disconnect_vibro` bool simply fail the uint32 read and default to 1.
 **Registers the status callback every time it is called** — the callback would otherwise be lost
 after any stop/start cycle. Note it **asserts** `!ble_started` (it does not guard); callers must
 stop BLE first. `ble_profile_hid_ext` is the custom Momentum-only profile template that injects
-the per-profile MAC/name (see **Firmware Requirement**).
+the per-profile MAC/name (see **Firmware Compatibility**).
 
 ### `bt_remotes_stop_ble(Hid* app)`
 

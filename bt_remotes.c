@@ -4,8 +4,6 @@
 #include <furi_hal_random.h>
 #include <notification/notification_messages.h>
 #include <dolphin/dolphin.h>
-#include <dialogs/dialogs.h>
-#include <toolbox/version.h>
 
 #define TAG "BtRemotes"
 
@@ -1305,43 +1303,14 @@ static void bt_remotes_free(Hid* app) {
     free(app);
 }
 
-// This app pokes BLE GAP structs (GapConfig.mac_address) that exist only in
-// Momentum firmware — see helpers/ble_hid_ext_profile.c. On stock/other firmware
-// those offsets are wrong and writing through them corrupts memory and hard-faults
-// the device (frozen screen, requires a force-reboot). The firmware API version
-// check can't catch this because struct layout isn't part of the API hash, so we
-// gate at startup on the firmware origin and refuse to run anywhere but Momentum.
-static bool bt_remotes_firmware_supported(void) {
-    const char* origin = version_get_firmware_origin(NULL);
-    return origin && strcmp(origin, "Momentum") == 0;
-}
-
-static void bt_remotes_show_unsupported_firmware(void) {
-    DialogsApp* dialogs = furi_record_open(RECORD_DIALOGS);
-    DialogMessage* message = dialog_message_alloc();
-    dialog_message_set_header(message, "Wrong Firmware", 64, 4, AlignCenter, AlignTop);
-    dialog_message_set_text(
-        message,
-        "BT Remotes needs\nMomentum firmware.\nOther firmware would\ncrash the Flipper.",
-        64,
-        34,
-        AlignCenter,
-        AlignCenter);
-    dialog_message_set_buttons(message, NULL, "OK", NULL);
-    dialog_message_show(dialogs, message);
-    dialog_message_free(message);
-    furi_record_close(RECORD_DIALOGS);
-}
-
+// This app targets Momentum firmware. It doesn't enforce that at runtime: it
+// already fails to load on stock/Unleashed/RogueMaster because it imports several
+// app-API symbols only Momentum exports (a set of built-in icons plus strtok /
+// variable_item_list_set_header), so those firmwares reject it with "Update
+// Firmware to use with this Application". See docs/ARCHITECTURE.md → Firmware
+// Compatibility for the full analysis and the path to broader compatibility.
 int32_t bt_remotes_app(void* p) {
     UNUSED(p);
-
-    // Refuse to run on non-Momentum firmware before touching any BLE state — a
-    // blocking message instead of the memory-corruption hard-fault described above.
-    if(!bt_remotes_firmware_supported()) {
-        bt_remotes_show_unsupported_firmware();
-        return 0;
-    }
 
     Hid* app = bt_remotes_alloc();
 

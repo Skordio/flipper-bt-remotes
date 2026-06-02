@@ -13,11 +13,15 @@ Momentum firmware tree at `applications_user/bt_remotes/`.
 
 ## Rules that bite if you forget them
 
-1. **Momentum firmware only — never remove or bypass the startup guard.**
-   `bt_remotes_app` calls `bt_remotes_firmware_supported()` (origin == `"Momentum"`) *before* any
-   alloc/BLE work and bails with a dialog otherwise. The app pokes a Momentum-only `GapConfig`
-   field; on other firmware it corrupts memory and hard-faults the device. Do **not** move
-   alloc/BLE above the guard. (Full reasoning in ARCHITECTURE → *Firmware Requirement*.)
+1. **Momentum-targeted, but for a mundane reason — and there's no runtime guard.** The app simply
+   won't load on stock/Unleashed/RogueMaster: it imports app-API symbols only Momentum exports —
+   16 built-in icons (which the app already bundles in `assets/` but references via firmware
+   `&I_…`), plus `strtok` and `variable_item_list_set_header`. Other firmwares reject it with
+   "Update Firmware to use with this Application" (`MissingImports`). It is **not** a BLE/custom-MAC
+   issue — `GapConfig` is identical everywhere. (An earlier `version_get_firmware_origin` startup
+   guard, based on a wrong BT-address theory, was removed.) To re-check after symbol changes:
+   `arm-none-eabi-nm -u <built>.fap` vs a firmware's `api_symbols.csv` `+` entries. Full analysis:
+   ARCHITECTURE → *Firmware Compatibility*.
 
 2. **Git: this app has its OWN remote.** Commit/push with `git -C` targeting the `bt_remotes/`
    directory, **not** the firmware root. Any temp commit-message file must live **outside** the
@@ -58,7 +62,7 @@ Momentum firmware tree at `applications_user/bt_remotes/`.
 ## Orientation (where to look)
 
 - **`bt_remotes.h`** — `Hid` struct, all constants, `BtRemotesStartIndex` enum, decls.
-- **`bt_remotes.c`** — firmware guard, BLE lifecycle, profile/collection/gesture/pins I/O, alloc/entry.
+- **`bt_remotes.c`** — BLE lifecycle, profile/collection/gesture/pins I/O, alloc/entry.
 - **`scenes/bt_remotes_scenes.h`** — authoritative scene list (`ADD_SCENE` macro).
 - **`scenes/bt_remotes_scene_start.c`** — Start menu build + routing + `bt_remotes_menu_default[]`.
 - **`views/hid_remote_menu.c`** — the reorderable/pinnable Start-menu view.
