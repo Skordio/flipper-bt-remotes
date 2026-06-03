@@ -19,21 +19,12 @@ saved profiles so it can remember several paired devices and switch between them
 - **Multiple profiles** — each profile has its own Bluetooth identity (address + name) and its
   own saved pairing, so you can keep separate remotes for your laptop, phone, and TV and switch
   between them without re-pairing.
-- **A whole set of remotes:**
-  - **Keynote** / **Keynote Vertical** — slideshow clicker (arrows, play, Esc).
-  - **Keyboard** & **Numpad** — full on-screen typing.
-  - **Media** — play/pause, track, and volume control.
-  - **Apple Music (macOS)** — dedicated Apple Music controls.
-  - **Movie** — playback controls tuned for video.
-  - **TikTok / YT Shorts** — scroll shorts hands-free (wheel or swipe-gesture mode).
-  - **Mouse**, **Mouse Clicker**, **Mouse Jiggler**, **Mouse Jiggler Stealth** — pointer control
-    and keep-awake jigglers.
-  - **PushToTalk** — push-to-talk button for calls/meetings.
-- **Ducky Scripts** — browse and run `.txt` DuckyScript files straight from the Flipper, and
-  save **Collections** of scripts to run together.
-- **Custom Gestures** — a simple built-in scripting language for recording a sequence of mouse
+- **Includes all remotes from stock fw bluetooth remote**
+- **Ducky Scripts** — minimal duckyscript runner allows you to run duckyscripts without leaving
+  the BT Remotes app.
+- **Custom Gestures** — a simple built-in scripting language for creating a sequence of mouse
   moves, clicks, drags, waits, and keystrokes (e.g. "open Settings and toggle a switch"), then
-  replaying it with one button press. Gestures can even reuse other gestures.
+  executing it on a device.
 - **Customizable menu** — reorder the main menu, hide remotes you don't use, and **pin** your
   favorite scripts or gestures to the top for one-tap access.
 - **Per-remote settings** — tune behavior like the Keynote back-button key, Media remote mode,
