@@ -195,6 +195,8 @@ typedef enum {
     GCmdTap,
     GCmdClick,
     GCmdDrag,
+    GCmdPress, // mouse button down, held until release (manual drag control)
+    GCmdRelease, // mouse button up
     GCmdScroll,
     GCmdWait,
     GCmdKey,
@@ -275,6 +277,26 @@ static void gesture_parse(const char* raw, GestureParsed* out) {
             return;
         }
         out->cmd = GCmdClick;
+    } else if(strcmp(verb, "press") == 0 || strcmp(verb, "release") == 0) {
+        // Optional button arg (default left). Holds/releases the button so a
+        // gesture can do a manual drag with its own timing: press / wait / move / release.
+        out->a = 0; // 0 = left, 1 = right
+        if(*p != '\0') {
+            char c[8];
+            size_t m = 0;
+            while(*p && *p != ' ' && m < sizeof(c) - 1) c[m++] = *p++;
+            c[m] = '\0';
+            gesture_tolower(c);
+            if(strcmp(c, "left") == 0)
+                out->a = 0;
+            else if(strcmp(c, "right") == 0)
+                out->a = 1;
+            else {
+                out->cmd = GCmdInvalid;
+                return;
+            }
+        }
+        out->cmd = (verb[0] == 'p') ? GCmdPress : GCmdRelease;
     } else if(strcmp(verb, "scroll") == 0) {
         if(p[0] == '\0') {
             out->cmd = GCmdInvalid;
@@ -384,6 +406,18 @@ static bool gesture_exec(GestureRunner* runner, const GestureParsed* g) {
         ble_profile_hid_mouse_release(runner->profile, HID_MOUSE_BTN_LEFT);
         return true;
 
+    case GCmdPress: {
+        uint8_t btn = (g->a == 1) ? HID_MOUSE_BTN_RIGHT : HID_MOUSE_BTN_LEFT;
+        ble_profile_hid_mouse_press(runner->profile, btn);
+        return true;
+    }
+
+    case GCmdRelease: {
+        uint8_t btn = (g->a == 1) ? HID_MOUSE_BTN_RIGHT : HID_MOUSE_BTN_LEFT;
+        ble_profile_hid_mouse_release(runner->profile, btn);
+        return true;
+    }
+
     case GCmdScroll:
         ble_profile_hid_mouse_scroll(runner->profile, (int8_t)g->a);
         return true;
@@ -450,10 +484,9 @@ static bool gesture_run_file(GestureRunner* runner, const char* path, int depth)
         return true;
     }
 
-    // .gesture files are FlipperFormat with line_N keys; we read them as plain text
-    // and execute any line that parses (the header and other keys simply don't
-    // parse and are skipped). We strip a leading "line_N:" key prefix if present.
-    char line[GESTURE_LINE_LEN + 24];
+    // .gesture files are plain text: one command per line. No header is required;
+    // any legacy "Filetype:"/"Version:" header parses as invalid lines and is skipped.
+    char line[GESTURE_LINE_LEN];
     bool keep_going = true;
 
     while(keep_going && gesture_read_line(file, line, sizeof(line))) {
@@ -462,17 +495,8 @@ static bool gesture_run_file(GestureRunner* runner, const char* path, int depth)
             break;
         }
 
-        char* content = line;
-        if(strncmp(content, "line_", 5) == 0) {
-            char* colon = strchr(content, ':');
-            if(colon) {
-                content = colon + 1;
-                while(*content == ' ') content++;
-            }
-        }
-
         GestureParsed parsed;
-        gesture_parse(content, &parsed);
+        gesture_parse(line, &parsed);
 
         if(parsed.cmd == GCmdRun) {
             char child[256];

@@ -868,37 +868,40 @@ bool bt_remotes_gesture_load(Hid* app, const char* name) {
     char path[256];
     bt_remotes_gesture_path(name, path, sizeof(path));
 
-    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
-    FuriString*    tmp = furi_string_alloc();
-    uint32_t       ver = 0;
-    bool           ok  = false;
+    File* file = storage_file_alloc(app->storage);
+    bool  ok   = false;
 
-    do {
-        if(!flipper_format_file_open_existing(fff, path)) break;
-        if(!flipper_format_read_header(fff, tmp, &ver)) break;
-        if(strcmp(furi_string_get_cstr(tmp), GESTURE_FILE_TYPE) != 0) break;
-
-        uint32_t count = 0;
-        if(!flipper_format_read_uint32(fff, "count", &count, 1)) break;
+    if(storage_file_open(file, path, FSAM_READ, FSOM_OPEN_EXISTING)) {
         ok = true;
-        if(count > GESTURE_LINE_MAX) count = GESTURE_LINE_MAX;
-
-        for(uint32_t i = 0; i < count; i++) {
-            char key[16];
-            flipper_format_rewind(fff);
-            snprintf(key, sizeof(key), "line_%u", (unsigned)i);
-            if(flipper_format_read_string(fff, key, tmp)) {
-                strlcpy(
-                    app->editing_gesture_lines[app->editing_gesture_line_count],
-                    furi_string_get_cstr(tmp),
-                    GESTURE_LINE_LEN);
-                app->editing_gesture_line_count++;
+        char buf[GESTURE_LINE_LEN];
+        bool eof = false;
+        while(app->editing_gesture_line_count < GESTURE_LINE_MAX && !eof) {
+            // Read one line (strip \r, NUL-terminate, truncate over-long lines).
+            size_t len = 0;
+            char   c;
+            while(true) {
+                if(storage_file_read(file, &c, 1) != 1) {
+                    eof = true;
+                    break;
+                }
+                if(c == '\n') break;
+                if(c == '\r') continue;
+                if(len < sizeof(buf) - 1) buf[len++] = c;
             }
+            buf[len] = '\0';
+            // Skip the header lines and blanks; everything else is a command.
+            if(buf[0] == '\0') continue;
+            if(strncmp(buf, "Filetype:", 9) == 0) continue;
+            if(strncmp(buf, "Version:", 8) == 0) continue;
+            strlcpy(
+                app->editing_gesture_lines[app->editing_gesture_line_count],
+                buf,
+                GESTURE_LINE_LEN);
+            app->editing_gesture_line_count++;
         }
-    } while(0);
-
-    furi_string_free(tmp);
-    flipper_format_free(fff);
+        storage_file_close(file);
+    }
+    storage_file_free(file);
     return ok;
 }
 
@@ -908,21 +911,22 @@ bool bt_remotes_gesture_save(Hid* app) {
     char path[256];
     bt_remotes_gesture_path(app->editing_gesture_name, path, sizeof(path));
 
-    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
-    bool           ok  = false;
+    File* file = storage_file_alloc(app->storage);
+    bool  ok   = false;
 
-    if(flipper_format_file_open_always(fff, path)) {
-        ok = flipper_format_write_header_cstr(fff, GESTURE_FILE_TYPE, GESTURE_FILE_VERSION);
-        uint32_t count = app->editing_gesture_line_count;
-        ok = ok && flipper_format_write_uint32(fff, "count", &count, 1);
-        for(uint8_t i = 0; ok && i < app->editing_gesture_line_count; i++) {
-            char key[16];
-            snprintf(key, sizeof(key), "line_%u", (unsigned)i);
-            ok = flipper_format_write_string_cstr(fff, key, app->editing_gesture_lines[i]);
+    if(storage_file_open(file, path, FSAM_WRITE, FSOM_CREATE_ALWAYS)) {
+        // Plain text: one command per line, no header (the reader still tolerates
+        // a legacy "Filetype:"/"Version:" header on files that have one).
+        FuriString* out = furi_string_alloc();
+        for(uint8_t i = 0; i < app->editing_gesture_line_count; i++) {
+            furi_string_cat_printf(out, "%s\n", app->editing_gesture_lines[i]);
         }
-        flipper_format_file_close(fff);
+        size_t len = furi_string_size(out);
+        ok = storage_file_write(file, furi_string_get_cstr(out), len) == len;
+        furi_string_free(out);
+        storage_file_close(file);
     }
-    flipper_format_free(fff);
+    storage_file_free(file);
     return ok;
 }
 

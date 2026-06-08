@@ -1,0 +1,8 @@
+anchor bl
+move 100 0
+move 0 500
+wait 100
+press
+wait 50
+move 0 -100
+release

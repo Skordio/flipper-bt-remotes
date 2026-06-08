@@ -1,0 +1,15 @@
+Filetype: Flipper BT Custom Gesture
+Version: 1
+run home
+wait 1000
+anchor tl
+move 200 250
+drag 0 300
+wait 800
+type settings
+wait 600
+key enter
+wait 2000
+anchor tl
+move 200 450
+tap

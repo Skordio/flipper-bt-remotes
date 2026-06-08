@@ -258,8 +258,12 @@ the old `disconnect_vibro` bool simply fail the uint32 read and default to 1.
 
 ### Custom Gestures (global) — `APP_DATA_PATH("gestures/")`
 
-- **`{name}.gesture`** — `Flipper BT Custom Gesture` v1: `count` + `line_0`, `line_1`, … (one
-  gesture command per key). Global = shared across all profiles. See **Custom Gestures**.
+- **`{name}.gesture`** — plain text (computer-editable): **one command per line** (blank lines and
+  `#` comments allowed). **No header required** — `gesture_save` writes the bare command lines; the
+  readers still skip a legacy `Filetype:`/`Version:` header so older files keep loading. No
+  `count` / `line_N` keys — written/read directly via `storage_file_*` in `bt_remotes.c`
+  (`gesture_save`/`gesture_load`) and the runner (`gesture_run_file`), not FlipperFormat. Global =
+  shared across all profiles. See **Custom Gestures** and [`WRITING_GESTURES.md`](WRITING_GESTURES.md).
 
 ---
 
@@ -409,6 +413,9 @@ A brand-new minimal mouse/keyboard scripting language with **its own** parser + 
 Start menu item **"Custom Gestures"** (`BtRemotesStartIndexCustomGestures` → `gesture_list`). The
 library is **global** (`gestures/*.gesture`, shared across profiles); gestures can be pinned to the
 Start menu (kind 1) and run from a pin or from the list.
+
+> Authoring guide (for users writing gestures by hand): [`WRITING_GESTURES.md`](WRITING_GESTURES.md).
+> The section below is the implementation reference.
 
 **Language** (one command per line; `#`/blank lines ignored; verbs case-insensitive):
 

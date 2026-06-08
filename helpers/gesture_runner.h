@@ -14,15 +14,20 @@
 //   move <dx> <dy>       relative mouse move (px), auto-chunked into int8 steps
 //   tap                  finger tap = left press + release
 //   click left|right     mouse button click
-//   drag <dx> <dy>       left press -> stepped move -> release
+//   drag <dx> <dy>       left press -> stepped move -> release (atomic)
+//   press [left|right]   button down, held until release (manual drag timing)
+//   release [left|right] button up
 //   scroll <n>           mouse wheel (signed)
 //   wait <ms>            delay
 //   key <combo>          keyboard key/combo, e.g. "key enter", "key cmd space"
 //   type <text>          type a literal string
 //   run <name>           run another gesture by name (script inheritance)
 
-// On-disk format (FlipperFormat). Shared by the runner (reads) and the library
-// save/load in bt_remotes.c (writes), so they must agree.
+// On-disk format (plain text, computer-editable): one command per line, blank
+// lines and '#' comments allowed. No header required. A legacy
+// "Filetype:"/"Version:" header is still tolerated (skipped) on older files.
+// Shared by the runner (reads) and the library save/load in bt_remotes.c.
+// GESTURE_FILE_TYPE/_VERSION below name the legacy header (no longer written).
 #define GESTURE_FILE_TYPE    "Flipper BT Custom Gesture"
 #define GESTURE_FILE_VERSION (1)
 #define GESTURE_LINE_MAX     64 // max gesture lines per file
