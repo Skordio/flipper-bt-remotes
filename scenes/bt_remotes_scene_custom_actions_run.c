@@ -38,9 +38,10 @@ static const char* path_basename(const char* path) {
 }
 
 // ---------------------------------------------------------------------------
-// Show the "running" popup (no timeout, Back = stop)
+// Popups
 // ---------------------------------------------------------------------------
 
+// "Running" popup (no timeout, Back = stop)
 static void show_running_popup(Hid* app) {
     popup_reset(app->popup);
     popup_set_header(app->popup, path_basename(app->pending_script_path),
@@ -53,6 +54,35 @@ static void show_running_popup(Hid* app) {
     view_dispatcher_switch_to_view(app->view_dispatcher, HidViewPopup);
 }
 
+// "Connecting" popup shown while we wait for the host (connect-per-run mode)
+static void show_connecting_popup(Hid* app) {
+    popup_reset(app->popup);
+    popup_set_header(app->popup, path_basename(app->pending_script_path),
+                     64, 3, AlignCenter, AlignTop);
+    popup_set_text(app->popup, "Connecting...\nPress Back to cancel.", 64, 28,
+                   AlignCenter, AlignTop);
+    popup_set_context(app->popup, app);
+    popup_set_callback(app->popup, NULL);
+    view_dispatcher_switch_to_view(app->view_dispatcher, HidViewPopup);
+}
+
+// Shown when the host never connects within the wait window (Back to dismiss)
+static void show_connect_failed_popup(Hid* app) {
+    popup_reset(app->popup);
+    popup_set_header(app->popup, "Not Connected", 64, 3, AlignCenter, AlignTop);
+    popup_set_text(app->popup, "Host didn't connect.\nPress Back.", 64, 28,
+                   AlignCenter, AlignTop);
+    popup_set_context(app->popup, app);
+    popup_set_callback(app->popup, NULL);
+    view_dispatcher_switch_to_view(app->view_dispatcher, HidViewPopup);
+}
+
+// Start the script runner and show the running popup.
+static void start_run(Hid* app) {
+    ducky_runner_start(app->ducky_runner, app->ble_hid_profile, app->pending_script_path);
+    show_running_popup(app);
+}
+
 // ---------------------------------------------------------------------------
 // Scene handlers
 // ---------------------------------------------------------------------------
@@ -61,9 +91,18 @@ void bt_remotes_scene_custom_actions_run_on_enter(void* context) {
     Hid* app = context;
 
     ducky_runner_set_callback(app->ducky_runner, custom_actions_run_cb, app);
-    ducky_runner_start(app->ducky_runner, app->ble_hid_profile, app->pending_script_path);
 
-    show_running_popup(app);
+    if(app->ducky_connect_per_run && !app->connected) {
+        // Connect-per-run: bring BLE up (if needed) and wait for the host to connect
+        // before firing the script. The connect_wait_timer polls app->connected.
+        if(!app->ble_started) bt_remotes_start_ble(app);
+        app->connect_wait_attempts = 0;
+        show_connecting_popup(app);
+        furi_timer_start(app->connect_wait_timer, CONNECT_WAIT_POLL_MS);
+    } else {
+        // Already connected, or per-run disabled: run immediately (legacy behavior).
+        start_run(app);
+    }
 }
 
 bool bt_remotes_scene_custom_actions_run_on_event(void* context, SceneManagerEvent event) {
@@ -71,7 +110,9 @@ bool bt_remotes_scene_custom_actions_run_on_event(void* context, SceneManagerEve
     bool consumed = false;
 
     if(event.type == SceneManagerEventTypeBack) {
-        // Stop the runner (join its thread) then let the scene manager pop us
+        // Stop the wait poll and the runner, then let the scene manager pop us.
+        // on_exit drops BLE (connect-per-run mode).
+        furi_timer_stop(app->connect_wait_timer);
         ducky_runner_stop(app->ducky_runner);
         return false;
     }
@@ -79,7 +120,17 @@ bool bt_remotes_scene_custom_actions_run_on_event(void* context, SceneManagerEve
     if(event.type == SceneManagerEventTypeCustom) {
         consumed = true;
 
-        if(event.event == CustomActionsRunEventDone) {
+        if(event.event == BT_REMOTES_EVENT_CONNECT_TICK) {
+            // Waiting for the host while connect-per-run brings BLE up.
+            if(app->connected) {
+                furi_timer_stop(app->connect_wait_timer);
+                start_run(app);
+            } else if(++app->connect_wait_attempts >= CONNECT_WAIT_MAX_ATTEMPTS) {
+                furi_timer_stop(app->connect_wait_timer);
+                show_connect_failed_popup(app);
+            }
+
+        } else if(event.event == CustomActionsRunEventDone) {
             popup_reset(app->popup);
             popup_set_header(app->popup, "Done!", 64, 22, AlignCenter, AlignCenter);
             popup_set_timeout(app->popup, 200);
@@ -110,7 +161,10 @@ bool bt_remotes_scene_custom_actions_run_on_event(void* context, SceneManagerEve
 
 void bt_remotes_scene_custom_actions_run_on_exit(void* context) {
     Hid* app = context;
-    // Ensure the runner is not still executing if we exit unexpectedly
+    // Ensure the wait poll and runner are stopped if we exit unexpectedly.
+    furi_timer_stop(app->connect_wait_timer);
     ducky_runner_stop(app->ducky_runner);
+    // Connect-per-run: the connection existed only for this run — drop it now.
+    if(app->ducky_connect_per_run) bt_remotes_stop_ble(app);
     popup_reset(app->popup);
 }

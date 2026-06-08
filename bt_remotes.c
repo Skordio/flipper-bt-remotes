@@ -170,6 +170,10 @@ void bt_remotes_save_profile_menu_cfg(Hid* app) {
         flipper_format_write_uint32(fff, "tiktok_gesture_margin", &tiktok_gesture_margin_u32, 1);
         uint32_t tiktok_gesture_swipe_u32 = app->tiktok_gesture_swipe;
         flipper_format_write_uint32(fff, "tiktok_gesture_swipe", &tiktok_gesture_swipe_u32, 1);
+        uint32_t delay_connect_u32 = app->delay_connect;
+        flipper_format_write_uint32(fff, "delay_connect", &delay_connect_u32, 1);
+        uint32_t ducky_connect_per_run_u32 = app->ducky_connect_per_run;
+        flipper_format_write_uint32(fff, "ducky_connect_per_run", &ducky_connect_per_run_u32, 1);
         flipper_format_file_close(fff);
     }
     flipper_format_free(fff);
@@ -528,6 +532,21 @@ bool bt_remotes_profile_activate(Hid* app) {
                 app->tiktok_gesture_swipe = (uint16_t)tiktok_gesture_swipe_u32;
             } else {
                 app->tiktok_gesture_swipe = TIKTOK_GESTURE_SWIPE_DEFAULT;
+            }
+            flipper_format_rewind(mfff);
+            uint32_t delay_connect_u32 = DELAY_CONNECT_DEFAULT;
+            if(flipper_format_read_uint32(mfff, "delay_connect", &delay_connect_u32, 1)) {
+                app->delay_connect = delay_connect_u32 ? 1 : 0;
+            } else {
+                app->delay_connect = DELAY_CONNECT_DEFAULT;
+            }
+            flipper_format_rewind(mfff);
+            uint32_t ducky_connect_per_run_u32 = DUCKY_CONNECT_PER_RUN_DEFAULT;
+            if(flipper_format_read_uint32(
+                   mfff, "ducky_connect_per_run", &ducky_connect_per_run_u32, 1)) {
+                app->ducky_connect_per_run = ducky_connect_per_run_u32 ? 1 : 0;
+            } else {
+                app->ducky_connect_per_run = DUCKY_CONNECT_PER_RUN_DEFAULT;
             }
         } while(0);
         furi_string_free(mtmp);
@@ -998,6 +1017,13 @@ static void bt_remotes_pair_save_timer_cb(void* context) {
     }
 }
 
+// Connect-wait timer (Ducky "connect per run"): posts a tick so the run scene re-checks
+// app->connected on the UI thread. Runs on the FuriTimer thread, so it must not touch UI.
+static void bt_remotes_connect_wait_timer_cb(void* context) {
+    Hid* app = context;
+    view_dispatcher_send_custom_event(app->view_dispatcher, BT_REMOTES_EVENT_CONNECT_TICK);
+}
+
 // Forward declaration so bt_remotes_start_ble can register it
 static void bt_remotes_connection_status_changed_callback(BtStatus status, void* context);
 
@@ -1020,6 +1046,12 @@ void bt_remotes_start_ble(Hid* app) {
     FURI_LOG_I(TAG, "BLE started");
 }
 
+void bt_remotes_start_ble_if_immediate(Hid* app) {
+    // Immediate-connect profiles bring BLE up now; delay-connect profiles defer it
+    // to the Start scene (start on remote entry, stop on return to the menu).
+    if(!app->delay_connect) bt_remotes_start_ble(app);
+}
+
 void bt_remotes_stop_ble(Hid* app) {
     if(!app->ble_started) return;
 
@@ -1031,6 +1063,9 @@ void bt_remotes_stop_ble(Hid* app) {
     bt_keys_storage_set_default_path(app->bt);
     furi_check(bt_profile_restore_default(app->bt));
     app->ble_started = false;
+    // Callback was detached above, so the disconnect won't report back — clear the
+    // link flag here so a later connect-wait doesn't see a stale "connected".
+    app->connected = false;
     FURI_LOG_I(TAG, "BLE stopped");
 }
 
@@ -1042,6 +1077,7 @@ static void bt_remotes_connection_status_changed_callback(BtStatus status, void*
     furi_assert(context);
     Hid* hid = context;
     const bool connected = (status == BtStatusConnected);
+    hid->connected = connected; // app-level link state (e.g. Ducky per-run connect wait)
     notification_internal_message(
         hid->notifications, connected ? &sequence_set_blue_255 : &sequence_reset_blue);
     if(connected && (hid->vibro_mode == 2 || hid->vibro_mode == 3)) {
@@ -1236,6 +1272,8 @@ static Hid* bt_remotes_alloc(void) {
 
     app->pair_save_timer =
         furi_timer_alloc(bt_remotes_pair_save_timer_cb, FuriTimerTypePeriodic, app);
+    app->connect_wait_timer =
+        furi_timer_alloc(bt_remotes_connect_wait_timer_cb, FuriTimerTypePeriodic, app);
 
     return app;
 }
@@ -1295,6 +1333,7 @@ static void bt_remotes_free(Hid* app) {
     ducky_runner_free(app->ducky_runner);
     gesture_runner_free(app->gesture_runner);
     furi_timer_free(app->pair_save_timer);
+    furi_timer_free(app->connect_wait_timer);
 
     scene_manager_free(app->scene_manager);
     view_dispatcher_free(app->view_dispatcher);

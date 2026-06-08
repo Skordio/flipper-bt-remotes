@@ -58,6 +58,12 @@ bool bt_remotes_scene_profile_new_on_event(void* context, SceneManagerEvent even
         if(event.event == BtRemotesProfileNewEventDone) {
             popup_reset(app->popup);
             if(bt_remotes_profile_create(app)) {
+                // Load the just-created profile so every per-profile field defaults
+                // from its (name+mac-only) .cfg — menu_order/menu_hidden and all
+                // per-remote settings, not just BLE identity. Without this the new
+                // profile would keep the previous profile's stale in-memory settings
+                // (the create flow auto-advances to Start without re-activating).
+                bt_remotes_profile_activate(app);
                 popup_set_header(app->popup, "Profile Created!", 64, 10, AlignCenter, AlignTop);
                 popup_set_text(
                     app->popup,

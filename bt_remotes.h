@@ -98,6 +98,24 @@ typedef enum {
 // Media remote mouse switcher: short Back opens the mouse sub-view (independent of mode)
 #define MEDIA_MOUSE_SWITCH_DEFAULT 0
 
+// Deferred BLE start (per-profile): 0 = connect immediately on profile select and
+// stay connected at the Start menu (default/legacy). 1 = only advertise/connect
+// while a remote/script/gesture screen is open; disconnect on return to the menu.
+#define DELAY_CONNECT_DEFAULT 0
+
+// Ducky/Collections "connect per run" (per-profile): 0 = run scripts on the existing
+// connection (default). 1 = stay disconnected while browsing scripts; connect only
+// for the duration of each script run, then disconnect. Independent of delay_connect.
+#define DUCKY_CONNECT_PER_RUN_DEFAULT 0
+
+// Custom view-dispatcher event posted by the connect-wait timer so the run scene
+// re-checks app->connected. High sentinel to avoid colliding with scene-local enums.
+#define BT_REMOTES_EVENT_CONNECT_TICK 0xC0FFEE01u
+
+// Ducky "connect per run": poll period + cap while the run scene waits for the host.
+#define CONNECT_WAIT_POLL_MS      150
+#define CONNECT_WAIT_MAX_ATTEMPTS 100 // ~15 seconds before giving up
+
 // TikTok / YT Shorts scroll behavior (per-profile)
 typedef enum {
     TikTokScrollWheel   = 0, // scroll-wheel burst (current behavior)
@@ -167,6 +185,7 @@ struct Hid {
     FuriHalBleProfileBase* ble_hid_profile;
     BleProfileHidExtParams ble_hid_cfg;
     bool ble_started;
+    bool connected; // live BLE link state (set by the status callback, cleared on stop)
     Bt* bt;
     Gui* gui;
     NotificationApp* notifications;
@@ -222,6 +241,8 @@ struct Hid {
     uint16_t tiktok_gesture_inset;  // px — horizontal inset before the vertical swipe
     uint16_t tiktok_gesture_margin; // px — vertical travel off the edge before press
     uint16_t tiktok_gesture_swipe;  // px — drag distance while the button is held
+    uint8_t  delay_connect; // 0 = connect immediately; 1 = only connect inside a remote
+    uint8_t  ducky_connect_per_run; // 1 = Ducky/Collections connect only during a script run
     // App-level settings
     // 0=Neither, 1=Disconnect, 2=Connect, 3=Both
     uint8_t vibro_mode;
@@ -240,6 +261,9 @@ struct Hid {
     // Post-pairing auto-save: polls for .bt_hid.keys after first-time BLE connect
     FuriTimer* pair_save_timer;
     uint8_t    pair_save_attempts;
+    // Ducky "connect per run": polls app->connected while the run scene waits for the host
+    FuriTimer* connect_wait_timer;
+    uint8_t    connect_wait_attempts;
 };
 
 // Shared name validator: checks non-empty and no forbidden filesystem chars.
@@ -248,6 +272,7 @@ bool bt_remotes_validate_name(const char* text, FuriString* error);
 
 // BLE lifecycle
 void bt_remotes_start_ble(Hid* app);
+void bt_remotes_start_ble_if_immediate(Hid* app); // start_ble unless delay_connect is set
 void bt_remotes_stop_ble(Hid* app);
 
 // Config / pairing

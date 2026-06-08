@@ -12,12 +12,19 @@ enum BtRemotesSettingsIndex {
     BtRemotesSettingsIndexDisconnectVibro,
     BtRemotesSettingsIndexHideItems,
     BtRemotesSettingsIndexRemoteTypeSettings,
+    BtRemotesSettingsIndexDelayConnect,
+    BtRemotesSettingsIndexDuckyPerRun,
     BtRemotesSettingsIndexResetMenu,
     BtRemotesSettingsIndexRenameProfile,
     BtRemotesSettingsIndexUnpair,
     BtRemotesSettingsIndexSaveProfile,
     BtRemotesSettingsIndexDeleteProfile,
 };
+
+// Dynamic labels for the connection toggles. submenu_add_item stores the pointer
+// (it does not copy), so the buffers must outlive the submenu — keep them file-scope.
+static char bt_remotes_delay_connect_label[40];
+static char bt_remotes_ducky_per_run_label[40];
 
 static void bt_remotes_scene_settings_submenu_cb(void* context, uint32_t index) {
     Hid* app = context;
@@ -53,6 +60,28 @@ static void build_settings_menu(Hid* app) {
             app->submenu,
             "Per-Remote Settings",
             BtRemotesSettingsIndexRemoteTypeSettings,
+            bt_remotes_scene_settings_submenu_cb,
+            app);
+        snprintf(
+            bt_remotes_delay_connect_label,
+            sizeof(bt_remotes_delay_connect_label),
+            "Delay Connect: %s",
+            app->delay_connect ? "On" : "Off");
+        submenu_add_item(
+            app->submenu,
+            bt_remotes_delay_connect_label,
+            BtRemotesSettingsIndexDelayConnect,
+            bt_remotes_scene_settings_submenu_cb,
+            app);
+        snprintf(
+            bt_remotes_ducky_per_run_label,
+            sizeof(bt_remotes_ducky_per_run_label),
+            "Ducky Per-Run: %s",
+            app->ducky_connect_per_run ? "On" : "Off");
+        submenu_add_item(
+            app->submenu,
+            bt_remotes_ducky_per_run_label,
+            BtRemotesSettingsIndexDuckyPerRun,
             bt_remotes_scene_settings_submenu_cb,
             app);
         submenu_add_item(
@@ -100,7 +129,10 @@ bool bt_remotes_scene_settings_on_event(void* context, SceneManagerEvent event) 
     bool consumed = false;
 
     if(event.type == SceneManagerEventTypeBack) {
-        if(!app->ble_started && app->active_profile[0] != '\0') {
+        // Restore the session's BLE identity on the way out of Settings. Delay-connect
+        // profiles stay disconnected at the menu, so don't auto-start there (the Start
+        // scene's on_enter keeps BLE stopped regardless; skipping avoids a start/stop blip).
+        if(!app->ble_started && app->active_profile[0] != '\0' && !app->delay_connect) {
             bt_remotes_profile_activate(app);
             bt_remotes_start_ble(app);
         }
@@ -121,6 +153,16 @@ bool bt_remotes_scene_settings_on_event(void* context, SceneManagerEvent event) 
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneHideItems);
         } else if(event.event == BtRemotesSettingsIndexRemoteTypeSettings) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneRemoteTypeSettings);
+        } else if(event.event == BtRemotesSettingsIndexDelayConnect) {
+            app->delay_connect = app->delay_connect ? 0 : 1;
+            bt_remotes_save_profile_menu_cfg(app);
+            build_settings_menu(app);
+            submenu_set_selected_item(app->submenu, BtRemotesSettingsIndexDelayConnect);
+        } else if(event.event == BtRemotesSettingsIndexDuckyPerRun) {
+            app->ducky_connect_per_run = app->ducky_connect_per_run ? 0 : 1;
+            bt_remotes_save_profile_menu_cfg(app);
+            build_settings_menu(app);
+            submenu_set_selected_item(app->submenu, BtRemotesSettingsIndexDuckyPerRun);
         } else if(event.event == BtRemotesSettingsIndexResetMenu) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneResetMenu);
         } else if(event.event == BtRemotesSettingsIndexRenameProfile) {

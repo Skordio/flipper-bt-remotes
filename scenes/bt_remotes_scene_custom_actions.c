@@ -40,6 +40,11 @@ static void build_hub_submenu(Hid* app) {
 void bt_remotes_scene_custom_actions_on_enter(void* context) {
     Hid* app = context;
 
+    // "Connect per run": stay disconnected while browsing scripts; the run scene
+    // brings BLE up only for a script's execution. Idempotent; also re-runs when
+    // returning here from the file browser / a finished run.
+    if(app->ducky_connect_per_run) bt_remotes_stop_ble(app);
+
     scene_manager_set_scene_state(
         app->scene_manager, BtRemotesSceneCustomActions, CA_STATE_SUBMENU);
 

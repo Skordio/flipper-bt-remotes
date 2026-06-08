@@ -162,7 +162,9 @@ bool bt_remotes_scene_profile_select_on_event(void* context, SceneManagerEvent e
                 // Stay on profile select — view is still visible
             } else {
                 bt_remotes_pinned_load(app);
-                bt_remotes_start_ble(app);
+                // Delay-connect profiles stay disconnected until a remote is opened;
+                // the Start scene brings BLE up on the way into a remote.
+                bt_remotes_start_ble_if_immediate(app);
                 scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, 0);
                 scene_manager_next_scene(app->scene_manager, BtRemotesSceneStart);
             }

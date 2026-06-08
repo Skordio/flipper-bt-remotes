@@ -53,7 +53,8 @@ bool bt_remotes_scene_reset_profile_on_event(void* context, SceneManagerEvent ev
             bool ok = bt_remotes_profile_reset(app);
             if(ok) {
                 bt_remotes_profile_activate(app);
-                bt_remotes_start_ble(app);
+                // Delay-connect profiles stay disconnected at the menu; don't auto-start.
+                bt_remotes_start_ble_if_immediate(app);
             }
 
             popup_reset(app->popup);

@@ -64,6 +64,17 @@ static void
 void bt_remotes_scene_start_on_enter(void* context) {
     Hid* app = context;
 
+    // Delay-connect profiles disconnect whenever the Start menu is shown: BLE is
+    // only up while a remote/script/gesture screen is open. First arrival is a
+    // no-op (BLE already stopped); returning from a remote/Settings drops it.
+    // Immediate-connect profiles ensure BLE is up at the menu — normally a no-op,
+    // but it reconnects after a Ducky "connect per run" session dropped the link.
+    if(app->delay_connect) {
+        bt_remotes_stop_ble(app);
+    } else if(!app->ble_started) {
+        bt_remotes_start_ble(app);
+    }
+
     // Max items: BT_REMOTES_MENU_ITEM_COUNT fixed + BT_REMOTES_PINNED_MAX pinned
     BtRemotesMenuEntry entries[BT_REMOTES_MENU_ORDER_LEN];
     uint8_t            order[BT_REMOTES_MENU_ORDER_LEN];
@@ -156,6 +167,25 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
     }
 
     if(event.type == SceneManagerEventTypeCustom) {
+        // Delay-connect: any selection except Settings is a HID destination
+        // (remote view, Ducky/Gesture list, or pinned script/gesture) — bring BLE
+        // up now. Settings must stay disconnected and stops BLE in its own branch.
+        // Bound to real menu events so a stray high-value event (e.g. a connect-wait
+        // tick that arrived after the run scene closed) can't spuriously start BLE.
+        if(app->delay_connect && !app->ble_started &&
+           event.event != BtRemotesStartIndexSettings &&
+           event.event < BT_REMOTES_MENU_ORDER_LEN) {
+            // "Connect per run" overrides this for Ducky/Collection launches: they
+            // stay disconnected here and connect only inside the run scene. A
+            // Ducky/Collection target is the Ducky list or a pinned collection
+            // (kind 0). Gestures (list or pinned kind 1) are unaffected.
+            bool ducky_target = (event.event == BtRemotesStartIndexCustomActions);
+            if(event.event >= BT_REMOTES_MENU_ITEM_COUNT) {
+                uint8_t pidx = event.event - BT_REMOTES_MENU_ITEM_COUNT;
+                if(pidx < app->pinned_count && app->pinned_kinds[pidx] == 0) ducky_target = true;
+            }
+            if(!(app->ducky_connect_per_run && ducky_target)) bt_remotes_start_ble(app);
+        }
         if(event.event == BtRemotesStartIndexSettings) {
             scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, event.event);
             bt_remotes_stop_ble(app);

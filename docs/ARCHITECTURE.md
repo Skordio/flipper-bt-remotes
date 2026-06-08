@@ -218,6 +218,8 @@ All config files are FlipperFormat text. Constants/file-types live in `bt_remote
   media_mouse_switch: <uint32>       # 0/1
   tiktok_scroll_mode: <uint32>       # TikTokScrollMode enum
   tiktok_gesture_inset / _margin / _swipe: <uint32>   # px tunables
+  delay_connect: <uint32>            # 0/1 — defer BLE start until a remote is opened
+  ducky_connect_per_run: <uint32>    # 0/1 — Ducky/Collections connect only during a run
   ```
   `bt_remotes_save_profile_menu_cfg` writes the **full** set above. Note `bt_hid_save_cfg` (used
   by rename/reset) writes only `name`+`mac` to the **active** `.bt_hid.cfg` mirror — the full
@@ -320,6 +322,53 @@ connected, the keys file may or may not exist yet:
 On **disconnect** it stops the pairing-save timer. (This polling approach replaced an earlier
 assumption that the BT service always writes keys before firing the status callback.)
 
+### Deferred BLE start (`delay_connect`, per profile)
+
+By default a profile starts BLE on selection (`profile_select`) and stays advertising the whole
+session. When the per-profile `delay_connect` flag is set, BLE is instead brought up **only while a
+remote/script/gesture screen is open**, and dropped on return to the Start menu:
+
+- **`profile_select`** skips `start_ble` when `delay_connect` is set (lands on Start disconnected).
+- **`start_on_event`** calls `start_ble` (guarded by `!ble_started`) for *any* selection except
+  Settings — covering remote views, the Ducky/Gesture lists, and pinned-slot launches in one place.
+- **`start_on_enter`** calls `stop_ble` when `delay_connect` is set, so every return to the menu
+  disconnects. (Entering a remote pushes `Main` over `Start`, so `start_on_enter` doesn't re-run
+  until Back — no start/stop churn.)
+- The Settings-Back restart and the `unpair` / `reset_profile` restarts are all gated by
+  `!delay_connect`, so management flows stay disconnected at the menu in delay mode.
+
+`delay_connect` is **off by default**. New profiles get the default via the
+`bt_remotes_profile_activate(app)` call the `profile_new` flow now runs after `profile_create` —
+that also defaults *all* the other per-profile fields (menu layout + per-remote settings) instead
+of inheriting the previous profile's stale in-memory values. Toggle lives in Settings → "Delay
+Connect". The three immediate-vs-delay start sites
+(`profile_select` / `unpair` / `reset_profile`) go through the
+`bt_remotes_start_ble_if_immediate(app)` helper.
+
+### Ducky/Collections "connect per run" (`ducky_connect_per_run`, per profile)
+
+An **independent** per-profile policy that narrows the connection window for Ducky Scripts and
+Collections to a single script's execution (Custom Gestures are unaffected). When set, regardless
+of `delay_connect`:
+
+- **Browsing is disconnected.** `custom_actions` and `collection_view` `on_enter` call `stop_ble`
+  (idempotent; this is what disconnects an immediate-mode profile). `start_on_event` also skips its
+  `delay_connect` BLE-start for the Ducky list and pinned **collection** (kind 0) launches so there
+  is no start/stop churn.
+- **The run scene connects just for the run.** `custom_actions_run` `on_enter`: if not already
+  `connected`, `start_ble` and show "Connecting…", then poll `app->connected` via
+  `connect_wait_timer` (period `CONNECT_WAIT_POLL_MS`, cap `CONNECT_WAIT_MAX_ATTEMPTS` ≈ 15 s,
+  posting `BT_REMOTES_EVENT_CONNECT_TICK`). On connect → start the runner; on timeout → "Not
+  Connected"; Back cancels. `on_exit` always `stop_ble` in this mode (covers Done/Error/cancel).
+- **The menu restores the profile's normal state.** `start_on_enter` does
+  `if(delay_connect) stop_ble; else if(!ble_started) start_ble;` — the `else if` reconnects an
+  immediate-mode profile after a per-run session dropped the link. A remote opened after a Ducky
+  run always passes through Start first, so it finds BLE restored.
+
+`app->connected` (set in the status callback, force-cleared in `stop_ble` since the callback is
+detached before the disconnect fires) is the gate the run scene waits on. Toggle lives in
+Settings → "Ducky Per-Run". Off by default.
+
 ---
 
 ## Start Menu (`hid_remote_menu` + `menu_order` / `menu_hidden` / pins)
@@ -382,9 +431,11 @@ in `bt_remotes_scene_start_on_event`.
 
 **Critical navigation rule**: `bt_remotes_stop_ble` is called in `start_on_event` when navigating
 to Settings. `bt_remotes_start_ble` is called in `settings_on_event` when handling
-`SceneManagerEventTypeBack` — but only if `!app->ble_started && active_profile[0] != '\0'`. The
-`settings_on_event` Back handler returns `false` so the scene manager still pops the scene. (Ducky
-Scripts / Custom Gestures / pinned-slot launches do **not** stop BLE — only Settings does.)
+`SceneManagerEventTypeBack` — but only if `!app->ble_started && active_profile[0] != '\0'`
+(**and** `!delay_connect`; see *Deferred BLE start*). The `settings_on_event` Back handler returns
+`false` so the scene manager still pops the scene. (Ducky Scripts / Custom Gestures / pinned-slot
+launches do **not** stop BLE — only Settings does. In `delay_connect` mode the Start scene's
+`on_enter`/`on_event` own the stop-at-menu / start-into-remote transitions instead.)
 
 ---
 

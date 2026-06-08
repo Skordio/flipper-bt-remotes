@@ -60,7 +60,12 @@ static const char* const help_pages[] = {
     "Pair once from your device's Bluetooth settings; it saves automatically.\n\n"
     "Bluetooth Name: the name your device sees.\n\n"
     "Bluetooth Unpairing: gives the profile a brand-new identity and forgets "
-    "all pairings. Use it if a device won't reconnect, then pair fresh.",
+    "all pairings. Use it if a device won't reconnect, then pair fresh.\n\n"
+    "Delay Connect (Settings): when On, this profile turns Bluetooth on only "
+    "while you're in a remote, script, or gesture, and disconnects when you go "
+    "back to the menu. Off (default): it connects as soon as you pick the "
+    "profile and stays connected. Use On to keep the Flipper off the air until "
+    "you actually start using a remote.",
 
     // 4: The Remote Menu
     "THE REMOTE MENU\n"
@@ -115,6 +120,7 @@ static const char* const help_pages[] = {
     "Vibration - buzz on connect/disconnect.\n"
     "Hide Remote Types - show/hide menu items.\n"
     "Per-Remote Settings - per-remote options.\n"
+    "Delay Connect - only connect while in a remote.\n"
     "Reset Menu Order - restore defaults.\n"
     "Rename Profile - rename the profile.\n"
     "Bluetooth Unpairing - new identity, forget pairings.\n"

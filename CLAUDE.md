@@ -49,9 +49,20 @@ Momentum firmware tree at `applications_user/bt_remotes/`.
    always also call `bt_remotes_save_profile_menu_cfg(app)` so a change survives
    `profile_activate` (which overwrites `.bt_hid.cfg` from the profile `.cfg` on Back-from-Settings).
 
-6. **BLE state:** `start_ble` **asserts** `!ble_started` (stop first; it's not a guard). Only the
-   Settings flow stops BLE — Ducky Scripts / Custom Gestures / pinned launches do not. Use
-   `bt_remotes_profile_clear_pairing` (not `bt_hid_remove_pairing`) whenever BLE is stopped.
+6. **BLE state:** `start_ble` **asserts** `!ble_started` (stop first; it's not a guard). In the
+   default mode only the Settings flow stops BLE — Ducky Scripts / Custom Gestures / pinned launches
+   do not. Use `bt_remotes_profile_clear_pairing` (not `bt_hid_remove_pairing`) whenever BLE is
+   stopped. **Per-profile `delay_connect`:** when set, the Start scene owns BLE — `on_event` starts
+   it on the way into any non-Settings destination, `on_enter` stops it on every return to the menu;
+   the Settings-Back / `unpair` / `reset_profile` auto-restarts go through
+   `bt_remotes_start_ble_if_immediate` (gated by `!delay_connect`). Defaults off; the `profile_new`
+   flow calls `bt_remotes_profile_activate` after `profile_create` so a new profile defaults **all**
+   per-profile fields (not just this flag) instead of inheriting the previous profile's in-memory state.
+   **Per-profile `ducky_connect_per_run`** (independent of `delay_connect`): Ducky/Collections stay
+   disconnected while browsing (`custom_actions`/`collection_view` `on_enter` stop BLE) and the run
+   scene (`custom_actions_run`) connects only for a script's execution — `start_ble` → wait on
+   `app->connected` (polled via `connect_wait_timer`) → run → `stop_ble` in `on_exit`. `start_on_enter`
+   restores an immediate-mode link afterward (`else if(!ble_started) start_ble`). Gestures unaffected.
 
 7. **Two separate script engines:** Ducky Scripts use `helpers/ducky_runner.c`; Custom Gestures
    use `helpers/gesture_runner.c` (its own lowercase-verb language, with `run <name>` inheritance).
