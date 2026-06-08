@@ -13,7 +13,6 @@ enum BtRemotesSettingsIndex {
     BtRemotesSettingsIndexHideItems,
     BtRemotesSettingsIndexRemoteTypeSettings,
     BtRemotesSettingsIndexDelayConnect,
-    BtRemotesSettingsIndexDuckyPerRun,
     BtRemotesSettingsIndexResetMenu,
     BtRemotesSettingsIndexRenameProfile,
     BtRemotesSettingsIndexUnpair,
@@ -21,10 +20,9 @@ enum BtRemotesSettingsIndex {
     BtRemotesSettingsIndexDeleteProfile,
 };
 
-// Dynamic labels for the connection toggles. submenu_add_item stores the pointer
-// (it does not copy), so the buffers must outlive the submenu — keep them file-scope.
+// Dynamic label for the Delay Connect toggle. submenu_add_item stores the pointer
+// (it does not copy), so the buffer must outlive the submenu — keep it file-scope.
 static char bt_remotes_delay_connect_label[40];
-static char bt_remotes_ducky_per_run_label[40];
 
 static void bt_remotes_scene_settings_submenu_cb(void* context, uint32_t index) {
     Hid* app = context;
@@ -71,17 +69,6 @@ static void build_settings_menu(Hid* app) {
             app->submenu,
             bt_remotes_delay_connect_label,
             BtRemotesSettingsIndexDelayConnect,
-            bt_remotes_scene_settings_submenu_cb,
-            app);
-        snprintf(
-            bt_remotes_ducky_per_run_label,
-            sizeof(bt_remotes_ducky_per_run_label),
-            "Ducky Per-Run: %s",
-            app->ducky_connect_per_run ? "On" : "Off");
-        submenu_add_item(
-            app->submenu,
-            bt_remotes_ducky_per_run_label,
-            BtRemotesSettingsIndexDuckyPerRun,
             bt_remotes_scene_settings_submenu_cb,
             app);
         submenu_add_item(
@@ -158,11 +145,6 @@ bool bt_remotes_scene_settings_on_event(void* context, SceneManagerEvent event) 
             bt_remotes_save_profile_menu_cfg(app);
             build_settings_menu(app);
             submenu_set_selected_item(app->submenu, BtRemotesSettingsIndexDelayConnect);
-        } else if(event.event == BtRemotesSettingsIndexDuckyPerRun) {
-            app->ducky_connect_per_run = app->ducky_connect_per_run ? 0 : 1;
-            bt_remotes_save_profile_menu_cfg(app);
-            build_settings_menu(app);
-            submenu_set_selected_item(app->submenu, BtRemotesSettingsIndexDuckyPerRun);
         } else if(event.event == BtRemotesSettingsIndexResetMenu) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneResetMenu);
         } else if(event.event == BtRemotesSettingsIndexRenameProfile) {

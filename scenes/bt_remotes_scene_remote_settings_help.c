@@ -46,6 +46,17 @@ static const char* const remote_settings_help_pages[] = {
     "- Edge Margin: how far off the top/bottom edge it travels before holding the "
     "button.\n"
     "- Swipe Length: drag distance while the button is held.",
+
+    // DuckyScript
+    "DUCKYSCRIPT SETTINGS\n"
+    "Connect Per Run:\n"
+    "- On: stay disconnected while browsing scripts; Bluetooth connects only for "
+    "the duration of each script run, then disconnects.\n"
+    "- Off: scripts run on the existing connection (default).\n\n"
+    "Connect Delay:\n"
+    "How long to wait after the link comes up before sending keystrokes, so the "
+    "host finishes connecting first. If the first keys of a run are dropped, raise "
+    "it; if it feels slow, lower it. Only used when Connect Per Run is On.",
 };
 
 void bt_remotes_scene_remote_settings_help_on_enter(void* context) {

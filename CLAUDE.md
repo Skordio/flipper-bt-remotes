@@ -61,8 +61,11 @@ Momentum firmware tree at `applications_user/bt_remotes/`.
    **Per-profile `ducky_connect_per_run`** (independent of `delay_connect`): Ducky/Collections stay
    disconnected while browsing (`custom_actions`/`collection_view` `on_enter` stop BLE) and the run
    scene (`custom_actions_run`) connects only for a script's execution — `start_ble` → wait on
-   `app->connected` (polled via `connect_wait_timer`) → run → `stop_ble` in `on_exit`. `start_on_enter`
-   restores an immediate-mode link afterward (`else if(!ble_started) start_ble`). Gestures unaffected.
+   `app->connected` (polled via `connect_wait_timer`) → **settle `ducky_connect_settle_ms`** (host
+   needs time to subscribe to HID notifications, else first keys drop) → run → `stop_ble` in
+   `on_exit`. `start_on_enter` restores an immediate-mode link afterward
+   (`else if(!ble_started) start_ble`). Gestures unaffected. Both settings live under Settings →
+   Per-Remote Settings → **DuckyScript** (`scene_ducky_settings.c`).
 
 7. **Two separate script engines:** Ducky Scripts use `helpers/ducky_runner.c`; Custom Gestures
    use `helpers/gesture_runner.c` (its own lowercase-verb language, with `run <name>` inheritance).

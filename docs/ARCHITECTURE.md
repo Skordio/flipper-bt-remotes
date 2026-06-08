@@ -220,6 +220,7 @@ All config files are FlipperFormat text. Constants/file-types live in `bt_remote
   tiktok_gesture_inset / _margin / _swipe: <uint32>   # px tunables
   delay_connect: <uint32>            # 0/1 — defer BLE start until a remote is opened
   ducky_connect_per_run: <uint32>    # 0/1 — Ducky/Collections connect only during a run
+  ducky_connect_settle_ms: <uint32>  # ms to wait after link-up before sending HID (per-run)
   ```
   `bt_remotes_save_profile_menu_cfg` writes the **full** set above. Note `bt_hid_save_cfg` (used
   by rename/reset) writes only `name`+`mac` to the **active** `.bt_hid.cfg` mirror — the full
@@ -358,16 +359,21 @@ of `delay_connect`:
 - **The run scene connects just for the run.** `custom_actions_run` `on_enter`: if not already
   `connected`, `start_ble` and show "Connecting…", then poll `app->connected` via
   `connect_wait_timer` (period `CONNECT_WAIT_POLL_MS`, cap `CONNECT_WAIT_MAX_ATTEMPTS` ≈ 15 s,
-  posting `BT_REMOTES_EVENT_CONNECT_TICK`). On connect → start the runner; on timeout → "Not
-  Connected"; Back cancels. `on_exit` always `stop_ble` in this mode (covers Done/Error/cancel).
+  posting `BT_REMOTES_EVENT_CONNECT_TICK`). On connect, **settle** `ducky_connect_settle_ms`
+  (the BLE link comes up before the host has subscribed to HID report notifications — sending
+  immediately drops the first keystrokes; the settle counts whole `CONNECT_WAIT_POLL_MS` ticks)
+  then start the runner; on timeout → "Not Connected"; Back cancels. `on_exit` always `stop_ble`
+  in this mode (covers Done/Error/cancel).
 - **The menu restores the profile's normal state.** `start_on_enter` does
   `if(delay_connect) stop_ble; else if(!ble_started) start_ble;` — the `else if` reconnects an
   immediate-mode profile after a per-run session dropped the link. A remote opened after a Ducky
   run always passes through Start first, so it finds BLE restored.
 
 `app->connected` (set in the status callback, force-cleared in `stop_ble` since the callback is
-detached before the disconnect fires) is the gate the run scene waits on. Toggle lives in
-Settings → "Ducky Per-Run". Off by default.
+detached before the disconnect fires) is the gate the run scene waits on. The "Connect Per Run"
+toggle and the "Connect Delay" (`ducky_connect_settle_ms`) tunable live together under
+Settings → Per-Remote Settings → **DuckyScript** (`scene_ducky_settings.c`, a `VariableItemList`
+modeled on the TikTok settings scene). Off by default.
 
 ---
 

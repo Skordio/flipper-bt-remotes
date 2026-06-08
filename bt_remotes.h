@@ -164,6 +164,7 @@ typedef enum {
     RemoteSettingsHelpKeynote = 0,
     RemoteSettingsHelpMedia   = 1,
     RemoteSettingsHelpTikTok  = 2,
+    RemoteSettingsHelpDucky   = 3,
 } RemoteSettingsHelpTopic;
 
 // Start-menu item indices — shared by bt_remotes_scene_start.c and bt_remotes_scene_main.c.

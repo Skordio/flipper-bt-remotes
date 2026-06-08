@@ -93,7 +93,12 @@ static const char* const help_pages[] = {
     "moving Up/Down between videos.\n"
     "- In Gesture mode you can tune the swipe for your phone: Inward Margin (how "
     "far in from the side it starts), Edge Margin (how far off the top/bottom "
-    "edge before holding), and Swipe Length (drag distance while held).",
+    "edge before holding), and Swipe Length (drag distance while held).\n\n"
+    "DUCKYSCRIPT\n"
+    "- Connect Per Run: stay disconnected while browsing scripts; connect only for "
+    "each script run, then disconnect.\n"
+    "- Connect Delay: how long to wait after connecting before sending keys (raise "
+    "it if the first keys of a run are dropped).",
 
     // 6: Ducky Scripts & Collections
     "DUCKY SCRIPTS & COLLECTIONS\n"
