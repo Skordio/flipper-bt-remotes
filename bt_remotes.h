@@ -115,6 +115,17 @@ typedef enum {
 // Ducky "connect per run": poll period + cap while the run scene waits for the host.
 #define CONNECT_WAIT_POLL_MS      150
 #define CONNECT_WAIT_MAX_ATTEMPTS 100 // ~15 seconds before giving up
+// After the BLE link comes up, wait this long before sending HID, so the host
+// finishes HID service discovery and subscribes to report notifications first.
+// (Link-up fires well before the host is ready; without this the first keys are
+// lost.) Per-profile, set in DuckyScript per-remote settings (ms). STEP == the poll
+// period so the displayed ms maps exactly to whole poll ticks. Default ~1.05 s.
+#define DUCKY_CONNECT_SETTLE_MIN     0
+#define DUCKY_CONNECT_SETTLE_MAX     3000
+#define DUCKY_CONNECT_SETTLE_STEP    CONNECT_WAIT_POLL_MS
+#define DUCKY_CONNECT_SETTLE_DEFAULT 1050
+#define DUCKY_CONNECT_SETTLE_COUNT \
+    (((DUCKY_CONNECT_SETTLE_MAX) - (DUCKY_CONNECT_SETTLE_MIN)) / (DUCKY_CONNECT_SETTLE_STEP) + 1)
 
 // TikTok / YT Shorts scroll behavior (per-profile)
 typedef enum {
@@ -243,6 +254,7 @@ struct Hid {
     uint16_t tiktok_gesture_swipe;  // px — drag distance while the button is held
     uint8_t  delay_connect; // 0 = connect immediately; 1 = only connect inside a remote
     uint8_t  ducky_connect_per_run; // 1 = Ducky/Collections connect only during a script run
+    uint16_t ducky_connect_settle_ms; // delay after link-up before sending HID (per-run)
     // App-level settings
     // 0=Neither, 1=Disconnect, 2=Connect, 3=Both
     uint8_t vibro_mode;
@@ -264,6 +276,7 @@ struct Hid {
     // Ducky "connect per run": polls app->connected while the run scene waits for the host
     FuriTimer* connect_wait_timer;
     uint8_t    connect_wait_attempts;
+    uint8_t    connect_settle_ticks; // ticks counted since the link came up (HID-ready settle)
 };
 
 // Shared name validator: checks non-empty and no forbidden filesystem chars.

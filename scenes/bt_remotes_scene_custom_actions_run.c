@@ -97,6 +97,7 @@ void bt_remotes_scene_custom_actions_run_on_enter(void* context) {
         // before firing the script. The connect_wait_timer polls app->connected.
         if(!app->ble_started) bt_remotes_start_ble(app);
         app->connect_wait_attempts = 0;
+        app->connect_settle_ticks  = 0;
         show_connecting_popup(app);
         furi_timer_start(app->connect_wait_timer, CONNECT_WAIT_POLL_MS);
     } else {
@@ -123,11 +124,23 @@ bool bt_remotes_scene_custom_actions_run_on_event(void* context, SceneManagerEve
         if(event.event == BT_REMOTES_EVENT_CONNECT_TICK) {
             // Waiting for the host while connect-per-run brings BLE up.
             if(app->connected) {
-                furi_timer_stop(app->connect_wait_timer);
-                start_run(app);
-            } else if(++app->connect_wait_attempts >= CONNECT_WAIT_MAX_ATTEMPTS) {
-                furi_timer_stop(app->connect_wait_timer);
-                show_connect_failed_popup(app);
+                // Link is up — but the host still needs to finish HID discovery and
+                // subscribe to report notifications. Settle for the per-profile
+                // Connect Delay before sending, or the first keystrokes drop.
+                // STEP == poll period, so ms maps exactly to whole ticks.
+                uint8_t settle_ticks =
+                    (uint8_t)(app->ducky_connect_settle_ms / CONNECT_WAIT_POLL_MS);
+                if(++app->connect_settle_ticks >= settle_ticks) {
+                    furi_timer_stop(app->connect_wait_timer);
+                    start_run(app);
+                }
+            } else {
+                // Lost the link before settling — restart the settle on reconnect.
+                app->connect_settle_ticks = 0;
+                if(++app->connect_wait_attempts >= CONNECT_WAIT_MAX_ATTEMPTS) {
+                    furi_timer_stop(app->connect_wait_timer);
+                    show_connect_failed_popup(app);
+                }
             }
 
         } else if(event.event == CustomActionsRunEventDone) {

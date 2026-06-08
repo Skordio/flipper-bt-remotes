@@ -174,6 +174,8 @@ void bt_remotes_save_profile_menu_cfg(Hid* app) {
         flipper_format_write_uint32(fff, "delay_connect", &delay_connect_u32, 1);
         uint32_t ducky_connect_per_run_u32 = app->ducky_connect_per_run;
         flipper_format_write_uint32(fff, "ducky_connect_per_run", &ducky_connect_per_run_u32, 1);
+        uint32_t ducky_connect_settle_ms_u32 = app->ducky_connect_settle_ms;
+        flipper_format_write_uint32(fff, "ducky_connect_settle_ms", &ducky_connect_settle_ms_u32, 1);
         flipper_format_file_close(fff);
     }
     flipper_format_free(fff);
@@ -547,6 +549,20 @@ bool bt_remotes_profile_activate(Hid* app) {
                 app->ducky_connect_per_run = ducky_connect_per_run_u32 ? 1 : 0;
             } else {
                 app->ducky_connect_per_run = DUCKY_CONNECT_PER_RUN_DEFAULT;
+            }
+            flipper_format_rewind(mfff);
+            uint32_t ducky_connect_settle_ms_u32 = DUCKY_CONNECT_SETTLE_DEFAULT;
+            if(flipper_format_read_uint32(
+                   mfff, "ducky_connect_settle_ms", &ducky_connect_settle_ms_u32, 1)) {
+                if(ducky_connect_settle_ms_u32 > DUCKY_CONNECT_SETTLE_MAX)
+                    ducky_connect_settle_ms_u32 = DUCKY_CONNECT_SETTLE_MAX;
+                // Snap to a whole step so the run-scene tick math is exact.
+                ducky_connect_settle_ms_u32 =
+                    (ducky_connect_settle_ms_u32 / DUCKY_CONNECT_SETTLE_STEP) *
+                    DUCKY_CONNECT_SETTLE_STEP;
+                app->ducky_connect_settle_ms = (uint16_t)ducky_connect_settle_ms_u32;
+            } else {
+                app->ducky_connect_settle_ms = DUCKY_CONNECT_SETTLE_DEFAULT;
             }
         } while(0);
         furi_string_free(mtmp);
