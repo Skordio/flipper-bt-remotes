@@ -237,8 +237,6 @@ struct Hid {
     char    gesture_names[BT_REMOTES_GESTURE_MAX][BT_REMOTES_GESTURE_NAME_LEN];
     uint8_t gesture_count;
     char    editing_gesture_name[BT_REMOTES_GESTURE_NAME_LEN];
-    char    editing_gesture_lines[GESTURE_LINE_MAX][GESTURE_LINE_LEN];
-    uint8_t editing_gesture_line_count;
     // Profile management
     char active_profile[BT_REMOTES_PROFILE_NAME_LEN];
     char pending_name[BT_REMOTES_PROFILE_NAME_LEN]; // old name held during profile rename
@@ -330,9 +328,6 @@ void bt_remotes_pinned_save(Hid* app);
 
 // Custom Gesture operations (global library; mirror the collection ops)
 void bt_remotes_gesture_load_list(Hid* app);
-bool bt_remotes_gesture_load(Hid* app, const char* name);
-bool bt_remotes_gesture_save(Hid* app);
-bool bt_remotes_gesture_delete(Hid* app, const char* name);
 // Full path to a gesture file by name (caller supplies buffer).
 void bt_remotes_gesture_path(const char* name, char* out, size_t out_size);
 

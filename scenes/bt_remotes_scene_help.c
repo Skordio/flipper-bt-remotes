@@ -110,14 +110,14 @@ static const char* const help_pages[] = {
 
     // 7: Custom Gestures
     "CUSTOM GESTURES\n"
-    "Build reusable 'quick actions' - a sequence of mouse moves, taps, drags, "
-    "scrolls, waits and keystrokes that navigate a device (e.g. deep into iOS "
-    "Settings) with one press.\n\n"
-    "Open Custom Gestures from the main menu, Create one, then Add lines. Each "
-    "line is one command; the editor's Help lists them all.\n\n"
-    "Commands: anchor, move, tap, click, drag, scroll, wait, key, type. Start "
-    "with 'anchor' so moves are repeatable.\n\n"
-    "Run a gesture from its menu, or Pin it to the main menu for one-tap access.",
+    "Reusable 'quick actions' - a sequence of mouse moves, taps, drags, "
+    "scrolls, waits and keystrokes that navigate a device with one press.\n\n"
+    "Gestures are plain .gesture text files edited on your PC and copied to "
+    "/ext/apps_data/bt_remotes/gestures/ on the SD card.\n\n"
+    "Commands: anchor, move, tap, click, drag, scroll, wait, key, type, run. "
+    "See WRITING_GESTURES.md in the app docs for the full reference.\n\n"
+    "Open Custom Gestures to run a gesture or Pin it to the main menu for "
+    "one-tap access.",
 
     // 8: Settings Reference
     "SETTINGS REFERENCE\n"

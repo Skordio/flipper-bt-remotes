@@ -337,20 +337,6 @@ static void gesture_parse(const char* raw, GestureParsed* out) {
     }
 }
 
-bool gesture_line_validate(const char* line, char* err, size_t err_size) {
-    GestureParsed parsed;
-    gesture_parse(line, &parsed);
-    if(parsed.cmd == GCmdInvalid) {
-        if(err) strlcpy(err, "Bad command or args", err_size);
-        return false;
-    }
-    if(parsed.cmd == GCmdKey && gesture_parse_combo(parsed.text) == 0) {
-        if(err) strlcpy(err, "Unknown key", err_size);
-        return false;
-    }
-    return true;
-}
-
 // Execute one parsed command. Returns false if execution should stop.
 // Note: GCmdRun is NOT handled here — it needs file access and is dispatched in
 // gesture_run_file so it can recurse.

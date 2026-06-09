@@ -30,7 +30,6 @@
 // GESTURE_FILE_TYPE/_VERSION below name the legacy header (no longer written).
 #define GESTURE_FILE_TYPE    "Flipper BT Custom Gesture"
 #define GESTURE_FILE_VERSION (1)
-#define GESTURE_LINE_MAX     64 // max gesture lines per file
 #define GESTURE_LINE_LEN     64 // max chars per command line (incl. NUL)
 
 typedef enum {
@@ -66,7 +65,3 @@ const char* gesture_runner_get_error(const GestureRunner* runner);
 
 void gesture_runner_set_callback(GestureRunner* runner, GestureRunnerCallback cb, void* context);
 
-// Validate a single gesture command line (used by the on-device line editor).
-// Returns true if the line parses; on failure writes a short reason into
-// |err| (size |err_size|). Blank lines and comments are considered valid.
-bool gesture_line_validate(const char* line, char* err, size_t err_size);
