@@ -128,11 +128,16 @@ bool bt_remotes_scene_custom_actions_run_on_event(void* context, SceneManagerEve
                 // subscribe to report notifications. Settle for the per-profile
                 // Connect Delay before sending, or the first keystrokes drop.
                 // STEP == poll period, so ms maps exactly to whole ticks.
+                // Check BEFORE incrementing: the connection callback posts one
+                // immediate CONNECT_TICK on link-up, so settle_ticks=0 fires on
+                // that first event without waiting a full poll period (~150 ms).
                 uint8_t settle_ticks =
                     (uint8_t)(app->ducky_connect_settle_ms / CONNECT_WAIT_POLL_MS);
-                if(++app->connect_settle_ticks >= settle_ticks) {
+                if(app->connect_settle_ticks >= settle_ticks) {
                     furi_timer_stop(app->connect_wait_timer);
                     start_run(app);
+                } else {
+                    app->connect_settle_ticks++;
                 }
             } else {
                 // Lost the link before settling — restart the settle on reconnect.

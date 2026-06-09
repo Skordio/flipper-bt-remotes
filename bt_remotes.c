@@ -924,8 +924,9 @@ bool bt_remotes_gesture_load(Hid* app, const char* name) {
                 if(len < sizeof(buf) - 1) buf[len++] = c;
             }
             buf[len] = '\0';
-            // Skip the header lines and blanks; everything else is a command.
+            // Skip blanks, comments, and header lines; everything else is a command.
             if(buf[0] == '\0') continue;
+            if(buf[0] == '#') continue;
             if(strncmp(buf, "Filetype:", 9) == 0) continue;
             if(strncmp(buf, "Version:", 8) == 0) continue;
             strlcpy(
@@ -1128,6 +1129,13 @@ static void bt_remotes_connection_status_changed_callback(BtStatus status, void*
             furi_timer_stop(hid->pair_save_timer);
         }
     }
+    // Let the connect-per-run run scene check its settle condition immediately on
+    // link-up. Without this, the 0 ms settle setting still incurs one full poll
+    // period (~150 ms) before start_run fires. The event is a no-op in all other scenes.
+    if(connected) {
+        view_dispatcher_send_custom_event(hid->view_dispatcher, BT_REMOTES_EVENT_CONNECT_TICK);
+    }
+
     hid_keynote_set_connected_status(hid->hid_keynote, connected);
     hid_keyboard_set_connected_status(hid->hid_keyboard, connected);
     hid_numpad_set_connected_status(hid->hid_numpad, connected);
