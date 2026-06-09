@@ -67,7 +67,7 @@
 #define BT_REMOTES_COLLECTION_EXT        ".collection"
 #define BT_REMOTES_COLLECTION_NAME_LEN   32
 #define BT_REMOTES_COLLECTION_MAX        16
-#define BT_REMOTES_COLLECTION_SCRIPT_MAX 32
+#define BT_REMOTES_COLLECTION_SCRIPT_MAX 16
 
 // Custom Gestures (global library; GESTURE_LINE_MAX/_LEN live in gesture_runner.h)
 #define BT_REMOTES_GESTURE_DIR      APP_DATA_PATH("gestures")

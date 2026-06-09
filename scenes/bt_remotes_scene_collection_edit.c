@@ -21,6 +21,11 @@ static void collection_edit_browser_cb(void* context) {
     view_dispatcher_send_custom_event(app->view_dispatcher, 0xFF);
 }
 
+static void collection_edit_full_popup_cb(void* context) {
+    Hid* app = context;
+    view_dispatcher_send_custom_event(app->view_dispatcher, 0xFD);
+}
+
 static void collection_edit_dialog_cb(DialogExResult result, void* context) {
     Hid* app = context;
     // 1 = confirmed remove, 0 = cancel
@@ -60,6 +65,7 @@ bool bt_remotes_scene_collection_edit_on_event(void* context, SceneManagerEvent 
     if(state == CE_STATE_BROWSER) {
         if(event.type == SceneManagerEventTypeCustom && event.event == 0xFF) {
             const char* path = furi_string_get_cstr(app->file_browser_result);
+            file_browser_stop(app->file_browser);
             if(path[0] != '\0' &&
                app->editing_collection_script_count < BT_REMOTES_COLLECTION_SCRIPT_MAX) {
                 strlcpy(
@@ -68,8 +74,34 @@ bool bt_remotes_scene_collection_edit_on_event(void* context, SceneManagerEvent 
                     256);
                 app->editing_collection_script_count++;
                 bt_remotes_collection_save(app);
+                scene_manager_set_scene_state(
+                    app->scene_manager, BtRemotesSceneCollectionEdit, CE_STATE_SUBMENU);
+                build_edit_submenu(app);
+                view_dispatcher_switch_to_view(app->view_dispatcher, HidViewSubmenu);
+            } else if(path[0] != '\0') {
+                // Collection is full — show a brief popup instead of silently dropping.
+                popup_reset(app->popup);
+                popup_set_header(app->popup, "Collection full", 64, 10, AlignCenter, AlignTop);
+                popup_set_text(
+                    app->popup,
+                    "Max 16 scripts\nper collection.",
+                    64, 28, AlignCenter, AlignTop);
+                popup_set_timeout(app->popup, 1500);
+                popup_set_context(app->popup, app);
+                popup_set_callback(app->popup, collection_edit_full_popup_cb);
+                popup_enable_timeout(app->popup);
+                view_dispatcher_switch_to_view(app->view_dispatcher, HidViewPopup);
+            } else {
+                scene_manager_set_scene_state(
+                    app->scene_manager, BtRemotesSceneCollectionEdit, CE_STATE_SUBMENU);
+                build_edit_submenu(app);
+                view_dispatcher_switch_to_view(app->view_dispatcher, HidViewSubmenu);
             }
-            file_browser_stop(app->file_browser);
+            return true;
+        }
+        // "Collection full" popup timed out — return to edit submenu.
+        if(event.type == SceneManagerEventTypeCustom && event.event == 0xFD) {
+            popup_reset(app->popup);
             scene_manager_set_scene_state(
                 app->scene_manager, BtRemotesSceneCollectionEdit, CE_STATE_SUBMENU);
             build_edit_submenu(app);
