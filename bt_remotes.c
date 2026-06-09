@@ -613,14 +613,35 @@ bool bt_remotes_profile_rename(Hid* app) {
         storage_common_remove(app->storage, furi_string_get_cstr(old_cfg));
 
         if(storage_file_exists(app->storage, furi_string_get_cstr(old_keys))) {
-            storage_common_copy(
+            err = storage_common_copy(
                 app->storage,
                 furi_string_get_cstr(old_keys),
                 furi_string_get_cstr(new_keys));
-            storage_common_remove(app->storage, furi_string_get_cstr(old_keys));
+            if(err == FSE_OK) {
+                storage_common_remove(app->storage, furi_string_get_cstr(old_keys));
+            } else {
+                // Keys copy failed — treat rename as failed so the scene doesn't
+                // report success with pairing data silently lost.
+                FURI_LOG_E(TAG, "Profile rename: keys copy failed (%d)", err);
+                ok = false;
+            }
         }
 
-        FURI_LOG_I(TAG, "Profile renamed: %s → %s", app->pending_name, app->active_profile);
+        if(ok) {
+            // Update the in-memory profile order string so apply_profile_order
+            // finds the new name on the next launch instead of appending it at
+            // the end (losing the saved position in the list).
+            char* found = strstr(app->profile_order_str, app->pending_name);
+            if(found) {
+                size_t old_len = strlen(app->pending_name);
+                size_t new_len = strlen(app->active_profile);
+                size_t rest    = strlen(found + old_len);
+                memmove(found + new_len, found + old_len, rest + 1);
+                memcpy(found, app->active_profile, new_len);
+            }
+            bt_remotes_save_app_cfg(app);
+            FURI_LOG_I(TAG, "Profile renamed: %s → %s", app->pending_name, app->active_profile);
+        }
     } else {
         FURI_LOG_E(TAG, "Profile rename failed: %d", err);
     }
