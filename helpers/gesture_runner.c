@@ -542,6 +542,11 @@ static int32_t gesture_worker(void* context) {
     } else if(runner->state == GestureRunnerStateRunning && !runner->user_stopped) {
         runner->state = GestureRunnerStateDone;
         if(runner->callback) runner->callback(runner->callback_context);
+    } else {
+        // user_stopped: reset so gesture_runner_start can be called again.
+        // Without this, state stays Running and the start guard permanently
+        // refuses subsequent runs for the lifetime of the process.
+        runner->state = GestureRunnerStateIdle;
     }
 
     return 0;
