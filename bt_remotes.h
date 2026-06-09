@@ -283,11 +283,17 @@ struct Hid {
 // Shared name validator: checks non-empty and no forbidden filesystem chars.
 // Returns false and sets error on failure.  Collision check is caller's responsibility.
 bool bt_remotes_validate_name(const char* text, FuriString* error);
+// Shared popup helpers used by both run scenes (ducky + gesture).
+const char* bt_remotes_path_basename(const char* path);
+void        bt_remotes_show_running_popup(Hid* app);
 
 // BLE lifecycle
 void bt_remotes_start_ble(Hid* app);
 void bt_remotes_start_ble_if_immediate(Hid* app); // start_ble unless delay_connect is set
 void bt_remotes_stop_ble(Hid* app);
+// Call from any Ducky/Collections browsing scene on_enter to enforce the
+// connect-per-run "stay disconnected while browsing" policy in one place.
+void bt_remotes_ducky_browse_enter(Hid* app);
 
 // Config / pairing
 void bt_hid_remove_pairing(Hid* app);

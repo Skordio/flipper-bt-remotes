@@ -4,14 +4,13 @@
 //   Connect Per Run - stay disconnected while browsing; connect only for a run
 //   Connect Delay   - ms to wait after the link is up before sending HID, so the
 //                     host finishes HID discovery first (only used in Per-Run mode)
-// Every change is persisted immediately via bt_remotes_save_profile_menu_cfg.
+// Changes are applied immediately to in-memory state; persisted on scene exit.
 
 static void ducky_per_run_changed(VariableItem* item) {
     Hid* app = variable_item_get_context(item);
     uint8_t idx = variable_item_get_current_value_index(item);
     app->ducky_connect_per_run = idx;
     variable_item_set_current_value_text(item, idx ? "On" : "Off");
-    bt_remotes_save_profile_menu_cfg(app);
 }
 
 static void ducky_settle_changed(VariableItem* item) {
@@ -22,7 +21,6 @@ static void ducky_settle_changed(VariableItem* item) {
     char buf[12];
     snprintf(buf, sizeof(buf), "%u ms", (unsigned)val);
     variable_item_set_current_value_text(item, buf);
-    bt_remotes_save_profile_menu_cfg(app);
 }
 
 // The "Help" row sits after the adjustable rows; OK on it opens the shared
@@ -77,5 +75,6 @@ bool bt_remotes_scene_ducky_settings_on_event(void* context, SceneManagerEvent e
 
 void bt_remotes_scene_ducky_settings_on_exit(void* context) {
     Hid* app = context;
+    bt_remotes_save_profile_menu_cfg(app);
     variable_item_list_reset(app->var_item_list);
 }

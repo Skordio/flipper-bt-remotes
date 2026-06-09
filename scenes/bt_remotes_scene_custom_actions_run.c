@@ -28,36 +28,13 @@ static void custom_actions_run_popup_cb(void* context) {
 }
 
 // ---------------------------------------------------------------------------
-// Extract the filename stem from a full path for display
-// e.g. "/ext/badusb/my_script.txt"  →  "my_script.txt"
-// ---------------------------------------------------------------------------
-
-static const char* path_basename(const char* path) {
-    const char* last_slash = strrchr(path, '/');
-    return last_slash ? last_slash + 1 : path;
-}
-
-// ---------------------------------------------------------------------------
 // Popups
 // ---------------------------------------------------------------------------
-
-// "Running" popup (no timeout, Back = stop)
-static void show_running_popup(Hid* app) {
-    popup_reset(app->popup);
-    popup_set_header(app->popup, path_basename(app->pending_script_path),
-                     64, 3, AlignCenter, AlignTop);
-    popup_set_text(app->popup, "Running...\nPress Back to stop.", 64, 28,
-                   AlignCenter, AlignTop);
-    // No timeout — stays up until runner finishes or user presses Back
-    popup_set_context(app->popup, app);
-    popup_set_callback(app->popup, NULL);
-    view_dispatcher_switch_to_view(app->view_dispatcher, HidViewPopup);
-}
 
 // "Connecting" popup shown while we wait for the host (connect-per-run mode)
 static void show_connecting_popup(Hid* app) {
     popup_reset(app->popup);
-    popup_set_header(app->popup, path_basename(app->pending_script_path),
+    popup_set_header(app->popup, bt_remotes_path_basename(app->pending_script_path),
                      64, 3, AlignCenter, AlignTop);
     popup_set_text(app->popup, "Connecting...\nPress Back to cancel.", 64, 28,
                    AlignCenter, AlignTop);
@@ -80,7 +57,7 @@ static void show_connect_failed_popup(Hid* app) {
 // Start the script runner and show the running popup.
 static void start_run(Hid* app) {
     ducky_runner_start(app->ducky_runner, app->ble_hid_profile, app->pending_script_path);
-    show_running_popup(app);
+    bt_remotes_show_running_popup(app);
 }
 
 // ---------------------------------------------------------------------------

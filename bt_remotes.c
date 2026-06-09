@@ -535,6 +535,8 @@ bool bt_remotes_profile_activate(Hid* app) {
             } else {
                 app->tiktok_gesture_swipe = TIKTOK_GESTURE_SWIPE_DEFAULT;
             }
+            // The three fields below appear consecutively at the end of the save
+            // order, so we need only one rewind to reset past the tiktok reads.
             flipper_format_rewind(mfff);
             uint32_t delay_connect_u32 = DELAY_CONNECT_DEFAULT;
             if(flipper_format_read_uint32(mfff, "delay_connect", &delay_connect_u32, 1)) {
@@ -542,7 +544,6 @@ bool bt_remotes_profile_activate(Hid* app) {
             } else {
                 app->delay_connect = DELAY_CONNECT_DEFAULT;
             }
-            flipper_format_rewind(mfff);
             uint32_t ducky_connect_per_run_u32 = DUCKY_CONNECT_PER_RUN_DEFAULT;
             if(flipper_format_read_uint32(
                    mfff, "ducky_connect_per_run", &ducky_connect_per_run_u32, 1)) {
@@ -550,7 +551,6 @@ bool bt_remotes_profile_activate(Hid* app) {
             } else {
                 app->ducky_connect_per_run = DUCKY_CONNECT_PER_RUN_DEFAULT;
             }
-            flipper_format_rewind(mfff);
             uint32_t ducky_connect_settle_ms_u32 = DUCKY_CONNECT_SETTLE_DEFAULT;
             if(flipper_format_read_uint32(
                    mfff, "ducky_connect_settle_ms", &ducky_connect_settle_ms_u32, 1)) {
@@ -997,6 +997,22 @@ bool bt_remotes_gesture_delete(Hid* app, const char* name) {
 // Shared utilities
 // ---------------------------------------------------------------------------
 
+const char* bt_remotes_path_basename(const char* path) {
+    const char* last_slash = strrchr(path, '/');
+    return last_slash ? last_slash + 1 : path;
+}
+
+void bt_remotes_show_running_popup(Hid* app) {
+    popup_reset(app->popup);
+    popup_set_header(
+        app->popup, bt_remotes_path_basename(app->pending_script_path),
+        64, 3, AlignCenter, AlignTop);
+    popup_set_text(app->popup, "Running...\nPress Back to stop.", 64, 28, AlignCenter, AlignTop);
+    popup_set_context(app->popup, app);
+    popup_set_callback(app->popup, NULL);
+    view_dispatcher_switch_to_view(app->view_dispatcher, HidViewPopup);
+}
+
 bool bt_remotes_validate_name(const char* text, FuriString* error) {
     if(text[0] == '\0') {
         furi_string_set(error, "Name cannot\nbe empty");
@@ -1067,6 +1083,13 @@ void bt_remotes_start_ble_if_immediate(Hid* app) {
     // Immediate-connect profiles bring BLE up now; delay-connect profiles defer it
     // to the Start scene (start on remote entry, stop on return to the menu).
     if(!app->delay_connect) bt_remotes_start_ble(app);
+}
+
+void bt_remotes_ducky_browse_enter(Hid* app) {
+    // Stay disconnected while browsing Ducky scripts/collections in per-run mode.
+    // Call from every Ducky/Collections browsing scene on_enter so new scenes
+    // enforce the policy without knowing its implementation.
+    if(app->ducky_connect_per_run) bt_remotes_stop_ble(app);
 }
 
 void bt_remotes_stop_ble(Hid* app) {

@@ -26,27 +26,11 @@ static void gesture_run_popup_cb(void* context) {
     view_dispatcher_send_custom_event(app->view_dispatcher, GestureRunEventPopupTimeout);
 }
 
-static const char* path_basename(const char* path) {
-    const char* last_slash = strrchr(path, '/');
-    return last_slash ? last_slash + 1 : path;
-}
-
-static void show_running_popup(Hid* app) {
-    popup_reset(app->popup);
-    popup_set_header(
-        app->popup, path_basename(app->pending_script_path), 64, 3, AlignCenter, AlignTop);
-    popup_set_text(
-        app->popup, "Running...\nPress Back to stop.", 64, 28, AlignCenter, AlignTop);
-    popup_set_context(app->popup, app);
-    popup_set_callback(app->popup, NULL);
-    view_dispatcher_switch_to_view(app->view_dispatcher, HidViewPopup);
-}
-
 void bt_remotes_scene_gesture_run_on_enter(void* context) {
     Hid* app = context;
     gesture_runner_set_callback(app->gesture_runner, gesture_run_cb, app);
     gesture_runner_start(app->gesture_runner, app->ble_hid_profile, app->pending_script_path);
-    show_running_popup(app);
+    bt_remotes_show_running_popup(app);
 }
 
 bool bt_remotes_scene_gesture_run_on_event(void* context, SceneManagerEvent event) {

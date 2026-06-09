@@ -43,7 +43,7 @@ void bt_remotes_scene_custom_actions_on_enter(void* context) {
     // "Connect per run": stay disconnected while browsing scripts; the run scene
     // brings BLE up only for a script's execution. Idempotent; also re-runs when
     // returning here from the file browser / a finished run.
-    if(app->ducky_connect_per_run) bt_remotes_stop_ble(app);
+    bt_remotes_ducky_browse_enter(app);
 
     scene_manager_set_scene_state(
         app->scene_manager, BtRemotesSceneCustomActions, CA_STATE_SUBMENU);

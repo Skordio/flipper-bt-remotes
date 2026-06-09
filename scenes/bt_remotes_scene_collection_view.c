@@ -13,7 +13,7 @@ void bt_remotes_scene_collection_view_on_enter(void* context) {
 
     // "Connect per run": browsing a collection (incl. a pinned one entered directly)
     // stays disconnected; the run scene connects only for a script's execution.
-    if(app->ducky_connect_per_run) bt_remotes_stop_ble(app);
+    bt_remotes_ducky_browse_enter(app);
 
     submenu_reset(app->submenu);
     submenu_set_header(app->submenu, app->editing_collection_name);
