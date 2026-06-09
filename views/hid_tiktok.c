@@ -239,6 +239,12 @@ static bool hid_tiktok_input_callback(InputEvent* event, void* context) {
     HidTikTok* hid_tiktok = context;
     bool consumed = false;
 
+    // Flags for operations that need hundreds of ms of furi_delay_ms — these
+    // must run OUTSIDE the with_view_model lock so the draw callback isn't
+    // starved for the entire duration.
+    bool do_cursor_reset = false;
+    int  do_swipe        = 0; // -1 = up (next), +1 = down (prev), 0 = none
+
     with_view_model(
         hid_tiktok->view,
         HidTikTokModel * model,
@@ -246,8 +252,8 @@ static bool hid_tiktok_input_callback(InputEvent* event, void* context) {
             if(event->type == InputTypePress) {
                 hid_tiktok_process_press(hid_tiktok, model, event);
                 if(model->connected && !model->is_cursor_set) {
-                    hid_tiktok_reset_cursor(hid_tiktok);
                     model->is_cursor_set = true;
+                    do_cursor_reset = true; // execute after lock is released
                 }
                 consumed = true;
             } else if(event->type == InputTypeRelease) {
@@ -266,8 +272,7 @@ static bool hid_tiktok_input_callback(InputEvent* event, void* context) {
                     consumed = true;
                 } else if(event->key == InputKeyUp) {
                     if(hid_tiktok->hid->tiktok_scroll_mode == TikTokScrollGesture) {
-                        // Up button -> previous video (drag the feed down)
-                        hid_tiktok_gesture_swipe(hid_tiktok, 1);
+                        do_swipe = 1; // execute after lock is released
                     } else {
                         // Emulate up swipe with the scroll wheel
                         hid_hal_mouse_scroll(hid_tiktok->hid, -12);
@@ -279,8 +284,7 @@ static bool hid_tiktok_input_callback(InputEvent* event, void* context) {
                     consumed = true;
                 } else if(event->key == InputKeyDown) {
                     if(hid_tiktok->hid->tiktok_scroll_mode == TikTokScrollGesture) {
-                        // Down button -> next video (drag the feed up)
-                        hid_tiktok_gesture_swipe(hid_tiktok, -1);
+                        do_swipe = -1; // execute after lock is released
                     } else {
                         // Emulate down swipe with the scroll wheel
                         hid_hal_mouse_scroll(hid_tiktok->hid, 12);
@@ -306,6 +310,11 @@ static bool hid_tiktok_input_callback(InputEvent* event, void* context) {
             }
         },
         true);
+
+    // Run delay-heavy BLE operations after releasing the model lock so the
+    // draw callback isn't blocked for hundreds of milliseconds.
+    if(do_cursor_reset) hid_tiktok_reset_cursor(hid_tiktok);
+    if(do_swipe != 0)   hid_tiktok_gesture_swipe(hid_tiktok, do_swipe);
 
     return consumed;
 }
