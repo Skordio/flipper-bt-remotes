@@ -1123,7 +1123,9 @@ void bt_remotes_stop_ble(Hid* app) {
     furi_delay_ms(200);
     bt_keys_storage_set_default_path(app->bt);
     furi_check(bt_profile_restore_default(app->bt));
-    app->ble_started = false;
+    app->ble_started     = false;
+    app->ble_hid_profile = NULL; // profile freed by restore_default; NULL so HAL
+                                 // wrappers silently no-op any stale input events
     // Callback was detached above, so the disconnect won't report back — clear the
     // link flag here so a later connect-wait doesn't see a stale "connected".
     app->connected = false;
