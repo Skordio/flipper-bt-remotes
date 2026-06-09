@@ -554,6 +554,12 @@ static int32_t ducky_worker(void* context) {
                     }
                 }
             }
+            // Apply default_delay after the final iteration.  The outer loop's
+            // post-line delay block is skipped by 'continue' below, so we do it
+            // here explicitly — matching the behaviour of every other command.
+            if(keep_going && runner->default_delay > 0) {
+                if(!ducky_delay(runner->default_delay)) keep_going = false;
+            }
             // REPEAT itself does not update prev_line
             continue;
         }
