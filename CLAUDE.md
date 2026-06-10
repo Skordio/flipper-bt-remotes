@@ -28,16 +28,16 @@ Momentum firmware tree at `applications_user/bt_remotes/`.
    repo. **Commit/push only when the user explicitly asks.** No force-push without explicit
    authorization.
 
-3. **Build/deploy (Windows, PowerShell):**
+3. **Build/deploy (Linux, current dev env):**
    ```
-   .\fbt.cmd build  APPSRC=applications_user/bt_remotes
-   .\fbt.cmd launch APPSRC=applications_user/bt_remotes      # build + deploy + run
+   ./fbt build  APPSRC=applications_user/bt_remotes
+   ./fbt launch APPSRC=applications_user/bt_remotes      # build + deploy + run
    ```
-   Redirect noisy output (`*> "$env:TEMP\log"`) and check `$LASTEXITCODE`. The Flipper's COM port
-   is flaky: it can re-enumerate (COM5→COM3) and briefly report busy/access-denied — poll until
-   openable and retry. For pushing files with `scripts/storage.py`, pass `-p COMx` explicitly and
-   run it from **PowerShell** (git-bash/MSYS mangles `/ext/...` paths into Windows paths). Toolchain
-   python: `toolchain/current/python/python.exe`.
+   The Flipper appears as `/dev/ttyACM0`. **Always ask the user whether the Flipper is plugged
+   in and connected before running `./fbt launch`** — unless the user explicitly granted
+   deploy permission in their immediately preceding message ("go ahead and deploy", "deploy it",
+   etc.). Permission is per-message, not per-session; ask again on the next deploy. `./fbt build`
+   alone is fine without asking (no hardware involved).
 
 4. **Settings must stay the last fixed Start-menu item** (`BtRemotesStartIndexSettings`, highest
    index). `hide_items` and a load-time guard depend on it. To add a fixed menu item, insert it
