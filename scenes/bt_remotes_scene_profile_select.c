@@ -173,7 +173,7 @@ bool bt_remotes_scene_profile_select_on_event(void* context, SceneManagerEvent e
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneProfileNew);
 
         } else if(event.event == BtRemotesProfileSelectEventSettings) {
-            scene_manager_next_scene(app->scene_manager, BtRemotesSceneSettings);
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneGlobalSettings);
 
         } else if(event.event == BtRemotesProfileSelectEventHelp) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneHelp);

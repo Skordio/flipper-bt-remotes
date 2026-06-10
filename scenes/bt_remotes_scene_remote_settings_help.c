@@ -57,6 +57,33 @@ static const char* const remote_settings_help_pages[] = {
     "How long to wait after the link comes up before sending keystrokes, so the "
     "host finishes connecting first. If the first keys of a run are dropped, raise "
     "it; if it feels slow, lower it. Only used when Connect Per Run is On.",
+
+    // Global Settings
+    "GLOBAL SETTINGS\n"
+    "Settings that apply to the app as a whole - not to any one profile.\n\n"
+    "Default Bluetooth Name:\n"
+    "The Bluetooth name applied to newly-created profiles. Existing profiles keep "
+    "their own name (change that under Profile Settings > Connection).\n\n"
+    "Vibration:\n"
+    "- Neither: no buzz.\n"
+    "- Connect: buzz when a device connects.\n"
+    "- Disconnect: buzz when a device disconnects.\n"
+    "- Both: buzz on connect AND disconnect.",
+
+    // Profile Settings
+    "PROFILE SETTINGS\n"
+    "Settings for the active profile, grouped into sections.\n\n"
+    "Connection:\n"
+    "Bluetooth name shown to the host, Delay Connect (only run Bluetooth while "
+    "inside a remote), Save BT Keys (snapshot the current pairing - use if a host "
+    "won't reconnect across reboots), and Bluetooth Unpairing (forget all pairings "
+    "and start with a fresh identity).\n\n"
+    "Start Menu Layout:\n"
+    "Hide remote types from the menu and reset menu order to defaults.\n\n"
+    "Per-Remote Settings:\n"
+    "Tweaks for individual remote types (Keynote, Media, TikTok, DuckyScript).\n\n"
+    "Profile Management:\n"
+    "Rename or delete the profile.",
 };
 
 void bt_remotes_scene_remote_settings_help_on_enter(void* context) {

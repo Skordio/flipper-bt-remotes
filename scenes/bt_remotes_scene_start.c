@@ -189,7 +189,7 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
         if(event.event == BtRemotesStartIndexSettings) {
             scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, event.event);
             bt_remotes_stop_ble(app);
-            scene_manager_next_scene(app->scene_manager, BtRemotesSceneSettings);
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneProfileSettings);
             consumed = true;
         } else if(event.event == BtRemotesStartIndexCustomActions) {
             scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, event.event);
