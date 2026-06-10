@@ -47,6 +47,9 @@ void bt_remotes_scene_remote_type_settings_on_enter(void* context) {
         BtRemotesRemoteTypeIndexHelp,
         bt_remotes_scene_remote_type_settings_cb,
         app);
+    submenu_set_selected_item(
+        app->submenu,
+        scene_manager_get_scene_state(app->scene_manager, BtRemotesSceneRemoteTypeSettings));
     view_dispatcher_switch_to_view(app->view_dispatcher, HidViewSubmenu);
 }
 
@@ -80,5 +83,9 @@ bool bt_remotes_scene_remote_type_settings_on_event(void* context, SceneManagerE
 
 void bt_remotes_scene_remote_type_settings_on_exit(void* context) {
     Hid* app = context;
+    scene_manager_set_scene_state(
+        app->scene_manager,
+        BtRemotesSceneRemoteTypeSettings,
+        submenu_get_selected_item(app->submenu));
     submenu_reset(app->submenu);
 }

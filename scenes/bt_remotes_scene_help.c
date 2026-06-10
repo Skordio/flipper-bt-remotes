@@ -86,6 +86,12 @@ static const char* const help_pages[] = {
 
 #define BT_REMOTES_HELP_TOPIC_COUNT (sizeof(help_topics) / sizeof(help_topics[0]))
 
+// Remembers the topic the user last had under the cursor in the list view so
+// re-entering Help from Profile Select lands on that topic again.
+// (scene_state for Help is already used for the page-view state machine —
+//   0 == showing list, N >= 1 == viewing page N-1 — so we cannot reuse it.)
+static uint32_t bt_remotes_help_last_cursor = 0;
+
 static void bt_remotes_scene_help_submenu_cb(void* context, uint32_t index) {
     Hid* app = context;
     view_dispatcher_send_custom_event(app->view_dispatcher, index);
@@ -110,6 +116,7 @@ void bt_remotes_scene_help_on_enter(void* context) {
     Hid* app = context;
     scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneHelp, 0);
     bt_remotes_scene_help_build_menu(app);
+    submenu_set_selected_item(app->submenu, bt_remotes_help_last_cursor);
     view_dispatcher_switch_to_view(app->view_dispatcher, HidViewSubmenu);
 }
 
@@ -145,6 +152,8 @@ bool bt_remotes_scene_help_on_event(void* context, SceneManagerEvent event) {
 
 void bt_remotes_scene_help_on_exit(void* context) {
     Hid* app = context;
+    // Save cursor before reset so re-entering Help lands on the same topic.
+    bt_remotes_help_last_cursor = submenu_get_selected_item(app->submenu);
     submenu_reset(app->submenu);
     widget_reset(app->help_widget);
 }

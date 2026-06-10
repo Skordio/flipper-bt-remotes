@@ -138,7 +138,9 @@ static void build_tiktok_list(Hid* app) {
 void bt_remotes_scene_tiktok_settings_on_enter(void* context) {
     Hid* app = context;
     build_tiktok_list(app);
-    variable_item_list_set_selected_item(app->var_item_list, 0);
+    variable_item_list_set_selected_item(
+        app->var_item_list,
+        scene_manager_get_scene_state(app->scene_manager, BtRemotesSceneTikTokSettings));
     view_dispatcher_switch_to_view(app->view_dispatcher, HidViewVariableItemList);
 }
 
@@ -156,5 +158,9 @@ bool bt_remotes_scene_tiktok_settings_on_event(void* context, SceneManagerEvent 
 
 void bt_remotes_scene_tiktok_settings_on_exit(void* context) {
     Hid* app = context;
+    scene_manager_set_scene_state(
+        app->scene_manager,
+        BtRemotesSceneTikTokSettings,
+        variable_item_list_get_selected_item_index(app->var_item_list));
     variable_item_list_reset(app->var_item_list);
 }

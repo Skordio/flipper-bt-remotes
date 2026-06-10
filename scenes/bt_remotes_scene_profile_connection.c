@@ -68,6 +68,9 @@ static void build_connection_menu(Hid* app) {
 void bt_remotes_scene_profile_connection_on_enter(void* context) {
     Hid* app = context;
     build_connection_menu(app);
+    submenu_set_selected_item(
+        app->submenu,
+        scene_manager_get_scene_state(app->scene_manager, BtRemotesSceneProfileConnection));
     view_dispatcher_switch_to_view(app->view_dispatcher, HidViewSubmenu);
 }
 
@@ -96,5 +99,9 @@ bool bt_remotes_scene_profile_connection_on_event(void* context, SceneManagerEve
 
 void bt_remotes_scene_profile_connection_on_exit(void* context) {
     Hid* app = context;
+    scene_manager_set_scene_state(
+        app->scene_manager,
+        BtRemotesSceneProfileConnection,
+        submenu_get_selected_item(app->submenu));
     submenu_reset(app->submenu);
 }

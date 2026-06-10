@@ -40,6 +40,11 @@ void hid_remote_menu_set_items(
 // If not found, cursor stays at 0.
 void hid_remote_menu_set_selected_index(HidRemoteMenu* menu, uint8_t index_value);
 
+// Returns the index_value of the item currently under the cursor (the user-
+// provided BtRemotesStartIndex / profile-list-index, NOT the visual position).
+// Returns 0xFF if the menu is empty.
+uint8_t hid_remote_menu_get_selected_index(const HidRemoteMenu* menu);
+
 void hid_remote_menu_set_select_callback(
     HidRemoteMenu*            menu,
     HidRemoteMenuSelectCallback cb,

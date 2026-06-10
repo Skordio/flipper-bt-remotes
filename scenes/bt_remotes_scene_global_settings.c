@@ -51,6 +51,10 @@ static void build_global_settings_menu(Hid* app) {
 void bt_remotes_scene_global_settings_on_enter(void* context) {
     Hid* app = context;
     build_global_settings_menu(app);
+    // Restore cursor to wherever the user left it (e.g. after coming back from Help).
+    uint32_t cursor = scene_manager_get_scene_state(
+        app->scene_manager, BtRemotesSceneGlobalSettings);
+    submenu_set_selected_item(app->submenu, cursor);
     view_dispatcher_switch_to_view(app->view_dispatcher, HidViewSubmenu);
 }
 
@@ -75,5 +79,11 @@ bool bt_remotes_scene_global_settings_on_event(void* context, SceneManagerEvent 
 
 void bt_remotes_scene_global_settings_on_exit(void* context) {
     Hid* app = context;
+    // Save cursor before reset so it survives navigation to and back from any
+    // sub-scene (Help, Default Bluetooth Name, etc.).
+    scene_manager_set_scene_state(
+        app->scene_manager,
+        BtRemotesSceneGlobalSettings,
+        submenu_get_selected_item(app->submenu));
     submenu_reset(app->submenu);
 }

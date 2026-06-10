@@ -45,7 +45,9 @@ void bt_remotes_scene_keynote_settings_on_enter(void* context) {
     variable_item_list_add(vil, "Help", 1, NULL, app);
 
     variable_item_list_set_enter_callback(vil, keynote_settings_enter_cb, app);
-    variable_item_list_set_selected_item(vil, 0);
+    variable_item_list_set_selected_item(
+        vil,
+        scene_manager_get_scene_state(app->scene_manager, BtRemotesSceneKeynoteSettings));
     view_dispatcher_switch_to_view(app->view_dispatcher, HidViewVariableItemList);
 }
 
@@ -57,5 +59,9 @@ bool bt_remotes_scene_keynote_settings_on_event(void* context, SceneManagerEvent
 
 void bt_remotes_scene_keynote_settings_on_exit(void* context) {
     Hid* app = context;
+    scene_manager_set_scene_state(
+        app->scene_manager,
+        BtRemotesSceneKeynoteSettings,
+        variable_item_list_get_selected_item_index(app->var_item_list));
     variable_item_list_reset(app->var_item_list);
 }

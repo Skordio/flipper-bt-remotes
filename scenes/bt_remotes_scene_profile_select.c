@@ -21,6 +21,13 @@ enum BtRemotesProfileSelectEvent {
 
 static void profile_select_cb(void* context, uint8_t index_value) {
     Hid* app = context;
+    // Save the current cursor index (any row - profile, Help, New, or Settings) so
+    // we can restore it when the user comes back from the chosen destination.
+    // Stored as (index_value + 1) so a default scene_state of 0 distinguishes
+    // "no saved cursor yet" from "cursor at profile-list-index 0".
+    scene_manager_set_scene_state(
+        app->scene_manager, BtRemotesSceneProfileSelect, (uint32_t)index_value + 1);
+
     if(index_value == PROFILE_SELECT_IDX_NEW) {
         view_dispatcher_send_custom_event(
             app->view_dispatcher, BtRemotesProfileSelectEventNew);
@@ -31,9 +38,8 @@ static void profile_select_cb(void* context, uint8_t index_value) {
         view_dispatcher_send_custom_event(
             app->view_dispatcher, BtRemotesProfileSelectEventHelp);
     } else {
-        // index_value is the profile list position
-        scene_manager_set_scene_state(
-            app->scene_manager, BtRemotesSceneProfileSelect, index_value);
+        // index_value is the profile list position; the Chosen handler reads it
+        // back from scene_state (already set above).
         view_dispatcher_send_custom_event(
             app->view_dispatcher, BtRemotesProfileSelectEventChosen);
     }
@@ -106,17 +112,25 @@ static void setup_profile_menu(Hid* app) {
     hid_remote_menu_set_select_callback(app->hid_remote_menu, profile_select_cb, app);
     hid_remote_menu_set_reorder_callback(app->hid_remote_menu, profile_reorder_cb, app);
 
-    // Restore cursor to the active profile (if any)
-    uint8_t cursor_pos = 0;
-    if(app->active_profile[0] != '\0') {
+    // Restore cursor. Priority order:
+    //  1. The last row the user picked (saved as scene_state by profile_select_cb,
+    //     offset by +1 so 0 means "no saved cursor"). This preserves Help /
+    //     + New / Settings cursors too, and is set after a profile is chosen —
+    //     so coming back from Start lands on that profile.
+    //  2. Otherwise (first time entering), the active profile if any.
+    //  3. Otherwise (no active profile, no saved cursor), position 0.
+    uint32_t saved = scene_manager_get_scene_state(
+        app->scene_manager, BtRemotesSceneProfileSelect);
+    if(saved != 0) {
+        hid_remote_menu_set_selected_index(app->hid_remote_menu, (uint8_t)(saved - 1));
+    } else if(app->active_profile[0] != '\0') {
         for(uint8_t i = 0; i < app->profile_count; i++) {
             if(strcmp(app->profile_list[i], app->active_profile) == 0) {
-                cursor_pos = i;
+                hid_remote_menu_set_selected_index(app->hid_remote_menu, i);
                 break;
             }
         }
     }
-    hid_remote_menu_set_selected_index(app->hid_remote_menu, cursor_pos);
 }
 
 // ---------------------------------------------------------------------------
@@ -151,8 +165,10 @@ bool bt_remotes_scene_profile_select_on_event(void* context, SceneManagerEvent e
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneStart);
 
         } else if(event.event == BtRemotesProfileSelectEventChosen) {
-            uint32_t idx = scene_manager_get_scene_state(
+            // scene_state holds (chosen_index + 1); subtract 1 to get the real index.
+            uint32_t saved = scene_manager_get_scene_state(
                 app->scene_manager, BtRemotesSceneProfileSelect);
+            uint32_t idx = saved ? saved - 1 : 0;
             strlcpy(
                 app->active_profile, app->profile_list[idx], BT_REMOTES_PROFILE_NAME_LEN);
 

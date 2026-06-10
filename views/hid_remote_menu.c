@@ -372,6 +372,22 @@ void hid_remote_menu_set_selected_index(HidRemoteMenu* menu, uint8_t index_value
         false);
 }
 
+uint8_t hid_remote_menu_get_selected_index(const HidRemoteMenu* menu) {
+    furi_assert(menu);
+    uint8_t value = 0xFF;
+    // Cast away const for with_view_model (only reads model fields).
+    with_view_model(
+        ((HidRemoteMenu*)menu)->view,
+        HidRemoteMenuModel * model,
+        {
+            if(model->count > 0 && model->cursor < model->count) {
+                value = model->indices[model->cursor];
+            }
+        },
+        false);
+    return value;
+}
+
 void hid_remote_menu_set_select_callback(
     HidRemoteMenu*            menu,
     HidRemoteMenuSelectCallback cb,
