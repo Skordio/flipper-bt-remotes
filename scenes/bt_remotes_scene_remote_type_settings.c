@@ -5,6 +5,7 @@ enum BtRemotesRemoteTypeIndex {
     BtRemotesRemoteTypeIndexMedia   = 1,
     BtRemotesRemoteTypeIndexTikTok  = 2,
     BtRemotesRemoteTypeIndexDucky   = 3,
+    BtRemotesRemoteTypeIndexHelp    = 4,
 };
 
 static void bt_remotes_scene_remote_type_settings_cb(void* context, uint32_t index) {
@@ -40,6 +41,12 @@ void bt_remotes_scene_remote_type_settings_on_enter(void* context) {
         BtRemotesRemoteTypeIndexDucky,
         bt_remotes_scene_remote_type_settings_cb,
         app);
+    submenu_add_item(
+        app->submenu,
+        "Help",
+        BtRemotesRemoteTypeIndexHelp,
+        bt_remotes_scene_remote_type_settings_cb,
+        app);
     view_dispatcher_switch_to_view(app->view_dispatcher, HidViewSubmenu);
 }
 
@@ -58,6 +65,13 @@ bool bt_remotes_scene_remote_type_settings_on_event(void* context, SceneManagerE
             consumed = true;
         } else if(event.event == BtRemotesRemoteTypeIndexDucky) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneDuckySettings);
+            consumed = true;
+        } else if(event.event == BtRemotesRemoteTypeIndexHelp) {
+            scene_manager_set_scene_state(
+                app->scene_manager,
+                BtRemotesSceneRemoteSettingsHelp,
+                RemoteSettingsHelpPerRemote);
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneRemoteSettingsHelp);
             consumed = true;
         }
     }

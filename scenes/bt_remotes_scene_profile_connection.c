@@ -12,6 +12,7 @@ enum BtRemotesProfileConnectionIndex {
     BtRemotesProfileConnectionIndexDelayConnect,
     BtRemotesProfileConnectionIndexSaveBtKeys,
     BtRemotesProfileConnectionIndexUnpair,
+    BtRemotesProfileConnectionIndexHelp,
 };
 
 static void bt_remotes_scene_profile_connection_cb(void* context, uint32_t index) {
@@ -55,6 +56,13 @@ static void build_connection_menu(Hid* app) {
         BtRemotesProfileConnectionIndexUnpair,
         bt_remotes_scene_profile_connection_cb,
         app);
+
+    submenu_add_item(
+        app->submenu,
+        "Help",
+        BtRemotesProfileConnectionIndexHelp,
+        bt_remotes_scene_profile_connection_cb,
+        app);
 }
 
 void bt_remotes_scene_profile_connection_on_enter(void* context) {
@@ -78,6 +86,10 @@ bool bt_remotes_scene_profile_connection_on_event(void* context, SceneManagerEve
         scene_manager_next_scene(app->scene_manager, BtRemotesSceneSaveProfile);
     } else if(event.event == BtRemotesProfileConnectionIndexUnpair) {
         scene_manager_next_scene(app->scene_manager, BtRemotesSceneUnpair);
+    } else if(event.event == BtRemotesProfileConnectionIndexHelp) {
+        scene_manager_set_scene_state(
+            app->scene_manager, BtRemotesSceneRemoteSettingsHelp, RemoteSettingsHelpConnection);
+        scene_manager_next_scene(app->scene_manager, BtRemotesSceneRemoteSettingsHelp);
     }
     return true;
 }

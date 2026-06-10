@@ -161,12 +161,16 @@ typedef enum {
 // (bt_remotes_scene_remote_settings_help.c). The launching settings scene stores
 // the topic as that scene's state before pushing it.
 typedef enum {
-    RemoteSettingsHelpKeynote = 0,
-    RemoteSettingsHelpMedia   = 1,
-    RemoteSettingsHelpTikTok  = 2,
-    RemoteSettingsHelpDucky   = 3,
-    RemoteSettingsHelpGlobal  = 4,
-    RemoteSettingsHelpProfile = 5,
+    RemoteSettingsHelpKeynote        = 0,
+    RemoteSettingsHelpMedia          = 1,
+    RemoteSettingsHelpTikTok         = 2,
+    RemoteSettingsHelpDucky          = 3,
+    RemoteSettingsHelpGlobal         = 4,
+    RemoteSettingsHelpProfile        = 5,
+    RemoteSettingsHelpConnection     = 6,
+    RemoteSettingsHelpMenuLayout     = 7,
+    RemoteSettingsHelpPerRemote      = 8,
+    RemoteSettingsHelpProfileMgmt    = 9,
 } RemoteSettingsHelpTopic;
 
 // Start-menu item indices — shared by bt_remotes_scene_start.c and bt_remotes_scene_main.c.

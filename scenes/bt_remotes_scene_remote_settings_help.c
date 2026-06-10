@@ -84,6 +84,64 @@ static const char* const remote_settings_help_pages[] = {
     "Tweaks for individual remote types (Keynote, Media, TikTok, DuckyScript).\n\n"
     "Profile Management:\n"
     "Rename or delete the profile.",
+
+    // Connection
+    "CONNECTION\n"
+    "Bluetooth name and connection behavior for the active profile.\n\n"
+    "Bluetooth Name:\n"
+    "The name your device sees when pairing. Per-profile - this is separate "
+    "from the Default Bluetooth Name in Global Settings, which is the template "
+    "applied to NEW profiles.\n\n"
+    "Delay Connect:\n"
+    "- On: Bluetooth is off at the menu and only turns on while you're inside a "
+    "remote, script, or gesture. Useful to keep the Flipper off the air.\n"
+    "- Off (default): connects as soon as you open the profile and stays "
+    "connected.\n\n"
+    "Save BT Keys:\n"
+    "Snapshots the current pairing into the profile's stored keys. Pairings "
+    "normally save on their own - use this only if a host won't reconnect after "
+    "a reboot.\n\n"
+    "Bluetooth Unpairing:\n"
+    "Gives the profile a brand-new identity and forgets all of its pairings. "
+    "Use it if a device won't reconnect, then re-pair fresh.",
+
+    // Start Menu Layout
+    "START MENU LAYOUT\n"
+    "Customize the remote list shown after you pick this profile. Saved "
+    "per-profile.\n\n"
+    "Hide Remote Types:\n"
+    "Toggle which remote items appear on the Start menu. [x] = shown, [ ] = "
+    "hidden. Settings is always visible (cannot be hidden).\n\n"
+    "Reset Menu Order:\n"
+    "Restores the default order AND makes every item visible again. Use this "
+    "to undo a HOLD-OK reorder or to bring back hidden items.",
+
+    // Per-Remote Settings (hub)
+    "PER-REMOTE SETTINGS\n"
+    "Per-profile knobs specific to individual remote types. Each has its own "
+    "Help page with the full details:\n\n"
+    "Keynote:\n"
+    "Which key short Back sends (Delete / Left Arrow / Escape / None) to match "
+    "different slide apps.\n\n"
+    "Media:\n"
+    "Mode (Legacy vs Improved) and Mouse Switcher (short Back swaps to a mouse "
+    "view).\n\n"
+    "TikTok / YT Shorts:\n"
+    "Scroll Mode (Wheel or emulated finger-swipe Gesture). In Gesture mode, "
+    "Inward Margin / Edge Margin / Swipe Length tune the swipe for your phone.\n\n"
+    "DuckyScript:\n"
+    "Connect Per Run (stay disconnected while browsing scripts) and Connect "
+    "Delay (settle time after the link is up).",
+
+    // Profile Management
+    "PROFILE MANAGEMENT\n"
+    "Manage the active profile's identity on disk.\n\n"
+    "Rename Profile:\n"
+    "Changes the profile's filename and the label shown on Profile Select. "
+    "Existing pairings are preserved.\n\n"
+    "Delete Profile:\n"
+    "Removes the profile, its menu layout, its per-remote settings, and its "
+    "stored pairings. Cannot be undone. Returns you to Profile Select.",
 };
 
 void bt_remotes_scene_remote_settings_help_on_enter(void* context) {
