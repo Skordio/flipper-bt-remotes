@@ -166,11 +166,10 @@ typedef enum {
     RemoteSettingsHelpTikTok         = 2,
     RemoteSettingsHelpDucky          = 3,
     RemoteSettingsHelpGlobal         = 4,
-    RemoteSettingsHelpProfile        = 5,
-    RemoteSettingsHelpConnection     = 6,
-    RemoteSettingsHelpMenuLayout     = 7,
-    RemoteSettingsHelpPerRemote      = 8,
-    RemoteSettingsHelpProfileMgmt    = 9,
+    RemoteSettingsHelpConnection     = 5,
+    RemoteSettingsHelpMenuLayout     = 6,
+    RemoteSettingsHelpPerRemote      = 7,
+    RemoteSettingsHelpProfileMgmt    = 8,
 } RemoteSettingsHelpTopic;
 
 // Start-menu item indices — shared by bt_remotes_scene_start.c and bt_remotes_scene_main.c.

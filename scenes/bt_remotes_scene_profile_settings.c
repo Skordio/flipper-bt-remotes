@@ -13,7 +13,6 @@ enum BtRemotesProfileSettingsIndex {
     BtRemotesProfileSettingsIndexMenuLayout,
     BtRemotesProfileSettingsIndexPerRemote,
     BtRemotesProfileSettingsIndexProfileMgmt,
-    BtRemotesProfileSettingsIndexHelp,
 };
 
 static void bt_remotes_scene_profile_settings_cb(void* context, uint32_t index) {
@@ -50,12 +49,6 @@ void bt_remotes_scene_profile_settings_on_enter(void* context) {
         BtRemotesProfileSettingsIndexProfileMgmt,
         bt_remotes_scene_profile_settings_cb,
         app);
-    submenu_add_item(
-        app->submenu,
-        "Help",
-        BtRemotesProfileSettingsIndexHelp,
-        bt_remotes_scene_profile_settings_cb,
-        app);
 
     // Restore cursor to wherever the user left it (saved in on_exit).
     submenu_set_selected_item(
@@ -90,10 +83,6 @@ bool bt_remotes_scene_profile_settings_on_event(void* context, SceneManagerEvent
         scene_manager_next_scene(app->scene_manager, BtRemotesSceneRemoteTypeSettings);
     } else if(event.event == BtRemotesProfileSettingsIndexProfileMgmt) {
         scene_manager_next_scene(app->scene_manager, BtRemotesSceneProfileManagement);
-    } else if(event.event == BtRemotesProfileSettingsIndexHelp) {
-        scene_manager_set_scene_state(
-            app->scene_manager, BtRemotesSceneRemoteSettingsHelp, RemoteSettingsHelpProfile);
-        scene_manager_next_scene(app->scene_manager, BtRemotesSceneRemoteSettingsHelp);
     }
     return true;
 }

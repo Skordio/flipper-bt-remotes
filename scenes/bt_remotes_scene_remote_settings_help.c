@@ -15,7 +15,6 @@
 // Parallel to RemoteSettingsHelpTopic. Word-wraps to 128px and scrolls Up/Down.
 static const char* const remote_settings_help_pages[] = {
     // Keynote
-    "KEYNOTE SETTINGS\n"
     "Back Button: choose what a short press of the Flipper Back button sends, to "
     "match different slide apps:\n"
     "- Delete\n"
@@ -25,7 +24,6 @@ static const char* const remote_settings_help_pages[] = {
     "Hold Back always exits the remote.",
 
     // Media
-    "MEDIA SETTINGS\n"
     "Mode:\n"
     "- Legacy: Left/Right skip to the previous/next track.\n"
     "- Improved: TAP Left/Right to seek within the current track, HOLD Left/Right "
@@ -36,7 +34,6 @@ static const char* const remote_settings_help_pages[] = {
     "Hold Back always exits.",
 
     // TikTok
-    "TIKTOK SETTINGS\n"
     "Scroll Mode:\n"
     "- Wheel: Up/Down send scroll-wheel events.\n"
     "- Gesture: Up/Down emulate a finger swipe (mouse click-drag).\n\n"
@@ -48,7 +45,6 @@ static const char* const remote_settings_help_pages[] = {
     "- Swipe Length: drag distance while the button is held.",
 
     // DuckyScript
-    "DUCKYSCRIPT SETTINGS\n"
     "Connect Per Run:\n"
     "- On: stay disconnected while browsing scripts; Bluetooth connects only for "
     "the duration of each script run, then disconnects.\n"
@@ -59,7 +55,6 @@ static const char* const remote_settings_help_pages[] = {
     "it; if it feels slow, lower it. Only used when Connect Per Run is On.",
 
     // Global Settings
-    "GLOBAL SETTINGS\n"
     "Settings that apply to the app as a whole - not to any one profile.\n\n"
     "Default Bluetooth Name:\n"
     "The Bluetooth name applied to newly-created profiles. Existing profiles keep "
@@ -70,23 +65,7 @@ static const char* const remote_settings_help_pages[] = {
     "- Disconnect: buzz when a device disconnects.\n"
     "- Both: buzz on connect AND disconnect.",
 
-    // Profile Settings
-    "PROFILE SETTINGS\n"
-    "Settings for the active profile, grouped into sections.\n\n"
-    "Connection:\n"
-    "Bluetooth name shown to the host, Delay Connect (only run Bluetooth while "
-    "inside a remote), Save BT Keys (snapshot the current pairing - use if a host "
-    "won't reconnect across reboots), and Bluetooth Unpairing (forget all pairings "
-    "and start with a fresh identity).\n\n"
-    "Start Menu Layout:\n"
-    "Hide remote types from the menu and reset menu order to defaults.\n\n"
-    "Per-Remote Settings:\n"
-    "Tweaks for individual remote types (Keynote, Media, TikTok, DuckyScript).\n\n"
-    "Profile Management:\n"
-    "Rename or delete the profile.",
-
     // Connection
-    "CONNECTION\n"
     "Bluetooth name and connection behavior for the active profile.\n\n"
     "Bluetooth Name:\n"
     "The name your device sees when pairing. Per-profile - this is separate "
@@ -106,7 +85,6 @@ static const char* const remote_settings_help_pages[] = {
     "Use it if a device won't reconnect, then re-pair fresh.",
 
     // Start Menu Layout
-    "START MENU LAYOUT\n"
     "Customize the remote list shown after you pick this profile. Saved "
     "per-profile.\n\n"
     "Hide Remote Types:\n"
@@ -117,7 +95,6 @@ static const char* const remote_settings_help_pages[] = {
     "to undo a HOLD-OK reorder or to bring back hidden items.",
 
     // Per-Remote Settings (hub)
-    "PER-REMOTE SETTINGS\n"
     "Per-profile knobs specific to individual remote types. Each has its own "
     "Help page with the full details:\n\n"
     "Keynote:\n"
@@ -134,7 +111,6 @@ static const char* const remote_settings_help_pages[] = {
     "Delay (settle time after the link is up).",
 
     // Profile Management
-    "PROFILE MANAGEMENT\n"
     "Manage the active profile's identity on disk.\n\n"
     "Rename Profile:\n"
     "Changes the profile's filename and the label shown on Profile Select. "
