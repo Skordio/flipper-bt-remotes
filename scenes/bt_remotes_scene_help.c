@@ -11,17 +11,16 @@
 // ---------------------------------------------------------------------------
 
 // Short labels for the topic menu (parallel to help_pages[]).
+//
+// Philosophy: the main Help is a high-level overview. Every settings screen has
+// its own Help page that goes into the detail - don't shadow-document those
+// here.
 static const char* const help_topics[] = {
     "Overview",
-    "Getting Started",
-    "Profiles",
-    "Pairing & Bluetooth",
-    "The Remote Menu",
-    "Per-Remote Changes",
+    "Profiles & Setup",
+    "Per-Remote Tweaks",
     "Ducky Scripts & Collections",
     "Custom Gestures",
-    "Settings Reference",
-    "Tips & Exiting",
 };
 
 // Full scrollable page bodies (parallel to help_topics[]).  The Widget text
@@ -30,117 +29,59 @@ static const char* const help_pages[] = {
     // 0: Overview
     "OVERVIEW\n"
     "Turns your Flipper into a Bluetooth keyboard, mouse, and media remote.\n\n"
-    "What this app adds over the stock Bluetooth Remote:\n"
+    "What this app adds over stock Bluetooth Remote:\n"
     "- Profiles: save many devices\n"
     "- Extra remote types\n"
-    "- Per-remote settings & tweaks\n"
-    "- Run Ducky/BadUSB scripts over Bluetooth\n"
-    "- Script collections, pinnable to the menu\n\n"
-    "New? See 'Getting Started'.",
+    "- Per-remote tweaks\n"
+    "- Ducky/BadUSB scripts over Bluetooth\n"
+    "- Script collections, pinnable to the Start menu\n"
+    "- Custom Gestures: scripting for mouse/keyboard macros\n\n"
+    "To start: Profile Select > '+ New Profile', name it, then pair from your "
+    "device's Bluetooth.\n\n"
+    "HOLD Back to leave any remote.",
 
-    // 1: Getting Started
-    "GETTING STARTED\n"
-    "1. Profile Select > '+ New Profile', name it.\n"
-    "2. The Flipper starts Bluetooth.\n"
-    "3. Pair with it from your device's Bluetooth settings.\n"
-    "4. Pick a remote and use the buttons.\n\n"
-    "HOLD Back to leave a remote.",
-
-    // 2: Profiles
-    "PROFILES\n"
+    // 1: Profiles & Setup
+    "PROFILES & SETUP\n"
     "A profile is one saved device, with its own pairing, Bluetooth name, menu "
-    "layout, and settings.\n\n"
-    "Keep one per computer/phone and switch between them without re-pairing.\n\n"
+    "layout, and settings. Keep one per computer/phone and switch between them "
+    "without re-pairing.\n\n"
     "- Tap a profile to connect.\n"
-    "- HOLD OK to reorder the list.\n"
-    "- Rename / Delete live in Settings.",
+    "- HOLD OK to reorder.\n"
+    "- Rename / Delete: Profile Settings > Profile Management.\n\n"
+    "REMOTE MENU (after you pick a profile)\n"
+    "- HOLD OK to reorder; OK/Back to drop.\n"
+    "- Hide / Reset Order: Profile Settings > Start Menu Layout.\n\n"
+    "CONNECTION\n"
+    "Bluetooth Name, Delay Connect, Save BT Keys, Bluetooth Unpairing live under "
+    "Profile Settings > Connection. Open its Help page for details.",
 
-    // 3: Pairing & Bluetooth
-    "PAIRING & BLUETOOTH\n"
-    "Pair once from your device's Bluetooth settings; it saves automatically.\n\n"
-    "Bluetooth Name: the name your device sees.\n\n"
-    "Bluetooth Unpairing: gives the profile a brand-new identity and forgets "
-    "all pairings. Use it if a device won't reconnect, then pair fresh.\n\n"
-    "Delay Connect (Settings): when On, this profile turns Bluetooth on only "
-    "while you're in a remote, script, or gesture, and disconnects when you go "
-    "back to the menu. Off (default): it connects as soon as you pick the "
-    "profile and stays connected. Use On to keep the Flipper off the air until "
-    "you actually start using a remote.",
+    // 2: Per-Remote Tweaks
+    "PER-REMOTE TWEAKS\n"
+    "Some remotes have per-profile knobs under Profile Settings > Per-Remote "
+    "Settings:\n"
+    "- Keynote\n"
+    "- Media\n"
+    "- TikTok / YT Shorts\n"
+    "- DuckyScript\n\n"
+    "Each has its own Help page with the details.",
 
-    // 4: The Remote Menu
-    "THE REMOTE MENU\n"
-    "The list of remotes shown after you pick a profile.\n\n"
-    "- Reorder: HOLD OK, move with Up/Down, OK/Back to drop.\n"
-    "- Hide: Settings > Hide Remote Types ([x] shown, [ ] hidden).\n"
-    "- Reset Menu Order restores defaults.\n\n"
-    "Saved per profile.",
-
-    // 5: Per-Remote Changes
-    "PER-REMOTE CHANGES\n"
-    "Some of the original remotes gain extra behavior here, set in\n"
-    "Settings > Per-Remote Settings (per profile). More options will be added "
-    "over time.\n\n"
-    "KEYNOTE\n"
-    "Pick what a short Back press sends: Delete, Left Arrow, Escape, or None - "
-    "to match different slide apps.\n\n"
-    "MEDIA\n"
-    "- Mode: Legacy (Left/Right skip tracks) or Improved (TAP Left/Right to "
-    "seek within a video, HOLD to skip tracks).\n"
-    "- Mouse Switcher: when On, a short Back opens a mouse view; a short Back "
-    "there returns to Media. Hold Back still exits.\n\n"
-    "TIKTOK / YT SHORTS\n"
-    "- Scroll Mode: Wheel (scroll-wheel) or Gesture (emulated finger swipe) for "
-    "moving Up/Down between videos.\n"
-    "- In Gesture mode you can tune the swipe for your phone: Inward Margin (how "
-    "far in from the side it starts), Edge Margin (how far off the top/bottom "
-    "edge before holding), and Swipe Length (drag distance while held).\n\n"
-    "DUCKYSCRIPT\n"
-    "- Connect Per Run: stay disconnected while browsing scripts; connect only for "
-    "each script run, then disconnect.\n"
-    "- Connect Delay: how long to wait after connecting before sending keys (raise "
-    "it if the first keys of a run are dropped).",
-
-    // 6: Ducky Scripts & Collections
+    // 3: Ducky Scripts & Collections
     "DUCKY SCRIPTS & COLLECTIONS\n"
-    "Ducky Scripts runs BadUSB/Ducky .txt scripts over Bluetooth. Pick one to "
-    "run it; press Back to stop.\n\n"
-    "Collections group scripts together - create, edit, and delete them under "
-    "Ducky Scripts > Collections.\n\n"
-    "Pin a collection to put it on the main menu for one-tap access.",
-
-    // 7: Custom Gestures
-    "CUSTOM GESTURES\n"
-    "Reusable 'quick actions' - a sequence of mouse moves, taps, drags, "
-    "scrolls, waits and keystrokes that navigate a device with one press.\n\n"
-    "Gestures are plain .gesture text files edited on your PC and copied to "
-    "/ext/apps_data/bt_remotes/gestures/ on the SD card.\n\n"
-    "Commands: anchor, move, tap, click, drag, scroll, wait, key, type, run. "
-    "See WRITING_GESTURES.md in the app docs for the full reference.\n\n"
-    "Open Custom Gestures to run a gesture or Pin it to the main menu for "
+    "Runs BadUSB/Ducky .txt scripts over Bluetooth. Pick one to run; press Back "
+    "to stop.\n\n"
+    "Collections group scripts together - create/edit/delete under Ducky "
+    "Scripts > Collections. Pin a collection to put it on the Start menu for "
     "one-tap access.",
 
-    // 8: Settings Reference
-    "SETTINGS REFERENCE\n"
-    "Bluetooth Name - name shown to the device.\n"
-    "Vibration - buzz on connect/disconnect.\n"
-    "Hide Remote Types - show/hide menu items.\n"
-    "Per-Remote Settings - per-remote options.\n"
-    "Delay Connect - only connect while in a remote.\n"
-    "Reset Menu Order - restore defaults.\n"
-    "Rename Profile - rename the profile.\n"
-    "Bluetooth Unpairing - new identity, forget pairings.\n"
-    "Save Profile - snapshot pairing.\n"
-    "Delete Profile - remove the profile.\n\n"
-    "Most apply to the active profile.",
-
-    // 9: Tips & Exiting
-    "TIPS & EXITING\n"
-    "- HOLD Back to leave any remote.\n"
-    "- Vibration can confirm connect/disconnect.\n"
-    "- Opening Settings briefly drops Bluetooth; it reconnects when you go "
-    "Back.\n"
-    "- Each profile keeps its own layout and settings.\n"
-    "- Reach this Help anytime from Profile Select.",
+    // 4: Custom Gestures
+    "CUSTOM GESTURES\n"
+    "Reusable quick actions - a sequence of mouse moves, taps, drags, scrolls, "
+    "waits and keystrokes that navigate a device with one press.\n\n"
+    "Gestures are plain .gesture text files edited on your PC and copied to "
+    "/ext/apps_data/bt_remotes/gestures/ on the SD card. See "
+    "WRITING_GESTURES.md in the app docs for the command reference.\n\n"
+    "Open Custom Gestures to run a gesture or Pin it to the Start menu for "
+    "one-tap access.",
 };
 
 #define BT_REMOTES_HELP_TOPIC_COUNT (sizeof(help_topics) / sizeof(help_topics[0]))

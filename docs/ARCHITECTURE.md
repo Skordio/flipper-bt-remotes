@@ -83,7 +83,9 @@ bt_remotes/
 │   ├── bt_remotes_scene_reset_profile.c   bt_remotes_scene_unpair.c
 │   │   # Navigation / menu:
 │   ├── bt_remotes_scene_start.c   bt_remotes_scene_main.c
-│   ├── bt_remotes_scene_settings.c   bt_remotes_scene_help.c
+│   ├── bt_remotes_scene_global_settings.c   bt_remotes_scene_profile_settings.c
+│   ├── bt_remotes_scene_profile_connection.c   bt_remotes_scene_profile_menu_layout.c
+│   ├── bt_remotes_scene_profile_management.c   bt_remotes_scene_help.c
 │   ├── bt_remotes_scene_hide_items.c   bt_remotes_scene_reset_menu.c
 │   │   # Per-remote settings:
 │   ├── bt_remotes_scene_remote_type_settings.c   bt_remotes_scene_remote_settings_help.c
@@ -419,16 +421,19 @@ ProfileSelect ──► ProfileNew ──► (back to ProfileSelect, auto-advanc
     │      │                                                                        │
     │      ├──► (pinned slot) ─► CollectionView (kind 0) or GestureRun (kind 1)    │
     │      │                                                                        │
-    │      └──► Settings ──► Rename (BT name, per-profile or default)             │
-    │                   ├──► ProfileRenameFile, ResetProfile, Unpair, SaveProfile   │
-    │                   ├──► HideItems, ResetMenu (Start-menu visibility/order)     │
-    │                   ├──► RemoteTypeSettings ─► Keynote/Media/TikTokSettings     │
-    │                   │                          └─► RemoteSettingsHelp           │
-    │                   ├──► Help                                                   │
-    │                   └──► DeleteProfile ──────────────────────────────────────►┘
-    │                         (deletes profile files, clears active_profile → ProfileSelect)
+    │      └──► ProfileSettings (hub) ─┬──► ProfileConnection ─► Rename / Unpair  │
+    │                                  │   (Bluetooth Name, Delay Connect, Unpair)│
+    │                                  ├──► ProfileMenuLayout ─► HideItems/ResetMenu│
+    │                                  ├──► RemoteTypeSettings ─► Keynote/Media/  │
+    │                                  │     TikTok/DuckySettings → RemoteSettingsHelp│
+    │                                  ├──► ProfileManagement ─► ProfileRenameFile,│
+    │                                  │     SaveProfile, DeleteProfile           │
+    │                                  └──► Help (RemoteSettingsHelp / Profile)   │
     │
-    └──► Settings (same scene, entered without a profile; only shows app-level items)
+    └──► GlobalSettings (from ProfileSelect, no active profile)
+            ├──► Rename (Default Bluetooth Name → app->default_ble_name)
+            ├──► (inline) Vibration cycle
+            └──► Help (RemoteSettingsHelp / Global)
 ```
 
 `bt_remotes_scenes.h` is the authoritative scene list. Start does **not** use a plain submenu — it
@@ -436,12 +441,15 @@ uses the custom `hid_remote_menu` view (see **Start Menu**). Routing of the sele
 in `bt_remotes_scene_start_on_event`.
 
 **Critical navigation rule**: `bt_remotes_stop_ble` is called in `start_on_event` when navigating
-to Settings. `bt_remotes_start_ble` is called in `settings_on_event` when handling
-`SceneManagerEventTypeBack` — but only if `!app->ble_started && active_profile[0] != '\0'`
-(**and** `!delay_connect`; see *Deferred BLE start*). The `settings_on_event` Back handler returns
-`false` so the scene manager still pops the scene. (Ducky Scripts / Custom Gestures / pinned-slot
-launches do **not** stop BLE — only Settings does. In `delay_connect` mode the Start scene's
-`on_enter`/`on_event` own the stop-at-menu / start-into-remote transitions instead.)
+to Settings (`BtRemotesSceneProfileSettings`). `bt_remotes_start_ble` is called in
+`profile_settings_on_event` when handling `SceneManagerEventTypeBack` — but only if
+`!app->ble_started && active_profile[0] != '\0'` (**and** `!delay_connect`; see *Deferred BLE
+start*). The `profile_settings_on_event` Back handler returns `false` so the scene manager still
+pops the scene. Sub-scenes under Profile Settings (Connection / Menu Layout / Per-Remote Settings /
+Profile Management) don't touch BLE — only the hub's back-to-Start transition restarts it. (Ducky
+Scripts / Custom Gestures / pinned-slot launches do **not** stop BLE — only Settings does. In
+`delay_connect` mode the Start scene's `on_enter`/`on_event` own the stop-at-menu / start-into-remote
+transitions instead.) `GlobalSettings` has no profile to restart, so its on_back is plain.
 
 ---
 
@@ -504,14 +512,18 @@ error). The worker thread uses a 4 KB stack to accommodate the recursion. File f
 
 ## Per-Remote Settings (per profile)
 
-Reached from **Settings → Remote Settings** (`remote_type_settings` hub). Three sub-scenes, each a
-`VariableItemList`, all persisted in the profile `.cfg`:
+Reached from **Profile Settings → Per-Remote Settings** (`remote_type_settings` hub). Four
+sub-scenes, each a `VariableItemList`, all persisted in the profile `.cfg`:
 
 - `keynote_settings` — `keynote_back_key` (`KeynoteBackKey`: Delete/Left/Escape/None).
 - `media_settings` — `media_mode` (`MediaMode`: Legacy/Improved) + `media_mouse_switch` (short Back
   opens the mouse sub-view).
 - `tiktok_settings` — `tiktok_scroll_mode` (Wheel/Gesture) + three px tunables
   `tiktok_gesture_inset` / `_margin` / `_swipe` (ranges/defaults defined in `bt_remotes.h`).
+  The three tunables are only meaningful in Gesture mode and are **hidden** in Wheel mode — the
+  Scroll Mode change callback posts a rebuild event back to the scene so the list can safely
+  `variable_item_list_reset` outside the callback that's processing the change.
+- `ducky_settings` — `ducky_connect_per_run` toggle + `ducky_connect_settle_ms` slider.
 
 `remote_settings_help` is a shared help scene; the launching settings scene stores the
 `RemoteSettingsHelpTopic` as its scene state before pushing it. These values are read back in
