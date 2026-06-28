@@ -333,20 +333,27 @@ static void hid_ios_phone_burst_timer_cb(void* context) {
             if(!model->burst_active) {
                 stop = true;
             } else {
-                // Linear velocity decay from a peak at t=0 to ~0 at t=T, then
-                // clamp at 1 px/tick so a held key keeps producing a slow
-                // precision crawl until release. Release clears burst_active
-                // (handled in the input callback), which stops the timer on the
-                // next tick via the branch above.
+                // Symmetric triangle velocity profile: ramp from 0.5*peak at
+                // t=0 up to peak at t=T/2, then back down to 0.5*peak at t=T.
+                // Past T, the `delta < 1` clamp below takes over so a held key
+                // keeps producing a slow precision crawl until release. Average
+                // height is 0.75*peak, so peak = (4*dist) / (3*N) keeps the
+                // total area equal to ios_burst_distance.
                 uint32_t elapsed = hid_ios_now_ms() - model->burst_start_tick;
                 int32_t dist = (int32_t)self->hid->ios_burst_distance;
                 int32_t n_ticks = IOS_BURST_DURATION_MS / IOS_BURST_TICK_MS;
                 if(n_ticks < 1) n_ticks = 1;
-                int32_t peak = (2 * dist + n_ticks - 1) / n_ticks; // round up
+                int32_t peak = (4 * dist + 3 * n_ticks - 1) / (3 * n_ticks); // round up
                 int32_t delta = 0;
                 if(elapsed < IOS_BURST_DURATION_MS) {
-                    delta = peak * (int32_t)(IOS_BURST_DURATION_MS - elapsed) /
-                            (int32_t)IOS_BURST_DURATION_MS;
+                    int32_t T = (int32_t)IOS_BURST_DURATION_MS;
+                    if((int32_t)elapsed * 2 <= T) {
+                        // First half: 0.5*peak -> peak.
+                        delta = peak * (T + 2 * (int32_t)elapsed) / (2 * T);
+                    } else {
+                        // Second half: peak -> 0.5*peak.
+                        delta = peak * (3 * T - 2 * (int32_t)elapsed) / (2 * T);
+                    }
                 }
                 if(delta < 1) delta = 1;
                 if(delta > 127) delta = 127;
