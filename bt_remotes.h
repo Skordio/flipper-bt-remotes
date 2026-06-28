@@ -167,9 +167,9 @@ typedef enum {
 //   Burst Distance: total px the cursor travels during a default-mode burst at
 //                   base speed. Larger = farther travel per d-pad tap.
 #define IOS_BURST_DISTANCE_MIN     40
-#define IOS_BURST_DISTANCE_MAX     400
+#define IOS_BURST_DISTANCE_MAX     800
 #define IOS_BURST_DISTANCE_STEP    20
-#define IOS_BURST_DISTANCE_DEFAULT 160
+#define IOS_BURST_DISTANCE_DEFAULT 480
 //   Swipe Distance: total px of the held-button drag (default-mode double-tap,
 //                   plus every Swipe-mode single press).
 #define IOS_SWIPE_DISTANCE_MIN     120

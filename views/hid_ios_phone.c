@@ -11,9 +11,9 @@
 // flooding it.
 #define IOS_BURST_TICK_MS 15
 // Total duration of a single burst at base speed. Tuned so a default-distance
-// burst (160 px) plays out in ~220 ms — long enough to feel like a fling, short
-// enough that a quick tap-tap-tap still feels responsive.
-#define IOS_BURST_DURATION_MS 220
+// burst (480 px) plays out in ~825 ms — long enough to feel the deceleration
+// curve clearly while keeping average velocity around 580 px/s.
+#define IOS_BURST_DURATION_MS 825
 // Per-axis chunk size for the swipe gesture (HID mouse delta is int8, max 127).
 #define IOS_SWIPE_CHUNK 90
 // Delay between swipe-chunk packets in ms.
@@ -333,31 +333,30 @@ static void hid_ios_phone_burst_timer_cb(void* context) {
             if(!model->burst_active) {
                 stop = true;
             } else {
+                // Linear velocity decay from a peak at t=0 to ~0 at t=T, then
+                // clamp at 1 px/tick so a held key keeps producing a slow
+                // precision crawl until release. Release clears burst_active
+                // (handled in the input callback), which stops the timer on the
+                // next tick via the branch above.
                 uint32_t elapsed = hid_ios_now_ms() - model->burst_start_tick;
-                if(elapsed >= IOS_BURST_DURATION_MS) {
-                    model->burst_active = false;
-                    stop = true;
-                } else {
-                    // Linear velocity decay from a peak at t=0 to 0 at t=T.
-                    // Per-tick delta = peak * (T - t) / T, where peak in
-                    // px/tick = 2 * distance / N_ticks (N_ticks = T / dt).
-                    int32_t dist = (int32_t)self->hid->ios_burst_distance;
-                    int32_t n_ticks = IOS_BURST_DURATION_MS / IOS_BURST_TICK_MS;
-                    if(n_ticks < 1) n_ticks = 1;
-                    int32_t peak = (2 * dist + n_ticks - 1) / n_ticks; // round up
-                    int32_t delta =
-                        peak * (int32_t)(IOS_BURST_DURATION_MS - elapsed) /
-                        (int32_t)IOS_BURST_DURATION_MS;
-                    if(delta < 1) delta = 1;
-                    if(delta > 127) delta = 127;
+                int32_t dist = (int32_t)self->hid->ios_burst_distance;
+                int32_t n_ticks = IOS_BURST_DURATION_MS / IOS_BURST_TICK_MS;
+                if(n_ticks < 1) n_ticks = 1;
+                int32_t peak = (2 * dist + n_ticks - 1) / n_ticks; // round up
+                int32_t delta = 0;
+                if(elapsed < IOS_BURST_DURATION_MS) {
+                    delta = peak * (int32_t)(IOS_BURST_DURATION_MS - elapsed) /
+                            (int32_t)IOS_BURST_DURATION_MS;
+                }
+                if(delta < 1) delta = 1;
+                if(delta > 127) delta = 127;
 
-                    switch(model->burst_key) {
-                    case InputKeyRight: dx = (int8_t)delta;   break;
-                    case InputKeyLeft:  dx = (int8_t)-delta;  break;
-                    case InputKeyDown:  dy = (int8_t)delta;   break;
-                    case InputKeyUp:    dy = (int8_t)-delta;  break;
-                    default: stop = true; model->burst_active = false; break;
-                    }
+                switch(model->burst_key) {
+                case InputKeyRight: dx = (int8_t)delta;   break;
+                case InputKeyLeft:  dx = (int8_t)-delta;  break;
+                case InputKeyDown:  dy = (int8_t)delta;   break;
+                case InputKeyUp:    dy = (int8_t)-delta;  break;
+                default: stop = true; model->burst_active = false; break;
                 }
             }
         },
