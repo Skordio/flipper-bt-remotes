@@ -1,11 +1,12 @@
 #include "../bt_remotes.h"
 
 enum BtRemotesRemoteTypeIndex {
-    BtRemotesRemoteTypeIndexKeynote = 0,
-    BtRemotesRemoteTypeIndexMedia   = 1,
-    BtRemotesRemoteTypeIndexTikTok  = 2,
-    BtRemotesRemoteTypeIndexDucky   = 3,
-    BtRemotesRemoteTypeIndexHelp    = 4,
+    BtRemotesRemoteTypeIndexKeynote  = 0,
+    BtRemotesRemoteTypeIndexMedia    = 1,
+    BtRemotesRemoteTypeIndexTikTok   = 2,
+    BtRemotesRemoteTypeIndexDucky    = 3,
+    BtRemotesRemoteTypeIndexIosPhone = 4,
+    BtRemotesRemoteTypeIndexHelp     = 5,
 };
 
 static void bt_remotes_scene_remote_type_settings_cb(void* context, uint32_t index) {
@@ -43,6 +44,12 @@ void bt_remotes_scene_remote_type_settings_on_enter(void* context) {
         app);
     submenu_add_item(
         app->submenu,
+        "iOS Phone",
+        BtRemotesRemoteTypeIndexIosPhone,
+        bt_remotes_scene_remote_type_settings_cb,
+        app);
+    submenu_add_item(
+        app->submenu,
         "Help",
         BtRemotesRemoteTypeIndexHelp,
         bt_remotes_scene_remote_type_settings_cb,
@@ -68,6 +75,9 @@ bool bt_remotes_scene_remote_type_settings_on_event(void* context, SceneManagerE
             consumed = true;
         } else if(event.event == BtRemotesRemoteTypeIndexDucky) {
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneDuckySettings);
+            consumed = true;
+        } else if(event.event == BtRemotesRemoteTypeIndexIosPhone) {
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneIosPhoneSettings);
             consumed = true;
         } else if(event.event == BtRemotesRemoteTypeIndexHelp) {
             scene_manager_set_scene_state(

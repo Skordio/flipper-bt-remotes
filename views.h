@@ -15,6 +15,7 @@ typedef enum {
     HidViewMouseJiggler,
     HidViewMouseJigglerStealth,
     BtHidViewTikTok,
+    HidViewIosPhone,
     HidViewPushToTalk,
     HidViewPushToTalkMenu,
     HidViewPushToTalkHelp,

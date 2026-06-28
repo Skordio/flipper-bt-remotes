@@ -170,6 +170,15 @@ void bt_remotes_save_profile_menu_cfg(Hid* app) {
         flipper_format_write_uint32(fff, "tiktok_gesture_margin", &tiktok_gesture_margin_u32, 1);
         uint32_t tiktok_gesture_swipe_u32 = app->tiktok_gesture_swipe;
         flipper_format_write_uint32(fff, "tiktok_gesture_swipe", &tiktok_gesture_swipe_u32, 1);
+        uint32_t ios_burst_distance_u32 = app->ios_burst_distance;
+        flipper_format_write_uint32(fff, "ios_burst_distance", &ios_burst_distance_u32, 1);
+        uint32_t ios_swipe_distance_u32 = app->ios_swipe_distance;
+        flipper_format_write_uint32(fff, "ios_swipe_distance", &ios_swipe_distance_u32, 1);
+        uint32_t ios_dbl_tap_window_ms_u32 = app->ios_dbl_tap_window_ms;
+        flipper_format_write_uint32(fff, "ios_dbl_tap_window_ms", &ios_dbl_tap_window_ms_u32, 1);
+        uint32_t ios_swipe_return_to_start_u32 = app->ios_swipe_return_to_start;
+        flipper_format_write_uint32(
+            fff, "ios_swipe_return_to_start", &ios_swipe_return_to_start_u32, 1);
         uint32_t delay_connect_u32 = app->delay_connect;
         flipper_format_write_uint32(fff, "delay_connect", &delay_connect_u32, 1);
         uint32_t ducky_connect_per_run_u32 = app->ducky_connect_per_run;
@@ -406,55 +415,78 @@ bool bt_remotes_profile_activate(Hid* app) {
             if(!flipper_format_file_open_existing(mfff, furi_string_get_cstr(src_cfg))) break;
             if(!flipper_format_read_header(mfff, mtmp, &mver)) break;
 
-            // Try the new 32-entry format first; fall back to the old 16-entry format.
+            // Try the current 33-entry format first; fall back to V2 (32-entry,
+            // pre-iOS-Phone) then V1 (31-entry, pre-Custom-Gestures), then the
+            // very old fixed-only layout.
             uint32_t order_u32[BT_REMOTES_MENU_ORDER_LEN];
             for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) order_u32[i] = 0xFF;
             if(flipper_format_read_uint32(
                    mfff, "menu_order", order_u32, BT_REMOTES_MENU_ORDER_LEN)) {
-                // New format: validate and copy all 32 slots.
+                // Current format: validate and copy all slots.
                 for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) {
                     uint8_t v = (uint8_t)order_u32[i];
-                    // Valid values: fixed indices 0‥15, custom-remote indices 16‥31, 0xFF sentinel.
+                    // Valid values: fixed indices 0..ITEM_COUNT-1, pinned
+                    // ITEM_COUNT..ORDER_LEN-1, or 0xFF sentinel.
                     app->menu_order[i] = (v < BT_REMOTES_MENU_ORDER_LEN || v == 0xFF) ? v : 0xFF;
                 }
+            } else if(
+                (flipper_format_rewind(mfff),
+                 flipper_format_read_uint32(
+                     mfff, "menu_order", order_u32, BT_REMOTES_MENU_ORDER_LEN_V2))) {
+                // V2 (32 entries: 16 fixed + 16 pinned), saved before iOS Phone
+                // existed. Pinned-slot values (16..31) shift +1 to 17..32. Old
+                // fixed index 15 (Settings) is left as 15, which now denotes
+                // iOS Phone; the real Settings (16) is re-appended by
+                // start_on_enter — same trick the V1 arm uses for Custom Gestures.
+                for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) app->menu_order[i] = 0xFF;
+                for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN_V2; i++) {
+                    uint8_t v = (uint8_t)order_u32[i];
+                    if(v == 0xFF) {
+                        app->menu_order[i] = 0xFF;
+                    } else if(
+                        v >= BT_REMOTES_MENU_ITEM_COUNT_V2 &&
+                        v < BT_REMOTES_MENU_ORDER_LEN_V2) {
+                        app->menu_order[i] = (uint8_t)(v + 1); // pinned slot shifted +1
+                    } else if(v < BT_REMOTES_MENU_ITEM_COUNT_V2) {
+                        app->menu_order[i] = v; // fixed item index unchanged
+                    } else {
+                        app->menu_order[i] = 0xFF;
+                    }
+                }
+            } else if(
+                (flipper_format_rewind(mfff),
+                 flipper_format_read_uint32(
+                     mfff, "menu_order", order_u32, BT_REMOTES_MENU_ORDER_LEN_V1))) {
+                // V1 (31 entries: 15 fixed + 16 pinned), saved before Custom
+                // Gestures existed. Both Custom Gestures (V2 add) and iOS Phone
+                // (V3 add) have appeared since, so pinned-slot values (15..30)
+                // shift +2 to 17..32. Old fixed index 14 (Settings) is left as
+                // 14, which now denotes Custom Gestures; both iOS Phone (15)
+                // and Settings (16) re-append via start_on_enter.
+                for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) app->menu_order[i] = 0xFF;
+                for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN_V1; i++) {
+                    uint8_t v = (uint8_t)order_u32[i];
+                    if(v == 0xFF) {
+                        app->menu_order[i] = 0xFF;
+                    } else if(
+                        v >= BT_REMOTES_MENU_ITEM_COUNT_V1 &&
+                        v < BT_REMOTES_MENU_ORDER_LEN_V1) {
+                        app->menu_order[i] = (uint8_t)(v + 2); // pinned slot shifted +2
+                    } else if(v < BT_REMOTES_MENU_ITEM_COUNT_V1) {
+                        app->menu_order[i] = v; // fixed item index unchanged
+                    } else {
+                        app->menu_order[i] = 0xFF;
+                    }
+                }
             } else {
-                // Previous format (31 entries: 15 fixed + 16 pinned), saved before
-                // Custom Gestures existed. Adding a fixed item moved the
-                // fixed/pinned boundary 15 -> 16, so remap old pinned-slot values
-                // (15..30) by +1. Old fixed index 14 (Settings) is left as 14,
-                // which now denotes Custom Gestures; the real Settings (15) is
-                // re-appended by start_on_enter, landing Custom Gestures just above
-                // Settings for default layouts.
+                // Very old format: just the 15 fixed items; pinned slots default to 0xFF.
                 flipper_format_rewind(mfff);
                 for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) order_u32[i] = 0xFF;
                 if(flipper_format_read_uint32(
-                       mfff, "menu_order", order_u32, BT_REMOTES_MENU_ORDER_LEN_V1)) {
-                    for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN_V1; i++) {
-                        uint8_t v = (uint8_t)order_u32[i];
-                        if(v == 0xFF) {
-                            app->menu_order[i] = 0xFF;
-                        } else if(
-                            v >= BT_REMOTES_MENU_ITEM_COUNT_V1 &&
-                            v < BT_REMOTES_MENU_ORDER_LEN_V1) {
-                            app->menu_order[i] = (uint8_t)(v + 1); // pinned slot shifted +1
-                        } else if(v < BT_REMOTES_MENU_ITEM_COUNT_V1) {
-                            app->menu_order[i] = v; // fixed item index unchanged
-                        } else {
-                            app->menu_order[i] = 0xFF;
-                        }
-                    }
-                    // New trailing slot (index 31) stays 0xFF.
-                } else {
-                    // Even older format (just the 15 fixed items): migrate; pinned
-                    // slots default to 0xFF.
-                    flipper_format_rewind(mfff);
-                    for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) order_u32[i] = 0xFF;
-                    if(flipper_format_read_uint32(
-                           mfff, "menu_order", order_u32, BT_REMOTES_MENU_ITEM_COUNT_V1)) {
-                        for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT_V1; i++) {
-                            app->menu_order[i] = (uint8_t)(
-                                order_u32[i] < BT_REMOTES_MENU_ITEM_COUNT_V1 ? order_u32[i] : i);
-                        }
+                       mfff, "menu_order", order_u32, BT_REMOTES_MENU_ITEM_COUNT_V1)) {
+                    for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT_V1; i++) {
+                        app->menu_order[i] = (uint8_t)(
+                            order_u32[i] < BT_REMOTES_MENU_ITEM_COUNT_V1 ? order_u32[i] : i);
                     }
                 }
             }
@@ -535,8 +567,52 @@ bool bt_remotes_profile_activate(Hid* app) {
             } else {
                 app->tiktok_gesture_swipe = TIKTOK_GESTURE_SWIPE_DEFAULT;
             }
+            flipper_format_rewind(mfff);
+            uint32_t ios_burst_distance_u32 = IOS_BURST_DISTANCE_DEFAULT;
+            if(flipper_format_read_uint32(
+                   mfff, "ios_burst_distance", &ios_burst_distance_u32, 1)) {
+                if(ios_burst_distance_u32 < IOS_BURST_DISTANCE_MIN)
+                    ios_burst_distance_u32 = IOS_BURST_DISTANCE_MIN;
+                if(ios_burst_distance_u32 > IOS_BURST_DISTANCE_MAX)
+                    ios_burst_distance_u32 = IOS_BURST_DISTANCE_MAX;
+                app->ios_burst_distance = (uint16_t)ios_burst_distance_u32;
+            } else {
+                app->ios_burst_distance = IOS_BURST_DISTANCE_DEFAULT;
+            }
+            flipper_format_rewind(mfff);
+            uint32_t ios_swipe_distance_u32 = IOS_SWIPE_DISTANCE_DEFAULT;
+            if(flipper_format_read_uint32(
+                   mfff, "ios_swipe_distance", &ios_swipe_distance_u32, 1)) {
+                if(ios_swipe_distance_u32 < IOS_SWIPE_DISTANCE_MIN)
+                    ios_swipe_distance_u32 = IOS_SWIPE_DISTANCE_MIN;
+                if(ios_swipe_distance_u32 > IOS_SWIPE_DISTANCE_MAX)
+                    ios_swipe_distance_u32 = IOS_SWIPE_DISTANCE_MAX;
+                app->ios_swipe_distance = (uint16_t)ios_swipe_distance_u32;
+            } else {
+                app->ios_swipe_distance = IOS_SWIPE_DISTANCE_DEFAULT;
+            }
+            flipper_format_rewind(mfff);
+            uint32_t ios_dbl_tap_window_ms_u32 = IOS_DBL_TAP_WINDOW_DEFAULT;
+            if(flipper_format_read_uint32(
+                   mfff, "ios_dbl_tap_window_ms", &ios_dbl_tap_window_ms_u32, 1)) {
+                if(ios_dbl_tap_window_ms_u32 < IOS_DBL_TAP_WINDOW_MIN)
+                    ios_dbl_tap_window_ms_u32 = IOS_DBL_TAP_WINDOW_MIN;
+                if(ios_dbl_tap_window_ms_u32 > IOS_DBL_TAP_WINDOW_MAX)
+                    ios_dbl_tap_window_ms_u32 = IOS_DBL_TAP_WINDOW_MAX;
+                app->ios_dbl_tap_window_ms = (uint16_t)ios_dbl_tap_window_ms_u32;
+            } else {
+                app->ios_dbl_tap_window_ms = IOS_DBL_TAP_WINDOW_DEFAULT;
+            }
+            flipper_format_rewind(mfff);
+            uint32_t ios_swipe_return_to_start_u32 = IOS_SWIPE_RETURN_DEFAULT;
+            if(flipper_format_read_uint32(
+                   mfff, "ios_swipe_return_to_start", &ios_swipe_return_to_start_u32, 1)) {
+                app->ios_swipe_return_to_start = ios_swipe_return_to_start_u32 ? 1 : 0;
+            } else {
+                app->ios_swipe_return_to_start = IOS_SWIPE_RETURN_DEFAULT;
+            }
             // The three fields below appear consecutively at the end of the save
-            // order, so we need only one rewind to reset past the tiktok reads.
+            // order, so we need only one rewind to reset past the prior reads.
             flipper_format_rewind(mfff);
             uint32_t delay_connect_u32 = DELAY_CONNECT_DEFAULT;
             if(flipper_format_read_uint32(mfff, "delay_connect", &delay_connect_u32, 1)) {
@@ -1099,6 +1175,7 @@ static void bt_remotes_connection_status_changed_callback(BtStatus status, void*
     hid_mouse_jiggler_stealth_set_connected_status(hid->hid_mouse_jiggler_stealth, connected);
     hid_ptt_set_connected_status(hid->hid_ptt, connected);
     hid_tiktok_set_connected_status(hid->hid_tiktok, connected);
+    hid_ios_phone_set_connected_status(hid->hid_ios_phone, connected);
 }
 
 // ---------------------------------------------------------------------------
@@ -1196,6 +1273,10 @@ static Hid* bt_remotes_alloc(void) {
     app->hid_tiktok = hid_tiktok_alloc(app);
     view_dispatcher_add_view(
         app->view_dispatcher, BtHidViewTikTok, hid_tiktok_get_view(app->hid_tiktok));
+
+    app->hid_ios_phone = hid_ios_phone_alloc(app);
+    view_dispatcher_add_view(
+        app->view_dispatcher, HidViewIosPhone, hid_ios_phone_get_view(app->hid_ios_phone));
 
     app->hid_mouse = hid_mouse_alloc(app);
     view_dispatcher_add_view(
@@ -1302,6 +1383,8 @@ static void bt_remotes_free(Hid* app) {
     hid_remote_menu_free(app->hid_remote_menu);
     view_dispatcher_remove_view(app->view_dispatcher, BtHidViewTikTok);
     hid_tiktok_free(app->hid_tiktok);
+    view_dispatcher_remove_view(app->view_dispatcher, HidViewIosPhone);
+    hid_ios_phone_free(app->hid_ios_phone);
     view_dispatcher_remove_view(app->view_dispatcher, HidViewFileBrowser);
     file_browser_free(app->file_browser);
     furi_string_free(app->file_browser_result);

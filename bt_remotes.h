@@ -36,6 +36,7 @@
 #include "views/hid_mouse_jiggler.h"
 #include "views/hid_mouse_jiggler_stealth.h"
 #include "views/hid_tiktok.h"
+#include "views/hid_ios_phone.h"
 #include "views/hid_ptt.h"
 #include "views/hid_ptt_menu.h"
 
@@ -46,15 +47,19 @@
 
 #define BT_REMOTES_PROFILE_NAME_LEN  32
 #define BT_REMOTES_PROFILE_MAX_COUNT 16
-#define BT_REMOTES_MENU_ITEM_COUNT   16
+#define BT_REMOTES_MENU_ITEM_COUNT   17
 #define BT_REMOTES_PINNED_MAX        16
 #define BT_REMOTES_MENU_ORDER_LEN    (BT_REMOTES_MENU_ITEM_COUNT + BT_REMOTES_PINNED_MAX)
 
-// Previous on-disk menu layout (before Custom Gestures was added), used to
-// migrate saved menu_order arrays. Adding the fixed item moved the fixed/pinned
-// boundary 15 -> 16, so old pinned-slot values must be shifted +1 on load.
+// Previous on-disk menu layouts, used to migrate saved menu_order arrays.
+// Each time a fixed item is appended before Settings the fixed/pinned boundary
+// moves and old pinned-slot values must be shifted up to land in the new layout.
+// V1 = pre-Custom-Gestures (15 fixed items).
+// V2 = post-Custom-Gestures, pre-iOS-Phone (16 fixed items).
 #define BT_REMOTES_MENU_ITEM_COUNT_V1 15
 #define BT_REMOTES_MENU_ORDER_LEN_V1  31
+#define BT_REMOTES_MENU_ITEM_COUNT_V2 16
+#define BT_REMOTES_MENU_ORDER_LEN_V2  32
 
 #define BT_REMOTES_PROFILES_DIR APP_DATA_PATH("profiles")
 #define BT_REMOTES_CFG_PATH     APP_DATA_PATH(".bt_hid.cfg")
@@ -157,6 +162,33 @@ typedef enum {
 // Number of selectable values for each range (used as VariableItemList counts).
 #define TIKTOK_GESTURE_VALUE_COUNT(min, max, step) (((max) - (min)) / (step) + 1)
 
+// iOS Phone remote (per-profile). Defaults tuned for a typical iPhone screen
+// scale; the user can tweak any of them via Per-Remote Settings → iOS Phone.
+//   Burst Distance: total px the cursor travels during a default-mode burst at
+//                   base speed. Larger = farther travel per d-pad tap.
+#define IOS_BURST_DISTANCE_MIN     40
+#define IOS_BURST_DISTANCE_MAX     400
+#define IOS_BURST_DISTANCE_STEP    20
+#define IOS_BURST_DISTANCE_DEFAULT 160
+//   Swipe Distance: total px of the held-button drag (default-mode double-tap,
+//                   plus every Swipe-mode single press).
+#define IOS_SWIPE_DISTANCE_MIN     120
+#define IOS_SWIPE_DISTANCE_MAX     600
+#define IOS_SWIPE_DISTANCE_STEP    40
+#define IOS_SWIPE_DISTANCE_DEFAULT 320
+//   Double-Tap Window: max ms gap between two short presses to count as a
+//                      double-tap (Back single-tap action is deferred by this
+//                      same window).
+#define IOS_DBL_TAP_WINDOW_MIN     150
+#define IOS_DBL_TAP_WINDOW_MAX     400
+#define IOS_DBL_TAP_WINDOW_STEP    25
+#define IOS_DBL_TAP_WINDOW_DEFAULT 250
+//   Return to Start: whether the cursor returns to its pre-swipe position
+//                    after a swipe gesture (on by default).
+#define IOS_SWIPE_RETURN_DEFAULT 1
+// Number of selectable values for VariableItemList rows.
+#define IOS_VALUE_COUNT(min, max, step) (((max) - (min)) / (step) + 1)
+
 // Topics for the shared Per-Remote Settings Help scene
 // (bt_remotes_scene_remote_settings_help.c). The launching settings scene stores
 // the topic as that scene's state before pushing it.
@@ -170,6 +202,7 @@ typedef enum {
     RemoteSettingsHelpMenuLayout     = 6,
     RemoteSettingsHelpPerRemote      = 7,
     RemoteSettingsHelpProfileMgmt    = 8,
+    RemoteSettingsHelpIosPhone       = 9,
 } RemoteSettingsHelpTopic;
 
 // Start-menu item indices — shared by bt_remotes_scene_start.c and bt_remotes_scene_main.c.
@@ -189,11 +222,12 @@ typedef enum {
     BtRemotesStartIndexPushToTalk          = 12,
     BtRemotesStartIndexCustomActions       = 13,
     BtRemotesStartIndexCustomGestures      = 14,
+    BtRemotesStartIndexIosPhone            = 15,
     // Settings stays the last fixed item (highest index) — hide_items and the
-    // load-time "never hide" guard rely on it being last. Custom Gestures was
-    // inserted just before it; profiles saved by the previous layout are migrated
-    // in bt_remotes_profile_activate (see the menu_order V1 arm).
-    BtRemotesStartIndexSettings            = 15,
+    // load-time "never hide" guard rely on it being last. New fixed items go in
+    // just before it; profiles saved by previous layouts are migrated in
+    // bt_remotes_profile_activate (see the menu_order V1 / V2 arms).
+    BtRemotesStartIndexSettings            = 16,
 } BtRemotesStartIndex;
 
 typedef struct Hid Hid;
@@ -226,6 +260,7 @@ struct Hid {
     HidMouseJiggler* hid_mouse_jiggler;
     HidMouseJigglerStealth* hid_mouse_jiggler_stealth;
     HidTikTok* hid_tiktok;
+    HidIosPhone* hid_ios_phone;
     HidPushToTalk* hid_ptt;
     HidPushToTalkMenu* hid_ptt_menu;
     HidRemoteMenu*   hid_remote_menu;
@@ -256,6 +291,10 @@ struct Hid {
     uint16_t tiktok_gesture_inset;  // px — horizontal inset before the vertical swipe
     uint16_t tiktok_gesture_margin; // px — vertical travel off the edge before press
     uint16_t tiktok_gesture_swipe;  // px — drag distance while the button is held
+    uint16_t ios_burst_distance;       // px — total travel of a default-mode burst
+    uint16_t ios_swipe_distance;       // px — held-button drag distance for swipes
+    uint16_t ios_dbl_tap_window_ms;    // ms — max gap between two short presses
+    uint8_t  ios_swipe_return_to_start; // 0 = stay, 1 = move cursor back to start
     uint8_t  delay_connect; // 0 = connect immediately; 1 = only connect inside a remote
     uint8_t  ducky_connect_per_run; // 1 = Ducky/Collections connect only during a script run
     uint16_t ducky_connect_settle_ms; // delay after link-up before sending HID (per-run)

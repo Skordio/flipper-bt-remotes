@@ -23,6 +23,7 @@ const BtRemotesMenuEntry bt_remotes_menu_default[BT_REMOTES_MENU_ITEM_COUNT] = {
     {"PushToTalk",            BtRemotesStartIndexPushToTalk},
     {"Ducky Scripts",         BtRemotesStartIndexCustomActions},
     {"Custom Gestures",       BtRemotesStartIndexCustomGestures},
+    {"iOS Phone",             BtRemotesStartIndexIosPhone},
     // Settings stays last so bt_remotes_menu_default[i].index == i (hide_items
     // relies on entry position == enum index, and several spots assume Settings
     // is the highest-indexed fixed item).
@@ -274,6 +275,9 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
                 break;
             case BtRemotesStartIndexPushToTalk:
                 view_id = HidViewPushToTalkMenu;
+                break;
+            case BtRemotesStartIndexIosPhone:
+                view_id = HidViewIosPhone;
                 break;
             default:
                 furi_crash();

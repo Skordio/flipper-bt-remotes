@@ -123,10 +123,11 @@ bt_remotes/
 | `BT_REMOTES_CFG_EXT` / `_KEYS_EXT` | `.cfg` / `.keys` | Per-profile config / bonding-keys extensions |
 | `BT_REMOTES_PROFILE_NAME_LEN` | `32` | Max profile name length (including NUL) |
 | `BT_REMOTES_PROFILE_MAX_COUNT` | `16` | Max number of profiles |
-| `BT_REMOTES_MENU_ITEM_COUNT` | `16` | Number of fixed Start-menu items (enum `BtRemotesStartIndex*`) |
+| `BT_REMOTES_MENU_ITEM_COUNT` | `17` | Number of fixed Start-menu items (enum `BtRemotesStartIndex*`) |
 | `BT_REMOTES_PINNED_MAX` | `16` | Max pinned collections/gestures on the Start menu |
-| `BT_REMOTES_MENU_ORDER_LEN` | `32` | `MENU_ITEM_COUNT + PINNED_MAX` — length of `menu_order[]` |
+| `BT_REMOTES_MENU_ORDER_LEN` | `33` | `MENU_ITEM_COUNT + PINNED_MAX` — length of `menu_order[]` |
 | `BT_REMOTES_MENU_ITEM_COUNT_V1` / `_ORDER_LEN_V1` | `15` / `31` | Pre-Custom-Gestures layout, for migrating saved `menu_order` |
+| `BT_REMOTES_MENU_ITEM_COUNT_V2` / `_ORDER_LEN_V2` | `16` / `32` | Post-Custom-Gestures, pre-iOS-Phone layout, for migrating saved `menu_order` |
 | `BT_REMOTES_COLLECTION_DIR` | `APP_DATA_PATH("collections")` | Ducky Script Collections directory |
 | `BT_REMOTES_COLLECTION_EXT` | `.collection` | Collection file extension |
 | `BT_REMOTES_COLLECTION_MAX` / `_SCRIPT_MAX` | `16` / `32` | Max collections / scripts-per-collection |
@@ -183,7 +184,7 @@ struct Hid {
 
     // App-level + menu layout
     uint8_t  vibro_mode;                          // 0=Neither 1=Disconnect 2=Connect 3=Both
-    uint8_t  menu_order[BT_REMOTES_MENU_ORDER_LEN]; // 0xFF = unused slot; >=16 = pinned slot
+    uint8_t  menu_order[BT_REMOTES_MENU_ORDER_LEN]; // 0xFF = unused slot; >=MENU_ITEM_COUNT = pinned slot
     uint32_t menu_hidden;                          // bitmask: bit i set → item i hidden
     char     profile_order_str[...];               // pipe-separated saved profile order
 
@@ -383,22 +384,26 @@ modeled on the TikTok settings scene). Off by default.
 ## Start Menu (`hid_remote_menu` + `menu_order` / `menu_hidden` / pins)
 
 The Start screen is a custom reorderable list, not a submenu. Item identity is the
-`BtRemotesStartIndex` enum (0‥15, Settings last at 15). `bt_remotes_menu_default[]` (in
-`bt_remotes_scene_start.c`) maps each index to a label and is kept in **enum order** so
-`bt_remotes_menu_default[i].index == i` — `hide_items` and several guards rely on this.
+`BtRemotesStartIndex` enum (`0..BT_REMOTES_MENU_ITEM_COUNT-1`, Settings always last at the
+highest index). `bt_remotes_menu_default[]` (in `bt_remotes_scene_start.c`) maps each index to a
+label and is kept in **enum order** so `bt_remotes_menu_default[i].index == i` — `hide_items` and
+several guards rely on this.
 
-- **`menu_order[32]`** (per profile): visual order. Values `0‥15` = fixed items, `16‥31` = pinned
-  slot `value-16` into `pinned_collections[]`, `0xFF` = unused slot.
+- **`menu_order[BT_REMOTES_MENU_ORDER_LEN]`** (per profile): visual order. Values
+  `0..MENU_ITEM_COUNT-1` = fixed items, `MENU_ITEM_COUNT..ORDER_LEN-1` = pinned slot
+  `value-MENU_ITEM_COUNT` into `pinned_collections[]`, `0xFF` = unused slot.
 - **`menu_hidden`** (per profile): bitmask, bit `i` set → fixed item `i` hidden.
 - **Pins**: `pinned_collections[i]` + `pinned_kinds[i]` (0 = collection, 1 = gesture), persisted
   per profile in `{name}.pins`. A pinned slot launches `CollectionView` or `GestureRun` by kind.
 
 `start_on_enter` rebuilds the displayed list from `menu_order`, then **appends** (a) any fixed
-item missing from a saved order — so items added in a firmware update (e.g. Custom Gestures)
-appear on existing profiles without a "Reset Menu Order", and (b) any newly-pinned collection not
-yet in `menu_order`. **Settings must stay the highest-indexed fixed item** — `hide_items` and the
-load-time "never hide Settings" guard depend on it. When inserting a new fixed item, add it
-*before* Settings and bump the V1 migration (`BT_REMOTES_MENU_ITEM_COUNT_V1` / `_ORDER_LEN_V1`).
+item missing from a saved order — so items added in a firmware update (e.g. Custom Gestures, iOS
+Phone) appear on existing profiles without a "Reset Menu Order", and (b) any newly-pinned
+collection not yet in `menu_order`. **Settings must stay the highest-indexed fixed item** —
+`hide_items` and the load-time "never hide Settings" guard depend on it. When inserting a new
+fixed item, add it *before* Settings and add a new V-arm in `bt_remotes_profile_activate` for the
+previous `MENU_ITEM_COUNT` / `MENU_ORDER_LEN` so older saved orders shift pinned slots up to
+land in the new layout (see existing V1 / V2 arms).
 
 ---
 

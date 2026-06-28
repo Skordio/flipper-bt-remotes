@@ -122,6 +122,27 @@ static const char* const remote_settings_help_pages[] = {
     "Delete Profile:\n"
     "Removes the profile, its menu layout, its per-remote settings, and its "
     "stored pairings. Cannot be undone. Returns you to Profile Select.",
+
+    // iOS Phone
+    "BLE mouse remote tuned for an iPhone.\n\n"
+    "Default screen:\n"
+    "- D-pad tap/hold: cursor flies in a quick burst that decelerates and "
+    "stops the instant you release.\n"
+    "- D-pad double-tap: held-button swipe in the opposite direction (Right "
+    "twice = swipe right).\n"
+    "- OK press/hold: left mouse button held while OK is held.\n"
+    "- Back tap: enter Swipe mode. Back double-tap: enter Slow mode. "
+    "From any non-default mode, either gesture returns you to Default. "
+    "Hold Back: exit the remote.\n\n"
+    "Swipe mode: a SINGLE d-pad press performs the swipe gesture. Tap Back "
+    "to return.\n\n"
+    "Slow mode: d-pad behaves like the standalone Mouse remote (small steps, "
+    "accelerating on hold). Double-tap Back to return.\n\n"
+    "Burst Dist: total px traveled in a default-mode burst.\n"
+    "Swipe Dist: total px of the held-button drag.\n"
+    "Dbl Tap ms: max gap between two short presses to count as a double-tap.\n"
+    "Return: when On, the cursor moves back to its pre-swipe position after "
+    "each swipe.",
 };
 
 void bt_remotes_scene_remote_settings_help_on_enter(void* context) {

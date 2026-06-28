@@ -1,0 +1,631 @@
+#include "hid_ios_phone.h"
+#include "../hid.h"
+#include <gui/elements.h>
+
+#include "hid_icons.h"
+
+#define TAG "HidIosPhone"
+
+// Period of the burst-move timer in ms. One mouse-move packet per tick; each BLE
+// connection interval is ~15-30 ms, so 15 ms keeps the host fed without
+// flooding it.
+#define IOS_BURST_TICK_MS 15
+// Total duration of a single burst at base speed. Tuned so a default-distance
+// burst (160 px) plays out in ~220 ms — long enough to feel like a fling, short
+// enough that a quick tap-tap-tap still feels responsive.
+#define IOS_BURST_DURATION_MS 220
+// Per-axis chunk size for the swipe gesture (HID mouse delta is int8, max 127).
+#define IOS_SWIPE_CHUNK 90
+// Delay between swipe-chunk packets in ms.
+#define IOS_SWIPE_STEP_MS 18
+
+typedef enum {
+    IosModeDefault = 0,
+    IosModeSwipe,
+    IosModeSlow,
+} IosMode;
+
+struct HidIosPhone {
+    View* view;
+    Hid*  hid;
+    // Burst timer drives the decelerating cursor move in Default mode while a
+    // d-pad direction is held. Periodic; allocated once.
+    FuriTimer* burst_timer;
+    // Back single-tap action is deferred by dbl_tap_window_ms so a second short
+    // press can override it as a double-tap. One-shot timer.
+    FuriTimer* back_tap_timer;
+};
+
+typedef struct {
+    IosMode mode;
+    bool    connected;
+    // Direction-pressed flags for the draw.
+    bool    up_pressed;
+    bool    down_pressed;
+    bool    left_pressed;
+    bool    right_pressed;
+    bool    ok_pressed;
+    // Sticky flag: OK was held long enough that we should keep the left mouse
+    // button down until OK release. In iOS-phone semantics OK is purely "while
+    // held = touch held", but we keep this flag for the draw + for clean
+    // release on mode change.
+    bool    left_mouse_held;
+    // Slow mode uses the same acceleration ramp as the Mouse view: 1 on press,
+    // +1 per repeat, capped at 20, reset on release.
+    uint8_t acceleration;
+    // Default-mode burst state. Only one direction can be bursting at a time.
+    bool     burst_active;
+    InputKey burst_key;
+    uint32_t burst_start_tick;
+    // Double-tap detection for the d-pad in Default mode: remember the last
+    // direction release so a follow-up press within dbl_tap_window can be
+    // promoted to a swipe.
+    InputKey last_release_key;
+    uint32_t last_release_tick;
+    // Wall-clock of the most recent d-pad Press, used to require that the prior
+    // press was a TAP (release - press < window) before treating the current
+    // press as a double-tap. Without this, holding a key through a full burst
+    // and re-pressing within the double-tap window would fire an unintended swipe.
+    uint32_t current_press_tick;
+    // Back single-tap is deferred so a second short press promotes it to a
+    // double-tap. The flag mirrors the back_tap_timer's pending state for the
+    // input callback to test from inside the model lock.
+    bool back_short_pending;
+} HidIosPhoneModel;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+static uint32_t hid_ios_now_ms(void) {
+    uint32_t freq = furi_kernel_get_tick_frequency();
+    if(freq == 0) freq = 1000;
+    return (uint32_t)((uint64_t)furi_get_tick() * 1000u / freq);
+}
+
+// One-axis chunked move; packets paced by IOS_SWIPE_STEP_MS so each lands in
+// its own BLE connection interval. Mirrors hid_tiktok_move_axis.
+static void hid_ios_move_axis(Hid* hid, bool horizontal, int total) {
+    while(total != 0) {
+        int step = total;
+        if(step > IOS_SWIPE_CHUNK) step = IOS_SWIPE_CHUNK;
+        if(step < -IOS_SWIPE_CHUNK) step = -IOS_SWIPE_CHUNK;
+        if(horizontal) {
+            hid_hal_mouse_move(hid, (int8_t)step, 0);
+        } else {
+            hid_hal_mouse_move(hid, 0, (int8_t)step);
+        }
+        furi_delay_ms(IOS_SWIPE_STEP_MS);
+        total -= step;
+    }
+}
+
+// Execute a held-button swipe: drag the cursor by (dx, dy), optionally return
+// to the starting point afterward (no button held on the return leg).
+// dx/dy must each be reachable in IOS_SWIPE_CHUNK-sized steps.
+static void hid_ios_do_swipe(Hid* hid, int dx, int dy) {
+    hid_hal_mouse_press(hid, HID_MOUSE_BTN_LEFT);
+    furi_delay_ms(30);
+    if(dx != 0) hid_ios_move_axis(hid, true, dx);
+    if(dy != 0) hid_ios_move_axis(hid, false, dy);
+    furi_delay_ms(20);
+    hid_hal_mouse_release(hid, HID_MOUSE_BTN_LEFT);
+    furi_delay_ms(20);
+    if(hid->ios_swipe_return_to_start) {
+        if(dy != 0) hid_ios_move_axis(hid, false, -dy);
+        if(dx != 0) hid_ios_move_axis(hid, true, -dx);
+    }
+}
+
+// Map a d-pad key + the per-profile swipe distance to the (dx, dy) the cursor
+// should travel during a swipe. The drag direction is OPPOSITE the pressed
+// key — pressing Right intends "swipe right" on the phone, which is a
+// finger-drag from right to left.
+static void hid_ios_swipe_delta_for_key(Hid* hid, InputKey key, int* out_dx, int* out_dy) {
+    int dist = (int)hid->ios_swipe_distance;
+    *out_dx = 0;
+    *out_dy = 0;
+    if(key == InputKeyRight)      *out_dx = -dist;
+    else if(key == InputKeyLeft)  *out_dx = dist;
+    else if(key == InputKeyDown)  *out_dy = -dist;
+    else if(key == InputKeyUp)    *out_dy = dist;
+}
+
+// ---------------------------------------------------------------------------
+// Draw
+// ---------------------------------------------------------------------------
+
+static void hid_ios_phone_draw_callback(Canvas* canvas, void* context) {
+    furi_assert(context);
+    HidIosPhoneModel* model = context;
+
+    // Header
+#ifdef HID_TRANSPORT_BLE
+    if(model->connected) {
+        canvas_draw_icon(canvas, 0, 0, &I_Ble_connected_15x15);
+    } else {
+        canvas_draw_icon(canvas, 0, 0, &I_Ble_disconnected_15x15);
+    }
+#endif
+
+    canvas_set_font(canvas, FontPrimary);
+    elements_multiline_text_aligned(canvas, 17, 3, AlignLeft, AlignTop, "iOS Phone");
+    canvas_set_font(canvas, FontSecondary);
+
+    // Mode indicator just under the title.
+    const char* mode_label = NULL;
+    if(model->mode == IosModeSwipe) mode_label = "Swipe mode";
+    else if(model->mode == IosModeSlow) mode_label = "Slow mode";
+    if(mode_label) elements_multiline_text_aligned(canvas, 3, 22, AlignLeft, AlignTop, mode_label);
+
+    if(model->left_mouse_held) {
+        elements_multiline_text_aligned(canvas, 0, 62, AlignLeft, AlignBottom, "Holding...");
+    } else {
+        canvas_draw_icon(canvas, 0, 54, &I_Pin_back_arrow_10x8);
+        elements_multiline_text_aligned(canvas, 13, 62, AlignLeft, AlignBottom, "Hold to exit");
+    }
+
+    // D-pad illustration (same shape as the Mouse view).
+    canvas_draw_icon(canvas, 58, 3, &I_OutCircles_70x51);
+
+    // Up
+    if(model->up_pressed) {
+        canvas_set_bitmap_mode(canvas, true);
+        canvas_draw_icon(canvas, 68, 6, &I_S_UP_31x15);
+        canvas_set_bitmap_mode(canvas, false);
+        canvas_set_color(canvas, ColorWhite);
+    }
+    canvas_draw_icon(canvas, 80, 8, &I_Pin_arrow_up_7x9);
+    canvas_set_color(canvas, ColorBlack);
+
+    // Down
+    if(model->down_pressed) {
+        canvas_set_bitmap_mode(canvas, true);
+        canvas_draw_icon(canvas, 68, 36, &I_S_DOWN_31x15);
+        canvas_set_bitmap_mode(canvas, false);
+        canvas_set_color(canvas, ColorWhite);
+    }
+    canvas_draw_icon(canvas, 80, 40, &I_Pin_arrow_down_7x9);
+    canvas_set_color(canvas, ColorBlack);
+
+    // Left
+    if(model->left_pressed) {
+        canvas_set_bitmap_mode(canvas, true);
+        canvas_draw_icon(canvas, 61, 13, &I_S_LEFT_15x31);
+        canvas_set_bitmap_mode(canvas, false);
+        canvas_set_color(canvas, ColorWhite);
+    }
+    canvas_draw_icon(canvas, 63, 25, &I_Pin_arrow_left_9x7);
+    canvas_set_color(canvas, ColorBlack);
+
+    // Right
+    if(model->right_pressed) {
+        canvas_set_bitmap_mode(canvas, true);
+        canvas_draw_icon(canvas, 91, 13, &I_S_RIGHT_15x31);
+        canvas_set_bitmap_mode(canvas, false);
+        canvas_set_color(canvas, ColorWhite);
+    }
+    canvas_draw_icon(canvas, 95, 25, &I_Pin_arrow_right_9x7);
+    canvas_set_color(canvas, ColorBlack);
+
+    // OK indicator
+    if(model->ok_pressed || model->left_mouse_held) {
+        canvas_set_bitmap_mode(canvas, true);
+        canvas_draw_icon(canvas, 74, 19, &I_Pressed_Button_19x19);
+        canvas_set_bitmap_mode(canvas, false);
+        canvas_set_color(canvas, ColorWhite);
+    }
+    canvas_draw_icon(canvas, 79, 24, &I_Left_mouse_icon_9x9);
+    canvas_set_color(canvas, ColorBlack);
+}
+
+// ---------------------------------------------------------------------------
+// Burst timer (Default mode)
+// ---------------------------------------------------------------------------
+
+static void hid_ios_phone_burst_timer_cb(void* context) {
+    furi_assert(context);
+    HidIosPhone* self = context;
+
+    int8_t dx = 0;
+    int8_t dy = 0;
+    bool   stop = false;
+
+    with_view_model(
+        self->view,
+        HidIosPhoneModel * model,
+        {
+            if(!model->burst_active) {
+                stop = true;
+            } else {
+                uint32_t elapsed = hid_ios_now_ms() - model->burst_start_tick;
+                if(elapsed >= IOS_BURST_DURATION_MS) {
+                    model->burst_active = false;
+                    stop = true;
+                } else {
+                    // Linear velocity decay from a peak at t=0 to 0 at t=T.
+                    // Per-tick delta = peak * (T - t) / T, where peak in
+                    // px/tick = 2 * distance / N_ticks (N_ticks = T / dt).
+                    int32_t dist = (int32_t)self->hid->ios_burst_distance;
+                    int32_t n_ticks = IOS_BURST_DURATION_MS / IOS_BURST_TICK_MS;
+                    if(n_ticks < 1) n_ticks = 1;
+                    int32_t peak = (2 * dist + n_ticks - 1) / n_ticks; // round up
+                    int32_t delta =
+                        peak * (int32_t)(IOS_BURST_DURATION_MS - elapsed) /
+                        (int32_t)IOS_BURST_DURATION_MS;
+                    if(delta < 1) delta = 1;
+                    if(delta > 127) delta = 127;
+
+                    switch(model->burst_key) {
+                    case InputKeyRight: dx = (int8_t)delta;   break;
+                    case InputKeyLeft:  dx = (int8_t)-delta;  break;
+                    case InputKeyDown:  dy = (int8_t)delta;   break;
+                    case InputKeyUp:    dy = (int8_t)-delta;  break;
+                    default: stop = true; model->burst_active = false; break;
+                    }
+                }
+            }
+        },
+        false);
+
+    if(stop) {
+        furi_timer_stop(self->burst_timer);
+    } else if(dx != 0 || dy != 0) {
+        hid_hal_mouse_move(self->hid, dx, dy);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Back tap timer (single-tap deferred action)
+// ---------------------------------------------------------------------------
+
+// Apply a single-tap Back: enter Swipe from Default, exit to Default from any
+// non-Default mode. Guarded by back_short_pending so a racing double-tap path
+// (which clears the flag before the timer can run) can't double-toggle the mode.
+static void hid_ios_phone_back_tap_timer_cb(void* context) {
+    furi_assert(context);
+    HidIosPhone* self = context;
+    bool fire = false;
+    with_view_model(
+        self->view,
+        HidIosPhoneModel * model,
+        {
+            // If the input thread already promoted to a double-tap it cleared
+            // back_short_pending; the queued callback then no-ops here.
+            if(model->back_short_pending) {
+                model->back_short_pending = false;
+                model->mode = (model->mode == IosModeDefault) ? IosModeSwipe : IosModeDefault;
+                model->burst_active = false;
+                model->acceleration = 0;
+                fire = true;
+            }
+        },
+        true);
+    if(fire) furi_timer_stop(self->burst_timer);
+}
+
+// ---------------------------------------------------------------------------
+// Input
+// ---------------------------------------------------------------------------
+
+// Slow mode input handling: matches the standalone Mouse view's behavior so
+// the user has a precision fallback identical to what they're used to.
+static void hid_ios_slow_process(HidIosPhone* self, InputEvent* event) {
+    with_view_model(
+        self->view,
+        HidIosPhoneModel * model,
+        {
+            model->acceleration = (event->type == InputTypePress)   ? 1 :
+                                  (event->type == InputTypeRelease) ? 0 :
+                                  (model->acceleration >= 20)       ? 20 :
+                                                                      model->acceleration + 1;
+
+            if(event->key == InputKeyRight) {
+                if(event->type == InputTypePress) {
+                    model->right_pressed = true;
+                    hid_hal_mouse_move(self->hid, MOUSE_MOVE_SHORT, 0);
+                } else if(event->type == InputTypeRepeat) {
+                    for(uint8_t i = model->acceleration; i > 1; i -= 2)
+                        hid_hal_mouse_move(self->hid, MOUSE_MOVE_LONG, 0);
+                } else if(event->type == InputTypeRelease) {
+                    model->right_pressed = false;
+                }
+            } else if(event->key == InputKeyLeft) {
+                if(event->type == InputTypePress) {
+                    model->left_pressed = true;
+                    hid_hal_mouse_move(self->hid, -MOUSE_MOVE_SHORT, 0);
+                } else if(event->type == InputTypeRepeat) {
+                    for(uint8_t i = model->acceleration; i > 1; i -= 2)
+                        hid_hal_mouse_move(self->hid, -MOUSE_MOVE_LONG, 0);
+                } else if(event->type == InputTypeRelease) {
+                    model->left_pressed = false;
+                }
+            } else if(event->key == InputKeyDown) {
+                if(event->type == InputTypePress) {
+                    model->down_pressed = true;
+                    hid_hal_mouse_move(self->hid, 0, MOUSE_MOVE_SHORT);
+                } else if(event->type == InputTypeRepeat) {
+                    for(uint8_t i = model->acceleration; i > 1; i -= 2)
+                        hid_hal_mouse_move(self->hid, 0, MOUSE_MOVE_LONG);
+                } else if(event->type == InputTypeRelease) {
+                    model->down_pressed = false;
+                }
+            } else if(event->key == InputKeyUp) {
+                if(event->type == InputTypePress) {
+                    model->up_pressed = true;
+                    hid_hal_mouse_move(self->hid, 0, -MOUSE_MOVE_SHORT);
+                } else if(event->type == InputTypeRepeat) {
+                    for(uint8_t i = model->acceleration; i > 1; i -= 2)
+                        hid_hal_mouse_move(self->hid, 0, -MOUSE_MOVE_LONG);
+                } else if(event->type == InputTypeRelease) {
+                    model->up_pressed = false;
+                }
+            }
+        },
+        true);
+}
+
+static bool hid_ios_phone_input_callback(InputEvent* event, void* context) {
+    furi_assert(context);
+    HidIosPhone* self = context;
+    bool consumed = false;
+
+    // Long Back: clean up any held state and let the scene manager pop. We don't
+    // consume the event so the view dispatcher's default Back handler fires.
+    if(event->type == InputTypeLong && event->key == InputKeyBack) {
+        hid_hal_mouse_release_all(self->hid);
+        furi_timer_stop(self->burst_timer);
+        furi_timer_stop(self->back_tap_timer);
+        with_view_model(
+            self->view,
+            HidIosPhoneModel * model,
+            {
+                model->burst_active = false;
+                model->left_mouse_held = false;
+                model->ok_pressed = false;
+                model->back_short_pending = false;
+            },
+            true);
+        return false;
+    }
+
+    // OK = mouse left button while held. Same in every mode.
+    if(event->key == InputKeyOk) {
+        if(event->type == InputTypePress) {
+            hid_hal_mouse_press(self->hid, HID_MOUSE_BTN_LEFT);
+            with_view_model(
+                self->view,
+                HidIosPhoneModel * model,
+                {
+                    model->ok_pressed = true;
+                    model->left_mouse_held = true;
+                },
+                true);
+            return true;
+        } else if(event->type == InputTypeRelease) {
+            hid_hal_mouse_release(self->hid, HID_MOUSE_BTN_LEFT);
+            with_view_model(
+                self->view,
+                HidIosPhoneModel * model,
+                {
+                    model->ok_pressed = false;
+                    model->left_mouse_held = false;
+                },
+                true);
+            return true;
+        }
+        // InputTypeShort / Long on OK are no-ops — Press/Release already covered it.
+        return true;
+    }
+
+    // Back short = mode toggle, single vs double tap distinguished by a deferred
+    // timer fire (see hid_ios_phone_back_tap_timer_cb).
+    if(event->key == InputKeyBack && event->type == InputTypeShort) {
+        bool fire_double = false;
+        with_view_model(
+            self->view,
+            HidIosPhoneModel * model,
+            {
+                if(model->back_short_pending) {
+                    // Second tap inside the window — promote to double-tap.
+                    model->back_short_pending = false;
+                    fire_double = true;
+                } else {
+                    model->back_short_pending = true;
+                }
+            },
+            false);
+        if(fire_double) {
+            furi_timer_stop(self->back_tap_timer);
+            with_view_model(
+                self->view,
+                HidIosPhoneModel * model,
+                {
+                    // Same "Default <-> mode" symmetry as the single-tap path:
+                    // a double-tap from Default enters Slow; from any non-Default
+                    // mode (Slow or Swipe) it returns to Default.
+                    model->mode = (model->mode == IosModeDefault) ? IosModeSlow : IosModeDefault;
+                    // Reset transient state on mode change.
+                    model->burst_active = false;
+                    model->acceleration = 0;
+                },
+                true);
+            furi_timer_stop(self->burst_timer);
+        } else {
+            furi_timer_stop(self->back_tap_timer);
+            uint32_t window = self->hid->ios_dbl_tap_window_ms;
+            if(window < 60) window = 60;
+            furi_timer_start(self->back_tap_timer, window);
+        }
+        return true;
+    }
+
+    // Slow mode — let the standalone Mouse remote's input model handle the d-pad.
+    IosMode mode;
+    with_view_model(
+        self->view, HidIosPhoneModel * model, { mode = model->mode; }, false);
+
+    if(mode == IosModeSlow) {
+        if(event->key == InputKeyRight || event->key == InputKeyLeft ||
+           event->key == InputKeyUp || event->key == InputKeyDown) {
+            hid_ios_slow_process(self, event);
+            return true;
+        }
+        return false;
+    }
+
+    // Default and Swipe modes share most of the d-pad handling. We dispatch on
+    // (mode, event type) below.
+    if(event->key != InputKeyRight && event->key != InputKeyLeft &&
+       event->key != InputKeyUp && event->key != InputKeyDown) {
+        return false;
+    }
+
+    // Set the press-indicator flags on Press/Release. These don't depend on mode.
+    if(event->type == InputTypePress || event->type == InputTypeRelease) {
+        bool down = (event->type == InputTypePress);
+        with_view_model(
+            self->view,
+            HidIosPhoneModel * model,
+            {
+                if(event->key == InputKeyRight) model->right_pressed = down;
+                if(event->key == InputKeyLeft)  model->left_pressed  = down;
+                if(event->key == InputKeyUp)    model->up_pressed    = down;
+                if(event->key == InputKeyDown)  model->down_pressed  = down;
+            },
+            true);
+        consumed = true;
+    }
+
+    if(mode == IosModeSwipe) {
+        // Swipe mode: a single press of a direction fires the swipe gesture.
+        // We trigger on Press so the user feels immediate response.
+        if(event->type == InputTypePress) {
+            int dx = 0, dy = 0;
+            hid_ios_swipe_delta_for_key(self->hid, event->key, &dx, &dy);
+            hid_ios_do_swipe(self->hid, dx, dy);
+        }
+        return consumed;
+    }
+
+    // Default mode below.
+    if(event->type == InputTypePress) {
+        // Check double-tap: same direction released < dbl_tap_window ago.
+        bool   do_swipe = false;
+        int    dx = 0, dy = 0;
+        uint32_t now = hid_ios_now_ms();
+        with_view_model(
+            self->view,
+            HidIosPhoneModel * model,
+            {
+                if(model->last_release_key == event->key &&
+                   (now - model->last_release_tick) < self->hid->ios_dbl_tap_window_ms) {
+                    do_swipe = true;
+                    hid_ios_swipe_delta_for_key(self->hid, event->key, &dx, &dy);
+                    // Clear so a triple-tap doesn't chain swipes.
+                    model->last_release_key = InputKeyMAX;
+                } else {
+                    // Start a fresh burst.
+                    model->burst_active = true;
+                    model->burst_key = event->key;
+                    model->burst_start_tick = now;
+                }
+                // Always record press start so the matching Release can decide
+                // whether to arm a double-tap (short press only).
+                model->current_press_tick = now;
+            },
+            true);
+        if(do_swipe) {
+            hid_ios_do_swipe(self->hid, dx, dy);
+        } else {
+            furi_timer_stop(self->burst_timer);
+            furi_timer_start(self->burst_timer, IOS_BURST_TICK_MS);
+        }
+    } else if(event->type == InputTypeRelease) {
+        uint32_t now = hid_ios_now_ms();
+        with_view_model(
+            self->view,
+            HidIosPhoneModel * model,
+            {
+                if(model->burst_active && model->burst_key == event->key) {
+                    model->burst_active = false;
+                }
+                // Only arm a double-tap candidate if this was a TAP — a long
+                // hold (e.g. the user kept the burst pinned for a second)
+                // should not pair with the next press as a double-tap.
+                if((now - model->current_press_tick) < self->hid->ios_dbl_tap_window_ms) {
+                    model->last_release_key = event->key;
+                    model->last_release_tick = now;
+                } else {
+                    model->last_release_key = InputKeyMAX;
+                }
+            },
+            true);
+        furi_timer_stop(self->burst_timer);
+    }
+
+    return consumed;
+}
+
+// ---------------------------------------------------------------------------
+// Lifecycle
+// ---------------------------------------------------------------------------
+
+static void hid_ios_phone_exit_callback(void* context) {
+    furi_assert(context);
+    HidIosPhone* self = context;
+    // Releasing the view: drop any held state so leaving via long-Back doesn't
+    // leave the mouse button stuck on the host.
+    hid_hal_mouse_release_all(self->hid);
+    furi_timer_stop(self->burst_timer);
+    furi_timer_stop(self->back_tap_timer);
+}
+
+HidIosPhone* hid_ios_phone_alloc(Hid* bt_hid) {
+    HidIosPhone* self = malloc(sizeof(HidIosPhone));
+    self->hid  = bt_hid;
+    self->view = view_alloc();
+
+    view_set_context(self->view, self);
+    view_allocate_model(self->view, ViewModelTypeLocking, sizeof(HidIosPhoneModel));
+    view_set_draw_callback(self->view, hid_ios_phone_draw_callback);
+    view_set_input_callback(self->view, hid_ios_phone_input_callback);
+    view_set_exit_callback(self->view, hid_ios_phone_exit_callback);
+
+    self->burst_timer =
+        furi_timer_alloc(hid_ios_phone_burst_timer_cb, FuriTimerTypePeriodic, self);
+    self->back_tap_timer =
+        furi_timer_alloc(hid_ios_phone_back_tap_timer_cb, FuriTimerTypeOnce, self);
+
+    with_view_model(
+        self->view,
+        HidIosPhoneModel * model,
+        {
+            model->mode = IosModeDefault;
+            model->last_release_key = InputKeyMAX;
+        },
+        true);
+
+    return self;
+}
+
+void hid_ios_phone_free(HidIosPhone* self) {
+    furi_assert(self);
+    furi_timer_stop(self->burst_timer);
+    furi_timer_free(self->burst_timer);
+    furi_timer_stop(self->back_tap_timer);
+    furi_timer_free(self->back_tap_timer);
+    view_free(self->view);
+    free(self);
+}
+
+View* hid_ios_phone_get_view(HidIosPhone* self) {
+    furi_assert(self);
+    return self->view;
+}
+
+void hid_ios_phone_set_connected_status(HidIosPhone* self, bool connected) {
+    furi_assert(self);
+    with_view_model(
+        self->view, HidIosPhoneModel * model, { model->connected = connected; }, true);
+}
