@@ -50,9 +50,11 @@ Momentum firmware tree at `applications_user/bt_remotes/`.
    `profile_activate` (which overwrites `.bt_hid.cfg` from the profile `.cfg` on Back-from-Settings).
 
 6. **BLE state:** `start_ble` **asserts** `!ble_started` (stop first; it's not a guard). In the
-   default mode only the Settings flow stops BLE — Ducky Scripts / Custom Gestures / pinned launches
-   do not. Use `bt_remotes_profile_clear_pairing` (not `bt_hid_remove_pairing`) whenever BLE is
-   stopped. **Per-profile `delay_connect`:** when set, the Start scene owns BLE — `on_event` starts
+   default (immediate-connect) mode BLE stays up through the whole Settings sub-tree so the host
+   doesn't drop while the user is tweaking knobs; the only Settings action that cycles BLE is
+   renaming the active profile's BT name (in `scene_rename.c`), so the new name advertises
+   immediately. Ducky Scripts / Custom Gestures / pinned launches don't stop BLE either. Use
+   `bt_remotes_profile_clear_pairing` (not `bt_hid_remove_pairing`) whenever BLE is stopped. **Per-profile `delay_connect`:** when set, the Start scene owns BLE — `on_event` starts
    it on the way into any non-Settings destination, `on_enter` stops it on every return to the menu;
    the Settings-Back / `unpair` / `reset_profile` auto-restarts go through
    `bt_remotes_start_ble_if_immediate` (gated by `!delay_connect`). Defaults off; the `profile_new`

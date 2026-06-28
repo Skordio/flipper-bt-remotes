@@ -187,8 +187,11 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
             if(!(app->ducky_connect_per_run && ducky_target)) bt_remotes_start_ble(app);
         }
         if(event.event == BtRemotesStartIndexSettings) {
+            // BLE stays up through Settings so the paired host doesn't drop when
+            // the user is tweaking knobs. The only Settings action that needs a
+            // BLE cycle (renaming the active profile's BT name) does it locally
+            // in scene_rename.c.
             scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, event.event);
-            bt_remotes_stop_ble(app);
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneProfileSettings);
             consumed = true;
         } else if(event.event == BtRemotesStartIndexCustomActions) {

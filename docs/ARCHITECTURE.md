@@ -337,8 +337,9 @@ remote/script/gesture screen is open**, and dropped on return to the Start menu:
 - **`start_on_enter`** calls `stop_ble` when `delay_connect` is set, so every return to the menu
   disconnects. (Entering a remote pushes `Main` over `Start`, so `start_on_enter` doesn't re-run
   until Back — no start/stop churn.)
-- The Settings-Back restart and the `unpair` / `reset_profile` restarts are all gated by
-  `!delay_connect`, so management flows stay disconnected at the menu in delay mode.
+- The `unpair` / `reset_profile` / `scene_rename` BT-name restarts are all gated by
+  `!delay_connect` (they call `bt_remotes_start_ble_if_immediate`), so management flows stay
+  disconnected at the menu in delay mode.
 
 `delay_connect` is **off by default**. New profiles get the default via the
 `bt_remotes_profile_activate(app)` call the `profile_new` flow now runs after `profile_create` —
@@ -440,16 +441,17 @@ ProfileSelect ──► ProfileNew ──► (back to ProfileSelect, auto-advanc
 uses the custom `hid_remote_menu` view (see **Start Menu**). Routing of the selected index lives
 in `bt_remotes_scene_start_on_event`.
 
-**Critical navigation rule**: `bt_remotes_stop_ble` is called in `start_on_event` when navigating
-to Settings (`BtRemotesSceneProfileSettings`). `bt_remotes_start_ble` is called in
-`profile_settings_on_event` when handling `SceneManagerEventTypeBack` — but only if
-`!app->ble_started && active_profile[0] != '\0'` (**and** `!delay_connect`; see *Deferred BLE
-start*). The `profile_settings_on_event` Back handler returns `false` so the scene manager still
-pops the scene. Sub-scenes under Profile Settings (Connection / Menu Layout / Per-Remote Settings /
-Profile Management) don't touch BLE — only the hub's back-to-Start transition restarts it. (Ducky
-Scripts / Custom Gestures / pinned-slot launches do **not** stop BLE — only Settings does. In
-`delay_connect` mode the Start scene's `on_enter`/`on_event` own the stop-at-menu / start-into-remote
-transitions instead.) `GlobalSettings` has no profile to restart, so its on_back is plain.
+**Critical navigation rule**: BLE stays up through the whole Profile Settings sub-tree in the
+default (immediate-connect) mode. `start_on_event` no longer calls `stop_ble` for the Settings
+selection, and `profile_settings_on_event` no longer restarts BLE on Back — sub-scenes inherit a
+live BLE session and the host doesn't drop. The one Settings action that needs to re-advertise is
+the per-profile **Bluetooth Name** rename: `scene_rename.c` performs a local
+`stop_ble` → `profile_activate` → `start_ble_if_immediate` after persisting the new name (the
+`_if_immediate` keeps `delay_connect` profiles offline). Ducky Scripts / Custom Gestures /
+pinned-slot launches don't stop BLE either. In `delay_connect` mode the Start scene's
+`on_enter`/`on_event` own the stop-at-menu / start-into-remote transitions; the Start scene's
+`delay_connect` BLE-start branch already excludes the Settings selection, so delay-connect profiles
+stay offline through Settings as before. `GlobalSettings` has no profile and never touches BLE.
 
 ---
 
@@ -575,17 +577,17 @@ the BLE spec for static random addresses. Always do this when generating a new M
 
 ### `bt_hid_remove_pairing` requires BLE to be active
 This function calls `furi_hal_bt_start_advertising()`, which is undefined behaviour without an
-active BLE profile. **Do not call it from the Settings scene or any scene entered from Settings** —
-BLE is always stopped before entering Settings. Use `bt_remotes_profile_clear_pairing` instead.
+active BLE profile. The `unpair` scene `stop_ble`s before it calls into the clear-pairing path, so
+**don't call `bt_hid_remove_pairing` from anywhere that may run with BLE stopped**. Use
+`bt_remotes_profile_clear_pairing` instead, which is safe regardless of BLE state.
 
 ### `bt_remotes_profile_activate` overwrites `.bt_hid.cfg`
-When navigating Back from Settings, `settings_on_event` calls `bt_remotes_profile_activate` before
-`bt_remotes_start_ble`. `profile_activate` copies the profile's `.cfg` → `.bt_hid.cfg`. If you
-saved a change only to `.bt_hid.cfg` (e.g. via `bt_hid_save_cfg`, which writes only name+mac) but
-not to the profile's `.cfg`, it will be silently overwritten. **Always persist changes to the
-profile's `.cfg` immediately** — the rename scene calls `bt_remotes_save_profile_menu_cfg(app)`
-after `bt_hid_save_cfg`, which rewrites the full profile cfg (name + mac + menu layout + per-remote
-settings).
+`profile_activate` copies the profile's `.cfg` → `.bt_hid.cfg`. If you save a change only to
+`.bt_hid.cfg` (e.g. via `bt_hid_save_cfg`, which writes only name+mac) but not to the profile's
+`.cfg`, the next `profile_activate` (e.g. the local cycle in `scene_rename` after a Bluetooth Name
+edit) will silently overwrite it. **Always persist changes to the profile's `.cfg` immediately** —
+the rename scene calls `bt_remotes_save_profile_menu_cfg(app)` after `bt_hid_save_cfg`, which
+rewrites the full profile cfg (name + mac + menu layout + per-remote settings).
 
 ### `on_exit` fires for both forward and backward navigation
 You cannot reliably use `on_exit` to detect whether the user pressed Back vs. selected a menu item.

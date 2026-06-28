@@ -3,10 +3,12 @@
 // Per-profile settings hub, reached from the Start menu. Pure chooser: each row
 // opens a focused sub-scene. App-wide settings live in BtRemotesSceneGlobalSettings.
 //
-// BLE policy: Start stops BLE when entering Settings (start.c:BtRemotesStartIndexSettings).
-// On Back to Start, this scene restarts BLE for non-delay-connect profiles so the
-// session reconnects automatically. Navigating within the Settings sub-tree keeps
-// BLE stopped — only the back-to-Start transition triggers the restart.
+// BLE policy: BLE stays up through the whole Settings sub-tree so the paired host
+// doesn't drop while the user is tweaking knobs. The one action that needs to
+// re-advertise (renaming the active profile's BT name) cycles BLE locally in
+// scene_rename.c. Delay-connect profiles keep BLE off in Settings as before —
+// the Start scene's delay-connect branch already excludes the Settings selection
+// from starting BLE.
 
 enum BtRemotesProfileSettingsIndex {
     BtRemotesProfileSettingsIndexConnection,
@@ -60,18 +62,6 @@ void bt_remotes_scene_profile_settings_on_enter(void* context) {
 
 bool bt_remotes_scene_profile_settings_on_event(void* context, SceneManagerEvent event) {
     Hid* app = context;
-
-    if(event.type == SceneManagerEventTypeBack) {
-        // Leaving Settings back to Start: restore BLE for non-delay-connect profiles.
-        // Start stopped BLE on the way in (start.c). Delay-connect profiles stay
-        // disconnected at the menu and Start re-enters its own BLE policy, so we
-        // skip both activate and start there (matches the old settings scene).
-        if(!app->ble_started && app->active_profile[0] != '\0' && !app->delay_connect) {
-            bt_remotes_profile_activate(app);
-            bt_remotes_start_ble(app);
-        }
-        return false;
-    }
 
     if(event.type != SceneManagerEventTypeCustom) return false;
 
