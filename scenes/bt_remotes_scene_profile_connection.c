@@ -9,6 +9,7 @@ static char bt_remotes_delay_connect_label[40];
 
 enum BtRemotesProfileConnectionIndex {
     BtRemotesProfileConnectionIndexBluetoothName,
+    BtRemotesProfileConnectionIndexResetBtName,
     BtRemotesProfileConnectionIndexDelayConnect,
     BtRemotesProfileConnectionIndexSaveBtKeys,
     BtRemotesProfileConnectionIndexUnpair,
@@ -28,6 +29,13 @@ static void build_connection_menu(Hid* app) {
         app->submenu,
         "Bluetooth Name",
         BtRemotesProfileConnectionIndexBluetoothName,
+        bt_remotes_scene_profile_connection_cb,
+        app);
+
+    submenu_add_item(
+        app->submenu,
+        "Reset Name to Default",
+        BtRemotesProfileConnectionIndexResetBtName,
         bt_remotes_scene_profile_connection_cb,
         app);
 
@@ -80,6 +88,8 @@ bool bt_remotes_scene_profile_connection_on_event(void* context, SceneManagerEve
 
     if(event.event == BtRemotesProfileConnectionIndexBluetoothName) {
         scene_manager_next_scene(app->scene_manager, BtRemotesSceneRename);
+    } else if(event.event == BtRemotesProfileConnectionIndexResetBtName) {
+        scene_manager_next_scene(app->scene_manager, BtRemotesSceneResetBtName);
     } else if(event.event == BtRemotesProfileConnectionIndexDelayConnect) {
         app->delay_connect = app->delay_connect ? 0 : 1;
         bt_remotes_save_profile_menu_cfg(app);
