@@ -52,17 +52,13 @@ struct HidIosPhone {
 typedef struct {
     IosMode mode;
     bool    connected;
-    // Direction-pressed flags for the draw.
+    // Direction-pressed flags for the draw. ok_pressed mirrors the held state of
+    // the left mouse button — they're 1:1 in iOS-phone semantics.
     bool    up_pressed;
     bool    down_pressed;
     bool    left_pressed;
     bool    right_pressed;
     bool    ok_pressed;
-    // Sticky flag: OK was held long enough that we should keep the left mouse
-    // button down until OK release. In iOS-phone semantics OK is purely "while
-    // held = touch held", but we keep this flag for the draw + for clean
-    // release on mode change.
-    bool    left_mouse_held;
     // Slow mode uses the same acceleration ramp as the Mouse view: 1 on press,
     // +1 per repeat, capped at 20, reset on release.
     uint8_t acceleration;
@@ -257,7 +253,7 @@ static void hid_ios_phone_draw_callback(Canvas* canvas, void* context) {
     else if(model->mode == IosModeSlow) mode_label = "Slow mode";
     if(mode_label) elements_multiline_text_aligned(canvas, 3, 22, AlignLeft, AlignTop, mode_label);
 
-    if(model->left_mouse_held) {
+    if(model->ok_pressed) {
         elements_multiline_text_aligned(canvas, 0, 62, AlignLeft, AlignBottom, "Holding...");
     } else {
         canvas_draw_icon(canvas, 0, 54, &I_Pin_back_arrow_10x8);
@@ -308,7 +304,7 @@ static void hid_ios_phone_draw_callback(Canvas* canvas, void* context) {
     canvas_set_color(canvas, ColorBlack);
 
     // OK indicator
-    if(model->ok_pressed || model->left_mouse_held) {
+    if(model->ok_pressed) {
         canvas_set_bitmap_mode(canvas, true);
         canvas_draw_icon(canvas, 74, 19, &I_Pressed_Button_19x19);
         canvas_set_bitmap_mode(canvas, false);
@@ -481,7 +477,6 @@ static bool hid_ios_phone_input_callback(InputEvent* event, void* context) {
             HidIosPhoneModel * model,
             {
                 model->burst_active = false;
-                model->left_mouse_held = false;
                 model->ok_pressed = false;
                 model->back_short_pending = false;
                 hid_ios_swipe_reset_state(model);
@@ -495,24 +490,12 @@ static bool hid_ios_phone_input_callback(InputEvent* event, void* context) {
         if(event->type == InputTypePress) {
             hid_hal_mouse_press(self->hid, HID_MOUSE_BTN_LEFT);
             with_view_model(
-                self->view,
-                HidIosPhoneModel * model,
-                {
-                    model->ok_pressed = true;
-                    model->left_mouse_held = true;
-                },
-                true);
+                self->view, HidIosPhoneModel * model, { model->ok_pressed = true; }, true);
             return true;
         } else if(event->type == InputTypeRelease) {
             hid_hal_mouse_release(self->hid, HID_MOUSE_BTN_LEFT);
             with_view_model(
-                self->view,
-                HidIosPhoneModel * model,
-                {
-                    model->ok_pressed = false;
-                    model->left_mouse_held = false;
-                },
-                true);
+                self->view, HidIosPhoneModel * model, { model->ok_pressed = false; }, true);
             return true;
         }
         // InputTypeShort / Long on OK are no-ops — Press/Release already covered it.
