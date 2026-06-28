@@ -120,16 +120,67 @@ static void hid_mouse_draw_callback(Canvas* canvas, void* context) {
     canvas_set_color(canvas, ColorBlack);
 }
 
+void hid_mouse_dpad_process(
+    Hid*        hid,
+    InputEvent* event,
+    uint8_t*    acceleration,
+    bool*       up_pressed,
+    bool*       down_pressed,
+    bool*       left_pressed,
+    bool*       right_pressed) {
+    *acceleration = (event->type == InputTypePress)   ? 1 :
+                    (event->type == InputTypeRelease) ? 0 :
+                    (*acceleration >= 20)             ? 20 :
+                                                        *acceleration + 1;
+
+    if(event->key == InputKeyRight) {
+        if(event->type == InputTypePress) {
+            *right_pressed = true;
+            hid_hal_mouse_move(hid, MOUSE_MOVE_SHORT, 0);
+        } else if(event->type == InputTypeRepeat) {
+            for(uint8_t i = *acceleration; i > 1; i -= 2)
+                hid_hal_mouse_move(hid, MOUSE_MOVE_LONG, 0);
+        } else if(event->type == InputTypeRelease) {
+            *right_pressed = false;
+        }
+    } else if(event->key == InputKeyLeft) {
+        if(event->type == InputTypePress) {
+            *left_pressed = true;
+            hid_hal_mouse_move(hid, -MOUSE_MOVE_SHORT, 0);
+        } else if(event->type == InputTypeRepeat) {
+            for(uint8_t i = *acceleration; i > 1; i -= 2)
+                hid_hal_mouse_move(hid, -MOUSE_MOVE_LONG, 0);
+        } else if(event->type == InputTypeRelease) {
+            *left_pressed = false;
+        }
+    } else if(event->key == InputKeyDown) {
+        if(event->type == InputTypePress) {
+            *down_pressed = true;
+            hid_hal_mouse_move(hid, 0, MOUSE_MOVE_SHORT);
+        } else if(event->type == InputTypeRepeat) {
+            for(uint8_t i = *acceleration; i > 1; i -= 2)
+                hid_hal_mouse_move(hid, 0, MOUSE_MOVE_LONG);
+        } else if(event->type == InputTypeRelease) {
+            *down_pressed = false;
+        }
+    } else if(event->key == InputKeyUp) {
+        if(event->type == InputTypePress) {
+            *up_pressed = true;
+            hid_hal_mouse_move(hid, 0, -MOUSE_MOVE_SHORT);
+        } else if(event->type == InputTypeRepeat) {
+            for(uint8_t i = *acceleration; i > 1; i -= 2)
+                hid_hal_mouse_move(hid, 0, -MOUSE_MOVE_LONG);
+        } else if(event->type == InputTypeRelease) {
+            *up_pressed = false;
+        }
+    }
+}
+
 static void hid_mouse_process(HidMouse* hid_mouse, InputEvent* event) {
     with_view_model(
         hid_mouse->view,
         HidMouseModel * model,
         {
-            model->acceleration = (event->type == InputTypePress)   ? 1 :
-                                  (event->type == InputTypeRelease) ? 0 :
-                                  (model->acceleration >= 20)       ? 20 :
-                                                                      model->acceleration + 1;
-
             if(event->key == InputKeyBack) {
                 if(event->type == InputTypeShort) {
                     hid_hal_mouse_press(hid_mouse->hid, HID_MOUSE_BTN_RIGHT);
@@ -156,47 +207,11 @@ static void hid_mouse_process(HidMouse* hid_mouse, InputEvent* event) {
                     // Only release if it wasn't a long press
                     if(!model->left_mouse_held) model->left_mouse_pressed = false;
                 }
-            } else if(event->key == InputKeyRight) {
-                if(event->type == InputTypePress) {
-                    model->right_pressed = true;
-                    hid_hal_mouse_move(hid_mouse->hid, MOUSE_MOVE_SHORT, 0);
-                } else if(event->type == InputTypeRepeat) {
-                    for(uint8_t i = model->acceleration; i > 1; i -= 2)
-                        hid_hal_mouse_move(hid_mouse->hid, MOUSE_MOVE_LONG, 0);
-                } else if(event->type == InputTypeRelease) {
-                    model->right_pressed = false;
-                }
-            } else if(event->key == InputKeyLeft) {
-                if(event->type == InputTypePress) {
-                    model->left_pressed = true;
-                    hid_hal_mouse_move(hid_mouse->hid, -MOUSE_MOVE_SHORT, 0);
-                } else if(event->type == InputTypeRepeat) {
-                    for(uint8_t i = model->acceleration; i > 1; i -= 2)
-                        hid_hal_mouse_move(hid_mouse->hid, -MOUSE_MOVE_LONG, 0);
-                } else if(event->type == InputTypeRelease) {
-                    model->left_pressed = false;
-                }
-            } else if(event->key == InputKeyDown) {
-                if(event->type == InputTypePress) {
-                    model->down_pressed = true;
-                    hid_hal_mouse_move(hid_mouse->hid, 0, MOUSE_MOVE_SHORT);
-                } else if(event->type == InputTypeRepeat) {
-                    for(uint8_t i = model->acceleration; i > 1; i -= 2)
-                        hid_hal_mouse_move(hid_mouse->hid, 0, MOUSE_MOVE_LONG);
-
-                } else if(event->type == InputTypeRelease) {
-                    model->down_pressed = false;
-                }
-            } else if(event->key == InputKeyUp) {
-                if(event->type == InputTypePress) {
-                    model->up_pressed = true;
-                    hid_hal_mouse_move(hid_mouse->hid, 0, -MOUSE_MOVE_SHORT);
-                } else if(event->type == InputTypeRepeat) {
-                    for(uint8_t i = model->acceleration; i > 1; i -= 2)
-                        hid_hal_mouse_move(hid_mouse->hid, 0, -MOUSE_MOVE_LONG);
-                } else if(event->type == InputTypeRelease) {
-                    model->up_pressed = false;
-                }
+            } else {
+                hid_mouse_dpad_process(
+                    hid_mouse->hid, event, &model->acceleration,
+                    &model->up_pressed, &model->down_pressed,
+                    &model->left_pressed, &model->right_pressed);
             }
         },
         true);

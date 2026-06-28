@@ -403,59 +403,17 @@ static void hid_ios_phone_back_tap_timer_cb(void* context) {
 // Input
 // ---------------------------------------------------------------------------
 
-// Slow mode input handling: matches the standalone Mouse view's behavior so
-// the user has a precision fallback identical to what they're used to.
+// Slow mode input handling: forwards to the standalone Mouse view's shared
+// helper so behavior stays in lockstep with the regular Mouse remote.
 static void hid_ios_slow_process(HidIosPhone* self, InputEvent* event) {
     with_view_model(
         self->view,
         HidIosPhoneModel * model,
         {
-            model->acceleration = (event->type == InputTypePress)   ? 1 :
-                                  (event->type == InputTypeRelease) ? 0 :
-                                  (model->acceleration >= 20)       ? 20 :
-                                                                      model->acceleration + 1;
-
-            if(event->key == InputKeyRight) {
-                if(event->type == InputTypePress) {
-                    model->right_pressed = true;
-                    hid_hal_mouse_move(self->hid, MOUSE_MOVE_SHORT, 0);
-                } else if(event->type == InputTypeRepeat) {
-                    for(uint8_t i = model->acceleration; i > 1; i -= 2)
-                        hid_hal_mouse_move(self->hid, MOUSE_MOVE_LONG, 0);
-                } else if(event->type == InputTypeRelease) {
-                    model->right_pressed = false;
-                }
-            } else if(event->key == InputKeyLeft) {
-                if(event->type == InputTypePress) {
-                    model->left_pressed = true;
-                    hid_hal_mouse_move(self->hid, -MOUSE_MOVE_SHORT, 0);
-                } else if(event->type == InputTypeRepeat) {
-                    for(uint8_t i = model->acceleration; i > 1; i -= 2)
-                        hid_hal_mouse_move(self->hid, -MOUSE_MOVE_LONG, 0);
-                } else if(event->type == InputTypeRelease) {
-                    model->left_pressed = false;
-                }
-            } else if(event->key == InputKeyDown) {
-                if(event->type == InputTypePress) {
-                    model->down_pressed = true;
-                    hid_hal_mouse_move(self->hid, 0, MOUSE_MOVE_SHORT);
-                } else if(event->type == InputTypeRepeat) {
-                    for(uint8_t i = model->acceleration; i > 1; i -= 2)
-                        hid_hal_mouse_move(self->hid, 0, MOUSE_MOVE_LONG);
-                } else if(event->type == InputTypeRelease) {
-                    model->down_pressed = false;
-                }
-            } else if(event->key == InputKeyUp) {
-                if(event->type == InputTypePress) {
-                    model->up_pressed = true;
-                    hid_hal_mouse_move(self->hid, 0, -MOUSE_MOVE_SHORT);
-                } else if(event->type == InputTypeRepeat) {
-                    for(uint8_t i = model->acceleration; i > 1; i -= 2)
-                        hid_hal_mouse_move(self->hid, 0, -MOUSE_MOVE_LONG);
-                } else if(event->type == InputTypeRelease) {
-                    model->up_pressed = false;
-                }
-            }
+            hid_mouse_dpad_process(
+                self->hid, event, &model->acceleration,
+                &model->up_pressed, &model->down_pressed,
+                &model->left_pressed, &model->right_pressed);
         },
         true);
 }
