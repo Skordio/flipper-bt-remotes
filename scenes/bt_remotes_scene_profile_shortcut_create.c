@@ -12,9 +12,10 @@
 // The file can be moved anywhere on the SD card afterwards — the firmware
 // archive routes .btremote on extension, not location.
 
-// Submenu row 0 = profile-only; rows 1..15 = bt_remotes_menu_default[row-1];
-// rows 16.. = pinned item (collection or gesture) at pidx = row-16. EventDone
-// sits above any possible pick (fixed 0..15 + pins 16..31 < 100).
+// Submenu row 0 = profile-only; rows 1..MENU_ITEM_COUNT-1 map to
+// bt_remotes_menu_default[row-1]; rows MENU_ITEM_COUNT.. = pinned item
+// (collection or gesture) at pidx = row - MENU_ITEM_COUNT. EventDone sits
+// above any possible pick (MENU_ITEM_COUNT + PINNED_MAX <= 33 < 100).
 enum BtRemotesShortcutCreateEvent {
     BtRemotesShortcutCreateEventPickBase = 0,
     BtRemotesShortcutCreateEventDone     = 100,
@@ -23,7 +24,7 @@ enum BtRemotesShortcutCreateEvent {
 // target encoding (mirrors the Start-menu event space shifted by nothing):
 //   BT_REMOTES_LAUNCHER_REMOTE_NONE          — profile-only shortcut
 //   < BT_REMOTES_MENU_ITEM_COUNT             — fixed remote index (Remote: field)
-//   >= BT_REMOTES_MENU_ITEM_COUNT            — pinned slot pidx + 16 (Pin: field)
+//   >= BT_REMOTES_MENU_ITEM_COUNT            — pinned slot pidx + MENU_ITEM_COUNT (Pin: field)
 static const char* bt_remotes_shortcut_target_name(Hid* app, uint8_t target) {
     if(target >= BT_REMOTES_MENU_ITEM_COUNT) {
         return app->pinned_collections[target - BT_REMOTES_MENU_ITEM_COUNT];
@@ -124,8 +125,9 @@ bool bt_remotes_scene_profile_shortcut_create_on_event(void* context, SceneManag
             scene_manager_previous_scene(app->scene_manager);
 
         } else {
-            // Pick: 0 = profile only, 1..15 = remote index + 1,
-            // >= 16 = pinned slot pidx + 16 (passed through unchanged).
+            // Pick: 0 = profile only, 1..MENU_ITEM_COUNT-1 = remote index + 1,
+            // >= MENU_ITEM_COUNT = pinned slot pidx + MENU_ITEM_COUNT
+            // (passed through unchanged).
             uint8_t target =
                 (event.event == 0) ? BT_REMOTES_LAUNCHER_REMOTE_NONE :
                 (event.event < BT_REMOTES_MENU_ITEM_COUNT) ? (uint8_t)(event.event - 1) :

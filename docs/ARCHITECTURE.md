@@ -214,7 +214,7 @@ All config files are FlipperFormat text. Constants/file-types live in `bt_remote
   Version: 1
   name: My Keyboard
   mac: C0 AB CD EF 12 34
-  menu_order: <32 uint32 values>     # fixed idx 0‥15, pinned slot 16‥31, 0xFF = unused
+  menu_order: <33 uint32 values>     # fixed idx 0‥16, pinned slot 17‥32, 0xFF = unused
   menu_hidden: <uint32 bitmask>      # bit i set → fixed item i hidden
   keynote_back_key: <uint32>         # KeynoteBackKey enum
   media_mode: <uint32>               # MediaMode enum
@@ -228,7 +228,7 @@ All config files are FlipperFormat text. Constants/file-types live in `bt_remote
   `bt_remotes_save_profile_menu_cfg` writes the **full** set above. Note `bt_hid_save_cfg` (used
   by rename/reset) writes only `name`+`mac` to the **active** `.bt_hid.cfg` mirror — the full
   per-profile cfg is then re-snapshotted via `save_profile_menu_cfg`. Old cfg files missing any
-  key load with safe defaults and are migrated on read (see the V1 migration arm in
+  key load with safe defaults and are migrated on read (see the V1/V2 migration arms in
   `bt_remotes_profile_activate`).
 - **`{name}.keys`** — BLE bonding keys binary blob (written by the BT service).
 - **`{name}.pins`** — `Flipper BT Collection Pins` v1. Per-profile list of Start-menu pins:
