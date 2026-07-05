@@ -176,6 +176,13 @@ typedef enum {
 #define IOS_SWIPE_DISTANCE_MAX     600
 #define IOS_SWIPE_DISTANCE_STEP    40
 #define IOS_SWIPE_DISTANCE_DEFAULT 320
+//   Swipe Speed: px/sec the cursor travels during the drag portion of a swipe.
+//                Lower = more time on screen for iOS to register the gesture
+//                (helpful if swipes occasionally land as taps); higher = snappier.
+#define IOS_SWIPE_SPEED_MIN     150
+#define IOS_SWIPE_SPEED_MAX     1500
+#define IOS_SWIPE_SPEED_STEP    50
+#define IOS_SWIPE_SPEED_DEFAULT 450
 //   Double-Tap Window: max ms gap between two short presses to count as a
 //                      double-tap (Back single-tap action is deferred by this
 //                      same window).
@@ -293,6 +300,7 @@ struct Hid {
     uint16_t tiktok_gesture_swipe;  // px — drag distance while the button is held
     uint16_t ios_burst_distance;       // px — total travel of a default-mode burst
     uint16_t ios_swipe_distance;       // px — held-button drag distance for swipes
+    uint16_t ios_swipe_speed_px_s;     // px/sec — drag speed during a swipe
     uint16_t ios_dbl_tap_window_ms;    // ms — max gap between two short presses
     uint8_t  ios_swipe_return_to_start; // 0 = stay, 1 = move cursor back to start
     uint8_t  delay_connect; // 0 = connect immediately; 1 = only connect inside a remote

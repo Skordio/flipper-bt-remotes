@@ -14,10 +14,14 @@
 // burst (480 px) plays out in ~825 ms — long enough to feel the deceleration
 // curve clearly while keeping average velocity around 580 px/s.
 #define IOS_BURST_DURATION_MS 825
-// Per-axis chunk size for the swipe gesture (HID mouse delta is int8, max 127).
-#define IOS_SWIPE_CHUNK 90
-// Delay between swipe-chunk packets in ms.
-#define IOS_SWIPE_STEP_MS 18
+// Delay between swipe-chunk packets in ms. Chunk size is computed at swipe
+// start from ios_swipe_speed_px_s so the user's px/sec setting controls
+// drag speed at a fixed tick rate (HID mouse delta is int8, max 127).
+#define IOS_SWIPE_STEP_MS 22
+// Pixels of cursor motion emitted BEFORE the mouse button is pressed. iOS
+// classifies touch-down as the start of a swipe vs. a tap based on whether the
+// cursor is already moving when the button goes down.
+#define IOS_SWIPE_LEAD_PX 14
 
 typedef enum {
     IosModeDefault = 0,
@@ -30,6 +34,7 @@ typedef enum {
 // free to handle Long-Back (exit) and other events during the gesture.
 typedef enum {
     IosSwipePhaseIdle = 0,
+    IosSwipePhaseLead,    // cursor moving, button NOT yet pressed (iOS gesture priming)
     IosSwipePhaseDrag,    // button pressed; emit chunks until remaining is 0
     IosSwipePhaseRelease, // emit the button release on this tick
     IosSwipePhaseReturn,  // optional: drag back to the starting position (no button)
@@ -87,6 +92,7 @@ typedef struct {
     int           swipe_remaining_y; // px left to emit on the y axis this phase
     int           swipe_total_x;     // saved for the return leg's mirror move
     int           swipe_total_y;
+    int           swipe_chunk_px;    // per-tick chunk derived from ios_swipe_speed_px_s
 } HidIosPhoneModel;
 
 // ---------------------------------------------------------------------------
@@ -99,10 +105,12 @@ static uint32_t hid_ios_now_ms(void) {
     return (uint32_t)((uint64_t)furi_get_tick() * 1000u / freq);
 }
 
-// Clamp a signed delta to one IOS_SWIPE_CHUNK step (HID mouse delta is int8).
-static int8_t hid_ios_chunk_step(int remaining) {
-    if(remaining > IOS_SWIPE_CHUNK) return IOS_SWIPE_CHUNK;
-    if(remaining < -IOS_SWIPE_CHUNK) return -IOS_SWIPE_CHUNK;
+// Clamp a signed delta to one chunk step (HID mouse delta is int8, max 127).
+static int8_t hid_ios_chunk_step(int remaining, int chunk) {
+    if(chunk > 127) chunk = 127;
+    if(chunk < 1) chunk = 1;
+    if(remaining > chunk) return (int8_t)chunk;
+    if(remaining < -chunk) return (int8_t)-chunk;
     return (int8_t)remaining;
 }
 
@@ -131,10 +139,18 @@ static void hid_ios_swipe_delta_for_key(Hid* hid, InputKey key, int* out_dx, int
     else if(key == InputKeyUp)    *out_dy = dist;
 }
 
-// Kick off a non-blocking swipe: press the mouse button, set the state machine
-// to Drag, and start the swipe_timer. Returns false (and emits nothing) if a
-// swipe is already in progress. Drops the model lock around the BLE call.
+// Kick off a non-blocking swipe: start in Lead phase so the cursor begins
+// moving before the mouse button is pressed (iOS reads stationary touch-down
+// as a tap, not a swipe). The press itself happens at the end of the first
+// timer tick, after that tick's lead motion. Returns false if a swipe is
+// already in progress.
 static bool hid_ios_swipe_start(HidIosPhone* self, int dx, int dy) {
+    // px/sec -> px/tick; ceil so the slowest setting still emits at least 1 px
+    // per tick (otherwise the swipe would stall on round-down).
+    int chunk = ((int)self->hid->ios_swipe_speed_px_s * IOS_SWIPE_STEP_MS + 999) / 1000;
+    if(chunk < 1) chunk = 1;
+    if(chunk > 127) chunk = 127;
+
     bool busy = false;
     with_view_model(
         self->view,
@@ -143,34 +159,39 @@ static bool hid_ios_swipe_start(HidIosPhone* self, int dx, int dy) {
             if(model->swipe_phase != IosSwipePhaseIdle) {
                 busy = true;
             } else {
-                model->swipe_phase = IosSwipePhaseDrag;
+                model->swipe_phase = IosSwipePhaseLead;
                 model->swipe_remaining_x = dx;
                 model->swipe_remaining_y = dy;
                 model->swipe_total_x = dx;
                 model->swipe_total_y = dy;
+                model->swipe_chunk_px = chunk;
             }
         },
         false);
     if(busy) return false;
-    hid_hal_mouse_press(self->hid, HID_MOUSE_BTN_LEFT);
     furi_timer_stop(self->swipe_timer);
     furi_timer_start(self->swipe_timer, IOS_SWIPE_STEP_MS);
     return true;
 }
 
 // One tick of the swipe state machine. Each tick emits at most one mouse-move
-// or button event so the input thread sees long-Back / mode-toggle events
-// promptly. State transitions:
+// plus optionally one button event so the input thread sees long-Back /
+// mode-toggle events promptly. State transitions:
+//   Lead    -> emit a short lead move (capped so >=1 px is left for Drag),
+//              press the mouse button after the move, advance to Drag.
 //   Drag    -> emit one chunk; when remaining_x and remaining_y are both 0,
 //              advance to Release.
 //   Release -> emit mouse release; if Return-to-Start is on, prime the mirror
 //              move and advance to Return; otherwise Idle + stop timer.
 //   Return  -> emit one chunk (no button); when remaining is 0, Idle + stop.
+// Per-tick BLE ordering is move -> press -> release, so in Lead the cursor is
+// already in motion at touch-down.
 static void hid_ios_phone_swipe_timer_cb(void* context) {
     furi_assert(context);
     HidIosPhone* self = context;
 
     int8_t dx = 0, dy = 0;
+    bool   do_press    = false;
     bool   do_release  = false;
     bool   stop_timer  = false;
 
@@ -179,12 +200,37 @@ static void hid_ios_phone_swipe_timer_cb(void* context) {
         HidIosPhoneModel * model,
         {
             switch(model->swipe_phase) {
+            case IosSwipePhaseLead: {
+                int sign_x = (model->swipe_remaining_x > 0) ? 1 :
+                             (model->swipe_remaining_x < 0) ? -1 : 0;
+                int sign_y = (model->swipe_remaining_y > 0) ? 1 :
+                             (model->swipe_remaining_y < 0) ? -1 : 0;
+                int lead = IOS_SWIPE_LEAD_PX;
+                if(sign_x != 0) {
+                    int max_lead = (model->swipe_remaining_x * sign_x) - 1;
+                    if(max_lead < 1) max_lead = 1;
+                    if(lead > max_lead) lead = max_lead;
+                    int amt = lead * sign_x;
+                    dx = (int8_t)amt;
+                    model->swipe_remaining_x -= amt;
+                } else if(sign_y != 0) {
+                    int max_lead = (model->swipe_remaining_y * sign_y) - 1;
+                    if(max_lead < 1) max_lead = 1;
+                    if(lead > max_lead) lead = max_lead;
+                    int amt = lead * sign_y;
+                    dy = (int8_t)amt;
+                    model->swipe_remaining_y -= amt;
+                }
+                do_press = true;
+                model->swipe_phase = IosSwipePhaseDrag;
+                break;
+            }
             case IosSwipePhaseDrag:
                 if(model->swipe_remaining_x != 0) {
-                    dx = hid_ios_chunk_step(model->swipe_remaining_x);
+                    dx = hid_ios_chunk_step(model->swipe_remaining_x, model->swipe_chunk_px);
                     model->swipe_remaining_x -= dx;
                 } else if(model->swipe_remaining_y != 0) {
-                    dy = hid_ios_chunk_step(model->swipe_remaining_y);
+                    dy = hid_ios_chunk_step(model->swipe_remaining_y, model->swipe_chunk_px);
                     model->swipe_remaining_y -= dy;
                 } else {
                     model->swipe_phase = IosSwipePhaseRelease;
@@ -203,10 +249,10 @@ static void hid_ios_phone_swipe_timer_cb(void* context) {
                 break;
             case IosSwipePhaseReturn:
                 if(model->swipe_remaining_x != 0) {
-                    dx = hid_ios_chunk_step(model->swipe_remaining_x);
+                    dx = hid_ios_chunk_step(model->swipe_remaining_x, model->swipe_chunk_px);
                     model->swipe_remaining_x -= dx;
                 } else if(model->swipe_remaining_y != 0) {
-                    dy = hid_ios_chunk_step(model->swipe_remaining_y);
+                    dy = hid_ios_chunk_step(model->swipe_remaining_y, model->swipe_chunk_px);
                     model->swipe_remaining_y -= dy;
                 } else {
                     hid_ios_swipe_reset_state(model);
@@ -222,6 +268,7 @@ static void hid_ios_phone_swipe_timer_cb(void* context) {
         false);
 
     if(dx != 0 || dy != 0) hid_hal_mouse_move(self->hid, dx, dy);
+    if(do_press) hid_hal_mouse_press(self->hid, HID_MOUSE_BTN_LEFT);
     if(do_release) hid_hal_mouse_release(self->hid, HID_MOUSE_BTN_LEFT);
     if(stop_timer) furi_timer_stop(self->swipe_timer);
 }

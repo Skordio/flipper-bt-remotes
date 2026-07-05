@@ -140,6 +140,7 @@ static const char* const remote_settings_help_pages[] = {
     "accelerating on hold). Double-tap Back to return.\n\n"
     "Burst Dist: total px traveled in a default-mode burst.\n"
     "Swipe Dist: total px of the held-button drag.\n"
+    "Swipe Spd: drag speed in px/sec — lower if iOS misses your swipes.\n"
     "Dbl Tap ms: max gap between two short presses to count as a double-tap.\n"
     "Return: when On, the cursor moves back to its pre-swipe position after "
     "each swipe.",

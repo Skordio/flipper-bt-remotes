@@ -174,6 +174,8 @@ void bt_remotes_save_profile_menu_cfg(Hid* app) {
         flipper_format_write_uint32(fff, "ios_burst_distance", &ios_burst_distance_u32, 1);
         uint32_t ios_swipe_distance_u32 = app->ios_swipe_distance;
         flipper_format_write_uint32(fff, "ios_swipe_distance", &ios_swipe_distance_u32, 1);
+        uint32_t ios_swipe_speed_u32 = app->ios_swipe_speed_px_s;
+        flipper_format_write_uint32(fff, "ios_swipe_speed_px_s", &ios_swipe_speed_u32, 1);
         uint32_t ios_dbl_tap_window_ms_u32 = app->ios_dbl_tap_window_ms;
         flipper_format_write_uint32(fff, "ios_dbl_tap_window_ms", &ios_dbl_tap_window_ms_u32, 1);
         uint32_t ios_swipe_return_to_start_u32 = app->ios_swipe_return_to_start;
@@ -590,6 +592,18 @@ bool bt_remotes_profile_activate(Hid* app) {
                 app->ios_swipe_distance = (uint16_t)ios_swipe_distance_u32;
             } else {
                 app->ios_swipe_distance = IOS_SWIPE_DISTANCE_DEFAULT;
+            }
+            flipper_format_rewind(mfff);
+            uint32_t ios_swipe_speed_u32 = IOS_SWIPE_SPEED_DEFAULT;
+            if(flipper_format_read_uint32(
+                   mfff, "ios_swipe_speed_px_s", &ios_swipe_speed_u32, 1)) {
+                if(ios_swipe_speed_u32 < IOS_SWIPE_SPEED_MIN)
+                    ios_swipe_speed_u32 = IOS_SWIPE_SPEED_MIN;
+                if(ios_swipe_speed_u32 > IOS_SWIPE_SPEED_MAX)
+                    ios_swipe_speed_u32 = IOS_SWIPE_SPEED_MAX;
+                app->ios_swipe_speed_px_s = (uint16_t)ios_swipe_speed_u32;
+            } else {
+                app->ios_swipe_speed_px_s = IOS_SWIPE_SPEED_DEFAULT;
             }
             flipper_format_rewind(mfff);
             uint32_t ios_dbl_tap_window_ms_u32 = IOS_DBL_TAP_WINDOW_DEFAULT;

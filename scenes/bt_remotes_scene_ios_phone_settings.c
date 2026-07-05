@@ -6,11 +6,12 @@
 // immediately through bt_remotes_save_profile_menu_cfg so the value survives
 // profile_activate.
 
-#define IOS_PHONE_ROW_BURST     0
-#define IOS_PHONE_ROW_SWIPE     1
-#define IOS_PHONE_ROW_DBL_TAP   2
-#define IOS_PHONE_ROW_RETURN    3
-#define IOS_PHONE_ROW_HELP      4
+#define IOS_PHONE_ROW_BURST      0
+#define IOS_PHONE_ROW_SWIPE      1
+#define IOS_PHONE_ROW_SWIPE_SPD  2
+#define IOS_PHONE_ROW_DBL_TAP    3
+#define IOS_PHONE_ROW_RETURN     4
+#define IOS_PHONE_ROW_HELP       5
 
 static void ios_burst_distance_changed(VariableItem* item) {
     Hid* app = variable_item_get_context(item);
@@ -28,6 +29,17 @@ static void ios_swipe_distance_changed(VariableItem* item) {
     uint8_t idx = variable_item_get_current_value_index(item);
     uint16_t val = IOS_SWIPE_DISTANCE_MIN + (uint16_t)idx * IOS_SWIPE_DISTANCE_STEP;
     app->ios_swipe_distance = val;
+    FuriString* s = furi_string_alloc_printf("%u", val);
+    variable_item_set_current_value_text(item, furi_string_get_cstr(s));
+    furi_string_free(s);
+    bt_remotes_save_profile_menu_cfg(app);
+}
+
+static void ios_swipe_speed_changed(VariableItem* item) {
+    Hid* app = variable_item_get_context(item);
+    uint8_t idx = variable_item_get_current_value_index(item);
+    uint16_t val = IOS_SWIPE_SPEED_MIN + (uint16_t)idx * IOS_SWIPE_SPEED_STEP;
+    app->ios_swipe_speed_px_s = val;
     FuriString* s = furi_string_alloc_printf("%u", val);
     variable_item_set_current_value_text(item, furi_string_get_cstr(s));
     furi_string_free(s);
@@ -99,6 +111,23 @@ void bt_remotes_scene_ios_phone_settings_on_enter(void* context) {
         if(cur < IOS_SWIPE_DISTANCE_MIN) cur = IOS_SWIPE_DISTANCE_MIN;
         if(cur > IOS_SWIPE_DISTANCE_MAX) cur = IOS_SWIPE_DISTANCE_MAX;
         uint8_t idx = (uint8_t)((cur - IOS_SWIPE_DISTANCE_MIN) / IOS_SWIPE_DISTANCE_STEP);
+        variable_item_set_current_value_index(item, idx);
+        s = furi_string_alloc_printf("%u", cur);
+        variable_item_set_current_value_text(item, furi_string_get_cstr(s));
+        furi_string_free(s);
+    }
+
+    item = variable_item_list_add(
+        vil,
+        "Swipe Spd",
+        IOS_VALUE_COUNT(IOS_SWIPE_SPEED_MIN, IOS_SWIPE_SPEED_MAX, IOS_SWIPE_SPEED_STEP),
+        ios_swipe_speed_changed,
+        app);
+    {
+        uint16_t cur = app->ios_swipe_speed_px_s;
+        if(cur < IOS_SWIPE_SPEED_MIN) cur = IOS_SWIPE_SPEED_MIN;
+        if(cur > IOS_SWIPE_SPEED_MAX) cur = IOS_SWIPE_SPEED_MAX;
+        uint8_t idx = (uint8_t)((cur - IOS_SWIPE_SPEED_MIN) / IOS_SWIPE_SPEED_STEP);
         variable_item_set_current_value_index(item, idx);
         s = furi_string_alloc_printf("%u", cur);
         variable_item_set_current_value_text(item, furi_string_get_cstr(s));
