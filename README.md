@@ -91,9 +91,10 @@ This app lives in the Momentum firmware tree. From the firmware root:
 - **Custom Gestures:** Main menu → **Custom Gestures** → create one, add command lines (there's a
   built-in Help page listing every command), then run or pin it.
 - **Launch a profile directly:** In a profile, go to **Settings → Profile Management → Create
-  Shortcut**. This writes a `.btremote` file to `apps_data/bt_remotes/launchers/`. Open it from
-  the Flipper's File Browser (or pin it to Favorites) and the app boots straight into that
-  profile's menu — no Profile Select. Move the `.btremote` anywhere on the SD card; it still works.
+  Shortcut**, then pick **Profile Only** or a specific remote. This writes a `.btremote` file to
+  `apps_data/bt_remotes/launchers/`. Open it from the Flipper's File Browser (or pin it to
+  Favorites) and the app boots straight into that profile's menu — or all the way into the picked
+  remote — no Profile Select. Move the `.btremote` anywhere on the SD card; it still works.
   Requires firmware support (Momentum).
 
 ### Where files are stored

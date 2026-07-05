@@ -121,9 +121,10 @@ static const char* const remote_settings_help_pages[] = {
     "Existing pairings are preserved.\n\n"
     "Create Shortcut:\n"
     "Writes a .btremote file to /ext/apps_data/bt_remotes/launchers/ that "
-    "opens this profile directly from File Browser or Favorites. Move the "
-    "file anywhere — routing is by extension. Rename the profile and the "
-    "shortcut breaks.\n\n"
+    "opens this profile directly from File Browser or Favorites. Pick "
+    "\"Profile Only\" to land on the remote menu, or pick a remote to jump "
+    "straight into it. Move the file anywhere — routing is by extension. "
+    "Rename the profile and the shortcut breaks.\n\n"
     "Delete Profile:\n"
     "Removes the profile, its menu layout, its per-remote settings, and its "
     "stored pairings. Cannot be undone. Returns you to Profile Select.",

@@ -1125,6 +1125,7 @@ static uint32_t hid_ptt_menu_view(void* context) {
 static Hid* bt_remotes_alloc(void) {
     Hid* app = malloc(sizeof(Hid));
     memset(app, 0, sizeof(Hid));
+    app->pending_launcher_remote = BT_REMOTES_LAUNCHER_REMOTE_NONE;
 
     app->gui = furi_record_open(RECORD_GUI);
     app->bt = furi_record_open(RECORD_BT);
@@ -1367,6 +1368,23 @@ static bool bt_remotes_launcher_try_load(Hid* app, const char* path) {
             break;
         }
         bt_remotes_pinned_load(app);
+
+        // Optional Remote: field — deep-link into a specific Start-menu item.
+        // Matched by label against bt_remotes_menu_default[] (stable across
+        // menu reorder/hiding and future index shifts). Settings is excluded.
+        // Unknown labels don't fail the launch; the profile still opens to Start.
+        if(flipper_format_read_string(fff, "Remote", tmp)) {
+            for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT - 1; i++) {
+                if(furi_string_cmp_str(tmp, bt_remotes_menu_default[i].label) == 0) {
+                    app->pending_launcher_remote = i;
+                    break;
+                }
+            }
+            if(app->pending_launcher_remote == BT_REMOTES_LAUNCHER_REMOTE_NONE) {
+                FURI_LOG_W(
+                    "BtRemotes", "Unknown launcher remote: %s", furi_string_get_cstr(tmp));
+            }
+        }
         ok = true;
     } while(0);
     flipper_format_file_close(fff);
