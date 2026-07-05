@@ -1323,9 +1323,9 @@ static void bt_remotes_free(Hid* app) {
 
 // Parse a .btremote launcher file, look up the referenced profile, and activate
 // it. Returns true if the app is ready to jump straight to the Start scene.
-// On any error (unreadable file, wrong filetype/version, missing/empty Profile
-// field, no matching profile.cfg, activation failure) the app state is left
-// clean and the caller falls through to Profile Select.
+// On any error (unreadable file, wrong filetype/version, invalid or missing
+// Profile field, no matching profile.cfg, activation failure) the app state is
+// left clean and the caller falls through to Profile Select.
 static bool bt_remotes_launcher_try_load(Hid* app, const char* path) {
     bool           ok   = false;
     FlipperFormat* fff  = flipper_format_file_alloc(app->storage);
@@ -1338,19 +1338,25 @@ static bool bt_remotes_launcher_try_load(Hid* app, const char* path) {
         if(strcmp(furi_string_get_cstr(tmp), BT_REMOTES_LAUNCHER_FILETYPE) != 0) break;
         if(ver != BT_REMOTES_LAUNCHER_VERSION) break;
         if(!flipper_format_read_string(fff, "Profile", prof)) break;
-        if(furi_string_empty(prof)) break;
 
-        // Confirm the profile .cfg exists before mutating app state.
+        // Reject anything the profile-name UI would reject (empty, or containing
+        // '<>:"/\|?*'). Blocking '/' and '\' is what prevents a hand-edited
+        // "Profile: ../foo" from resolving outside BT_REMOTES_PROFILES_DIR. Also
+        // guard the length so strlcpy into active_profile doesn't silently
+        // truncate and end up activating a different profile that shares the
+        // truncated prefix.
+        furi_string_reset(tmp);
+        if(!bt_remotes_validate_name(furi_string_get_cstr(prof), tmp)) break;
+        if(furi_string_size(prof) >= BT_REMOTES_PROFILE_NAME_LEN) break;
+
         FuriString* profile_path = furi_string_alloc_printf(
             "%s/%s%s",
             BT_REMOTES_PROFILES_DIR,
             furi_string_get_cstr(prof),
             BT_REMOTES_CFG_EXT);
-        FileInfo fi;
-        FS_Error err = storage_common_stat(
-            app->storage, furi_string_get_cstr(profile_path), &fi);
+        bool exists = storage_file_exists(app->storage, furi_string_get_cstr(profile_path));
         furi_string_free(profile_path);
-        if(err != FSE_OK) break;
+        if(!exists) break;
 
         strlcpy(
             app->active_profile,
@@ -1404,20 +1410,29 @@ int32_t bt_remotes_app(void* p) {
 
     dolphin_deed(DolphinDeedPluginStart);
 
-    scene_manager_next_scene(app->scene_manager, BtRemotesSceneProfileSelect);
-
     // Deep-link: if launched via a .btremote shortcut, activate the referenced
-    // profile and push Start on top of Profile Select. On any launcher error,
-    // fall through so the user lands on Profile Select as usual.
-    if(p != NULL) {
+    // profile and start BLE (for immediate-connect) BEFORE pushing Profile
+    // Select — its on_enter sees `ble_started` and skips its normal setup,
+    // queueing an AutoAdvance event that pushes Start (same short-circuit used
+    // right after profile_new). Delay-connect profiles fall through Profile
+    // Select's normal path; we push Start explicitly below to cover that case.
+    bool launcher_ok = false;
+    if(p != NULL && ((const char*)p)[0] != '\0') {
         const char* arg = (const char*)p;
-        if(strlen(arg) > 0 && bt_remotes_launcher_try_load(app, arg)) {
+        if(bt_remotes_launcher_try_load(app, arg)) {
             bt_remotes_start_ble_if_immediate(app);
-            scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, 0);
-            scene_manager_next_scene(app->scene_manager, BtRemotesSceneStart);
-        } else if(strlen(arg) > 0) {
+            launcher_ok = true;
+        } else {
             FURI_LOG_W("BtRemotes", "Ignored launcher arg: %s", arg);
         }
+    }
+
+    scene_manager_next_scene(app->scene_manager, BtRemotesSceneProfileSelect);
+    if(launcher_ok && !app->ble_started) {
+        // delay_connect profile: Profile Select rendered normally; push Start
+        // on top so the user still lands in the profile. Start owns BLE for
+        // delay_connect (starts it on the way into any non-Settings destination).
+        scene_manager_next_scene(app->scene_manager, BtRemotesSceneStart);
     }
 
     view_dispatcher_run(app->view_dispatcher);
