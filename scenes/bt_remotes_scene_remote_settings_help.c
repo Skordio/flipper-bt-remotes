@@ -119,6 +119,11 @@ static const char* const remote_settings_help_pages[] = {
     "Rename Profile:\n"
     "Changes the profile's filename and the label shown on Profile Select. "
     "Existing pairings are preserved.\n\n"
+    "Create Shortcut:\n"
+    "Writes a .btremote file to /ext/apps_data/bt_remotes/launchers/ that "
+    "opens this profile directly from File Browser or Favorites. Move the "
+    "file anywhere — routing is by extension. Rename the profile and the "
+    "shortcut breaks.\n\n"
     "Delete Profile:\n"
     "Removes the profile, its menu layout, its per-remote settings, and its "
     "stored pairings. Cannot be undone. Returns you to Profile Select.",

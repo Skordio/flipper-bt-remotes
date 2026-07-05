@@ -1321,15 +1321,67 @@ static void bt_remotes_free(Hid* app) {
     free(app);
 }
 
+// Parse a .btremote launcher file, look up the referenced profile, and activate
+// it. Returns true if the app is ready to jump straight to the Start scene.
+// On any error (unreadable file, wrong filetype/version, missing/empty Profile
+// field, no matching profile.cfg, activation failure) the app state is left
+// clean and the caller falls through to Profile Select.
+static bool bt_remotes_launcher_try_load(Hid* app, const char* path) {
+    bool           ok   = false;
+    FlipperFormat* fff  = flipper_format_file_alloc(app->storage);
+    FuriString*    tmp  = furi_string_alloc();
+    FuriString*    prof = furi_string_alloc();
+    do {
+        if(!flipper_format_file_open_existing(fff, path)) break;
+        uint32_t ver = 0;
+        if(!flipper_format_read_header(fff, tmp, &ver)) break;
+        if(strcmp(furi_string_get_cstr(tmp), BT_REMOTES_LAUNCHER_FILETYPE) != 0) break;
+        if(ver != BT_REMOTES_LAUNCHER_VERSION) break;
+        if(!flipper_format_read_string(fff, "Profile", prof)) break;
+        if(furi_string_empty(prof)) break;
+
+        // Confirm the profile .cfg exists before mutating app state.
+        FuriString* profile_path = furi_string_alloc_printf(
+            "%s/%s%s",
+            BT_REMOTES_PROFILES_DIR,
+            furi_string_get_cstr(prof),
+            BT_REMOTES_CFG_EXT);
+        FileInfo fi;
+        FS_Error err = storage_common_stat(
+            app->storage, furi_string_get_cstr(profile_path), &fi);
+        furi_string_free(profile_path);
+        if(err != FSE_OK) break;
+
+        strlcpy(
+            app->active_profile,
+            furi_string_get_cstr(prof),
+            BT_REMOTES_PROFILE_NAME_LEN);
+        if(!bt_remotes_profile_activate(app)) {
+            app->active_profile[0] = '\0';
+            break;
+        }
+        bt_remotes_pinned_load(app);
+        ok = true;
+    } while(0);
+    flipper_format_file_close(fff);
+    flipper_format_free(fff);
+    furi_string_free(tmp);
+    furi_string_free(prof);
+    return ok;
+}
+
 // This app targets Momentum firmware. It doesn't enforce that at runtime: it
 // already fails to load on stock/Unleashed/RogueMaster because it imports several
 // app-API symbols only Momentum exports (a set of built-in icons plus strtok /
 // variable_item_list_set_header), so those firmwares reject it with "Update
 // Firmware to use with this Application". See docs/ARCHITECTURE.md → Firmware
 // Compatibility for the full analysis and the path to broader compatibility.
+//
+// When invoked with a non-empty argument, `p` is treated as the path to a
+// .btremote launcher file (see docs/ARCHITECTURE.md → Profile Launchers). If
+// the launcher resolves cleanly, the app jumps straight to the Start menu for
+// that profile with Profile Select underneath (so Back still returns there).
 int32_t bt_remotes_app(void* p) {
-    UNUSED(p);
-
     Hid* app = bt_remotes_alloc();
 
     notification_internal_message(app->notifications, &sequence_reset_blue);
@@ -1345,6 +1397,7 @@ int32_t bt_remotes_app(void* p) {
 
     storage_simply_mkdir(app->storage, BT_REMOTES_PROFILES_DIR);
     storage_simply_mkdir(app->storage, BT_REMOTES_COLLECTION_DIR);
+    storage_simply_mkdir(app->storage, BT_REMOTES_LAUNCHER_DIR);
 
     // Load app-level config (default BT name for new profiles)
     bt_remotes_load_app_cfg(app);
@@ -1352,6 +1405,20 @@ int32_t bt_remotes_app(void* p) {
     dolphin_deed(DolphinDeedPluginStart);
 
     scene_manager_next_scene(app->scene_manager, BtRemotesSceneProfileSelect);
+
+    // Deep-link: if launched via a .btremote shortcut, activate the referenced
+    // profile and push Start on top of Profile Select. On any launcher error,
+    // fall through so the user lands on Profile Select as usual.
+    if(p != NULL) {
+        const char* arg = (const char*)p;
+        if(strlen(arg) > 0 && bt_remotes_launcher_try_load(app, arg)) {
+            bt_remotes_start_ble_if_immediate(app);
+            scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, 0);
+            scene_manager_next_scene(app->scene_manager, BtRemotesSceneStart);
+        } else if(strlen(arg) > 0) {
+            FURI_LOG_W("BtRemotes", "Ignored launcher arg: %s", arg);
+        }
+    }
 
     view_dispatcher_run(app->view_dispatcher);
 

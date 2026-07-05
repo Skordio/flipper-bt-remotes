@@ -62,6 +62,16 @@
 #define BT_REMOTES_CFG_EXT      ".cfg"
 #define BT_REMOTES_KEYS_EXT     ".keys"
 
+// Profile-launcher shortcut files. A .btremote file on the SD card, when opened
+// from the built-in File Browser or Favorites, launches this FAP and jumps
+// straight into a specific profile's Start menu (skipping Profile Select). The
+// firmware archive extension->app map that routes .btremote to this FAP lives
+// in applications/main/archive/ (see docs/ARCHITECTURE.md).
+#define BT_REMOTES_LAUNCHER_DIR      APP_DATA_PATH("launchers")
+#define BT_REMOTES_LAUNCHER_EXT      ".btremote"
+#define BT_REMOTES_LAUNCHER_FILETYPE "BT Remotes Launcher"
+#define BT_REMOTES_LAUNCHER_VERSION  1U
+
 // Ducky Script Collections
 #define BT_REMOTES_COLLECTION_DIR        APP_DATA_PATH("collections")
 #define BT_REMOTES_COLLECTION_EXT        ".collection"

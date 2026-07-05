@@ -270,6 +270,26 @@ the old `disconnect_vibro` bool simply fail the uint32 read and default to 1.
   (`gesture_save`/`gesture_load`) and the runner (`gesture_run_file`), not FlipperFormat. Global =
   shared across all profiles. See **Custom Gestures** and [`WRITING_GESTURES.md`](WRITING_GESTURES.md).
 
+### Profile Launcher shortcuts — `APP_DATA_PATH("launchers/")`
+
+- **`{name}.btremote`** — `BT Remotes Launcher` v1: single `Profile` field naming the profile file's
+  basename (no path, no `.cfg`).
+- Opened from the Flipper's File Browser (or Favorites) → firmware routes the extension to the
+  `bt_remotes.fap` and hands the path in via the entry-point argument. Extension registration lives
+  in the firmware archive (`applications/main/archive/`): `ArchiveFileTypeBtRemotesLauncher` in
+  `helpers/archive_files.h`, `.btremote` in `helpers/archive_browser.h`'s `known_ext[]`, and the
+  `EXT_PATH("apps/Bluetooth/bt_remotes.fap")` mapping in `scenes/archive_scene_browser.c`.
+- `bt_remotes_launcher_try_load` (in `bt_remotes.c`) opens the file, validates filetype+version,
+  reads `Profile`, stats the matching `.cfg`, sets `app->active_profile`, and calls
+  `bt_remotes_profile_activate`. On any failure the app state is left clean and the entry point
+  falls through to Profile Select (with a `FURI_LOG_W` line for diagnosis).
+- Launcher-launched sessions push Profile Select underneath Start so Back from Start still lands on
+  Profile Select (matching the normal in-app flow).
+- Written by the **Create Shortcut** row under Profile Settings → Profile Management. The row writes
+  `{active_profile}.btremote` to `BT_REMOTES_LAUNCHER_DIR` and overwrites if the file exists. Users
+  can move the file anywhere on the SD card — routing is by extension, not location. Renaming a
+  profile after creating a shortcut breaks it (documented in the Profile Management help page).
+
 ---
 
 ## BLE Lifecycle
