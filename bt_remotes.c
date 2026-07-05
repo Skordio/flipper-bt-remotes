@@ -1369,10 +1369,15 @@ static bool bt_remotes_launcher_try_load(Hid* app, const char* path) {
         }
         bt_remotes_pinned_load(app);
 
-        // Optional Remote: field — deep-link into a specific Start-menu item.
-        // Matched by label against bt_remotes_menu_default[] (stable across
-        // menu reorder/hiding and future index shifts). Settings is excluded.
-        // Unknown labels don't fail the launch; the profile still opens to Start.
+        // Optional deep-link fields. One target per shortcut; if both are
+        // present, Remote: wins. A failed flipper_format key search leaves the
+        // cursor at EOF, so rewind before each optional read. Unknown targets
+        // don't fail the launch; the profile still opens to Start.
+        //
+        // Remote: — a fixed Start-menu item, matched by label against
+        // bt_remotes_menu_default[] (stable across menu reorder/hiding and
+        // future index shifts). Settings is excluded.
+        flipper_format_rewind(fff);
         if(flipper_format_read_string(fff, "Remote", tmp)) {
             for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT - 1; i++) {
                 if(furi_string_cmp_str(tmp, bt_remotes_menu_default[i].label) == 0) {
@@ -1383,6 +1388,28 @@ static bool bt_remotes_launcher_try_load(Hid* app, const char* path) {
             if(app->pending_launcher_remote == BT_REMOTES_LAUNCHER_REMOTE_NONE) {
                 FURI_LOG_W(
                     "BtRemotes", "Unknown launcher remote: %s", furi_string_get_cstr(tmp));
+            }
+        }
+
+        // Pin: — a currently-pinned collection or gesture, matched by name
+        // against the pins loaded by bt_remotes_pinned_load above. Resolves to
+        // the pinned-slot event value (MENU_ITEM_COUNT + pidx), so Start's
+        // on_event routes it exactly like a tap on the pin — including the
+        // kind dispatch (collection view vs gesture run) and the
+        // delay-connect / ducky_connect_per_run BLE handling. If the item was
+        // unpinned since the shortcut was created, fall through to Start.
+        flipper_format_rewind(fff);
+        if(app->pending_launcher_remote == BT_REMOTES_LAUNCHER_REMOTE_NONE &&
+           flipper_format_read_string(fff, "Pin", tmp)) {
+            for(uint8_t pidx = 0; pidx < app->pinned_count; pidx++) {
+                if(furi_string_cmp_str(tmp, app->pinned_collections[pidx]) == 0) {
+                    app->pending_launcher_remote = BT_REMOTES_MENU_ITEM_COUNT + pidx;
+                    break;
+                }
+            }
+            if(app->pending_launcher_remote == BT_REMOTES_LAUNCHER_REMOTE_NONE) {
+                FURI_LOG_W(
+                    "BtRemotes", "Launcher pin not pinned: %s", furi_string_get_cstr(tmp));
             }
         }
         ok = true;

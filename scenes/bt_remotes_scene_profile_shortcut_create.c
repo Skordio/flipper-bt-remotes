@@ -12,24 +12,34 @@
 // The file can be moved anywhere on the SD card afterwards — the firmware
 // archive routes .btremote on extension, not location.
 
-// Submenu row 0 = profile-only; rows 1..N = bt_remotes_menu_default[row-1].
-// EventDone sits above any possible pick index (picks are <= MENU_ITEM_COUNT).
+// Submenu row 0 = profile-only; rows 1..15 = bt_remotes_menu_default[row-1];
+// rows 16.. = pinned item (collection or gesture) at pidx = row-16. EventDone
+// sits above any possible pick (fixed 0..15 + pins 16..31 < 100).
 enum BtRemotesShortcutCreateEvent {
     BtRemotesShortcutCreateEventPickBase = 0,
     BtRemotesShortcutCreateEventDone     = 100,
 };
 
-// remote_index: BtRemotesStartIndex of the picked remote, or
-// BT_REMOTES_LAUNCHER_REMOTE_NONE for a profile-only shortcut.
-static bool bt_remotes_shortcut_write(Hid* app, uint8_t remote_index) {
+// target encoding (mirrors the Start-menu event space shifted by nothing):
+//   BT_REMOTES_LAUNCHER_REMOTE_NONE          — profile-only shortcut
+//   < BT_REMOTES_MENU_ITEM_COUNT             — fixed remote index (Remote: field)
+//   >= BT_REMOTES_MENU_ITEM_COUNT            — pinned slot pidx + 16 (Pin: field)
+static const char* bt_remotes_shortcut_target_name(Hid* app, uint8_t target) {
+    if(target >= BT_REMOTES_MENU_ITEM_COUNT) {
+        return app->pinned_collections[target - BT_REMOTES_MENU_ITEM_COUNT];
+    }
+    return bt_remotes_menu_default[target].label;
+}
+
+static bool bt_remotes_shortcut_write(Hid* app, uint8_t target) {
     FuriString* path = furi_string_alloc_printf(
         "%s/%s", BT_REMOTES_LAUNCHER_DIR, app->active_profile);
-    if(remote_index != BT_REMOTES_LAUNCHER_REMOTE_NONE) {
-        // " - <label>" suffix keeps remote shortcuts from overwriting the
+    if(target != BT_REMOTES_LAUNCHER_REMOTE_NONE) {
+        // " - <name>" suffix keeps target shortcuts from overwriting the
         // profile-only one. Labels can contain filesystem-hostile chars
         // ("TikTok / YT Shorts" has '/'), so sanitize the copy.
         furi_string_cat_str(path, " - ");
-        for(const char* c = bt_remotes_menu_default[remote_index].label; *c; c++) {
+        for(const char* c = bt_remotes_shortcut_target_name(app, target); *c; c++) {
             furi_string_push_back(path, strchr("<>:\"/\\|?*", *c) ? '-' : *c);
         }
     }
@@ -42,9 +52,11 @@ static bool bt_remotes_shortcut_write(Hid* app, uint8_t remote_index) {
                fff, BT_REMOTES_LAUNCHER_FILETYPE, BT_REMOTES_LAUNCHER_VERSION)) {
             ok = flipper_format_write_string_cstr(fff, "Profile", app->active_profile);
         }
-        if(ok && remote_index != BT_REMOTES_LAUNCHER_REMOTE_NONE) {
+        if(ok && target != BT_REMOTES_LAUNCHER_REMOTE_NONE) {
             ok = flipper_format_write_string_cstr(
-                fff, "Remote", bt_remotes_menu_default[remote_index].label);
+                fff,
+                (target >= BT_REMOTES_MENU_ITEM_COUNT) ? "Pin" : "Remote",
+                bt_remotes_shortcut_target_name(app, target));
         }
     }
     flipper_format_file_close(fff);
@@ -87,6 +99,16 @@ void bt_remotes_scene_profile_shortcut_create_on_enter(void* context) {
             bt_remotes_scene_profile_shortcut_create_submenu_cb,
             app);
     }
+    // Pinned collections / gestures (event = MENU_ITEM_COUNT + pidx, matching
+    // the target encoding decoded in on_event).
+    for(uint8_t pidx = 0; pidx < app->pinned_count; pidx++) {
+        submenu_add_item(
+            app->submenu,
+            app->pinned_collections[pidx],
+            BT_REMOTES_MENU_ITEM_COUNT + pidx,
+            bt_remotes_scene_profile_shortcut_create_submenu_cb,
+            app);
+    }
 
     view_dispatcher_switch_to_view(app->view_dispatcher, HidViewSubmenu);
 }
@@ -102,23 +124,25 @@ bool bt_remotes_scene_profile_shortcut_create_on_event(void* context, SceneManag
             scene_manager_previous_scene(app->scene_manager);
 
         } else {
-            // Pick: 0 = profile only, 1..N = remote index + 1.
-            uint8_t remote_index =
+            // Pick: 0 = profile only, 1..15 = remote index + 1,
+            // >= 16 = pinned slot pidx + 16 (passed through unchanged).
+            uint8_t target =
                 (event.event == 0) ? BT_REMOTES_LAUNCHER_REMOTE_NONE :
-                                     (uint8_t)(event.event - 1);
-            bool ok = bt_remotes_shortcut_write(app, remote_index);
+                (event.event < BT_REMOTES_MENU_ITEM_COUNT) ? (uint8_t)(event.event - 1) :
+                                                             (uint8_t)event.event;
+            bool ok = bt_remotes_shortcut_write(app, target);
 
             popup_reset(app->popup);
             if(ok) {
-                // popup_set_text stores the pointer, not a copy — both strings
-                // here are persistent (Hid field / static table), never
+                // popup_set_text stores the pointer, not a copy — all strings
+                // here are persistent (Hid fields / static table), never
                 // transient allocations.
                 popup_set_header(app->popup, "Saved!", 64, 10, AlignCenter, AlignTop);
                 popup_set_text(
                     app->popup,
-                    (remote_index == BT_REMOTES_LAUNCHER_REMOTE_NONE) ?
+                    (target == BT_REMOTES_LAUNCHER_REMOTE_NONE) ?
                         app->active_profile :
-                        bt_remotes_menu_default[remote_index].label,
+                        bt_remotes_shortcut_target_name(app, target),
                     64,
                     28,
                     AlignCenter,
