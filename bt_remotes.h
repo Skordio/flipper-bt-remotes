@@ -67,6 +67,18 @@
 #define BT_REMOTES_CFG_EXT      ".cfg"
 #define BT_REMOTES_KEYS_EXT     ".keys"
 
+// Profile-launcher shortcut files. A .btremote file on the SD card, when opened
+// from the built-in File Browser or Favorites, launches this FAP and jumps
+// straight into a specific profile's Start menu (skipping Profile Select). The
+// firmware archive extension->app map that routes .btremote to this FAP lives
+// in applications/main/archive/ (see docs/ARCHITECTURE.md).
+#define BT_REMOTES_LAUNCHER_DIR      APP_DATA_PATH("launchers")
+#define BT_REMOTES_LAUNCHER_EXT      ".btremote"
+#define BT_REMOTES_LAUNCHER_FILETYPE "BT Remotes Launcher"
+#define BT_REMOTES_LAUNCHER_VERSION  1U
+// Sentinel for pending_launcher_remote: no remote deep-link queued.
+#define BT_REMOTES_LAUNCHER_REMOTE_NONE 0xFF
+
 // Ducky Script Collections
 #define BT_REMOTES_COLLECTION_DIR        APP_DATA_PATH("collections")
 #define BT_REMOTES_COLLECTION_EXT        ".collection"
@@ -287,6 +299,11 @@ struct Hid {
     // Profile management
     char active_profile[BT_REMOTES_PROFILE_NAME_LEN];
     char pending_name[BT_REMOTES_PROFILE_NAME_LEN]; // old name held during profile rename
+    // Launcher deep-link: BtRemotesStartIndex parsed from a .btremote Remote:
+    // field, fired as a custom event by the Start scene's on_enter then reset
+    // to BT_REMOTES_LAUNCHER_REMOTE_NONE. See docs/ARCHITECTURE.md → Profile
+    // Launcher shortcuts.
+    uint8_t pending_launcher_remote;
     char default_ble_name[FURI_HAL_BT_ADV_NAME_LENGTH]; // default BT name applied to new profiles
     char profile_list[BT_REMOTES_PROFILE_MAX_COUNT][BT_REMOTES_PROFILE_NAME_LEN];
     uint8_t profile_count;

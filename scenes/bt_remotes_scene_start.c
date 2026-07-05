@@ -153,6 +153,17 @@ void bt_remotes_scene_start_on_enter(void* context) {
         (uint8_t)scene_manager_get_scene_state(app->scene_manager, BtRemotesSceneStart));
 
     view_dispatcher_switch_to_view(app->view_dispatcher, HidViewRemoteMenu);
+
+    // Launcher deep-link: a .btremote Remote: field queued a Start-menu index.
+    // Fire it as a custom event now that this scene is stack-top — it lands in
+    // our own on_event below, reusing the normal routing (delay-connect BLE
+    // start, view_id mapping, scene stack). Reset first so Back-from-remote
+    // re-entering this scene doesn't re-fire.
+    if(app->pending_launcher_remote != BT_REMOTES_LAUNCHER_REMOTE_NONE) {
+        uint8_t idx = app->pending_launcher_remote;
+        app->pending_launcher_remote = BT_REMOTES_LAUNCHER_REMOTE_NONE;
+        view_dispatcher_send_custom_event(app->view_dispatcher, idx);
+    }
 }
 
 bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {

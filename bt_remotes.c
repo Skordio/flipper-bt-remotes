@@ -1216,6 +1216,7 @@ static uint32_t hid_ptt_menu_view(void* context) {
 static Hid* bt_remotes_alloc(void) {
     Hid* app = malloc(sizeof(Hid));
     memset(app, 0, sizeof(Hid));
+    app->pending_launcher_remote = BT_REMOTES_LAUNCHER_REMOTE_NONE;
 
     app->gui = furi_record_open(RECORD_GUI);
     app->bt = furi_record_open(RECORD_BT);
@@ -1418,15 +1419,117 @@ static void bt_remotes_free(Hid* app) {
     free(app);
 }
 
+// Parse a .btremote launcher file, look up the referenced profile, and activate
+// it. Returns true if the app is ready to jump straight to the Start scene.
+// On any error (unreadable file, wrong filetype/version, invalid or missing
+// Profile field, no matching profile.cfg, activation failure) the app state is
+// left clean and the caller falls through to Profile Select.
+static bool bt_remotes_launcher_try_load(Hid* app, const char* path) {
+    bool           ok   = false;
+    FlipperFormat* fff  = flipper_format_file_alloc(app->storage);
+    FuriString*    tmp  = furi_string_alloc();
+    FuriString*    prof = furi_string_alloc();
+    do {
+        if(!flipper_format_file_open_existing(fff, path)) break;
+        uint32_t ver = 0;
+        if(!flipper_format_read_header(fff, tmp, &ver)) break;
+        if(strcmp(furi_string_get_cstr(tmp), BT_REMOTES_LAUNCHER_FILETYPE) != 0) break;
+        if(ver != BT_REMOTES_LAUNCHER_VERSION) break;
+        if(!flipper_format_read_string(fff, "Profile", prof)) break;
+
+        // Reject anything the profile-name UI would reject (empty, or containing
+        // '<>:"/\|?*'). Blocking '/' and '\' is what prevents a hand-edited
+        // "Profile: ../foo" from resolving outside BT_REMOTES_PROFILES_DIR. Also
+        // guard the length so strlcpy into active_profile doesn't silently
+        // truncate and end up activating a different profile that shares the
+        // truncated prefix.
+        furi_string_reset(tmp);
+        if(!bt_remotes_validate_name(furi_string_get_cstr(prof), tmp)) break;
+        if(furi_string_size(prof) >= BT_REMOTES_PROFILE_NAME_LEN) break;
+
+        FuriString* profile_path = furi_string_alloc_printf(
+            "%s/%s%s",
+            BT_REMOTES_PROFILES_DIR,
+            furi_string_get_cstr(prof),
+            BT_REMOTES_CFG_EXT);
+        bool exists = storage_file_exists(app->storage, furi_string_get_cstr(profile_path));
+        furi_string_free(profile_path);
+        if(!exists) break;
+
+        strlcpy(
+            app->active_profile,
+            furi_string_get_cstr(prof),
+            BT_REMOTES_PROFILE_NAME_LEN);
+        if(!bt_remotes_profile_activate(app)) {
+            app->active_profile[0] = '\0';
+            break;
+        }
+        bt_remotes_pinned_load(app);
+
+        // Optional deep-link fields. One target per shortcut; if both are
+        // present, Remote: wins. A failed flipper_format key search leaves the
+        // cursor at EOF, so rewind before each optional read. Unknown targets
+        // don't fail the launch; the profile still opens to Start.
+        //
+        // Remote: — a fixed Start-menu item, matched by label against
+        // bt_remotes_menu_default[] (stable across menu reorder/hiding and
+        // future index shifts). Settings is excluded.
+        flipper_format_rewind(fff);
+        if(flipper_format_read_string(fff, "Remote", tmp)) {
+            for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT - 1; i++) {
+                if(furi_string_cmp_str(tmp, bt_remotes_menu_default[i].label) == 0) {
+                    app->pending_launcher_remote = i;
+                    break;
+                }
+            }
+            if(app->pending_launcher_remote == BT_REMOTES_LAUNCHER_REMOTE_NONE) {
+                FURI_LOG_W(
+                    "BtRemotes", "Unknown launcher remote: %s", furi_string_get_cstr(tmp));
+            }
+        }
+
+        // Pin: — a currently-pinned collection or gesture, matched by name
+        // against the pins loaded by bt_remotes_pinned_load above. Resolves to
+        // the pinned-slot event value (MENU_ITEM_COUNT + pidx), so Start's
+        // on_event routes it exactly like a tap on the pin — including the
+        // kind dispatch (collection view vs gesture run) and the
+        // delay-connect / ducky_connect_per_run BLE handling. If the item was
+        // unpinned since the shortcut was created, fall through to Start.
+        flipper_format_rewind(fff);
+        if(app->pending_launcher_remote == BT_REMOTES_LAUNCHER_REMOTE_NONE &&
+           flipper_format_read_string(fff, "Pin", tmp)) {
+            for(uint8_t pidx = 0; pidx < app->pinned_count; pidx++) {
+                if(furi_string_cmp_str(tmp, app->pinned_collections[pidx]) == 0) {
+                    app->pending_launcher_remote = BT_REMOTES_MENU_ITEM_COUNT + pidx;
+                    break;
+                }
+            }
+            if(app->pending_launcher_remote == BT_REMOTES_LAUNCHER_REMOTE_NONE) {
+                FURI_LOG_W(
+                    "BtRemotes", "Launcher pin not pinned: %s", furi_string_get_cstr(tmp));
+            }
+        }
+        ok = true;
+    } while(0);
+    flipper_format_file_close(fff);
+    flipper_format_free(fff);
+    furi_string_free(tmp);
+    furi_string_free(prof);
+    return ok;
+}
+
 // This app targets Momentum firmware. It doesn't enforce that at runtime: it
 // already fails to load on stock/Unleashed/RogueMaster because it imports several
 // app-API symbols only Momentum exports (a set of built-in icons plus strtok /
 // variable_item_list_set_header), so those firmwares reject it with "Update
 // Firmware to use with this Application". See docs/ARCHITECTURE.md → Firmware
 // Compatibility for the full analysis and the path to broader compatibility.
+//
+// When invoked with a non-empty argument, `p` is treated as the path to a
+// .btremote launcher file (see docs/ARCHITECTURE.md → Profile Launchers). If
+// the launcher resolves cleanly, the app jumps straight to the Start menu for
+// that profile with Profile Select underneath (so Back still returns there).
 int32_t bt_remotes_app(void* p) {
-    UNUSED(p);
-
     Hid* app = bt_remotes_alloc();
 
     notification_internal_message(app->notifications, &sequence_reset_blue);
@@ -1442,13 +1545,37 @@ int32_t bt_remotes_app(void* p) {
 
     storage_simply_mkdir(app->storage, BT_REMOTES_PROFILES_DIR);
     storage_simply_mkdir(app->storage, BT_REMOTES_COLLECTION_DIR);
+    storage_simply_mkdir(app->storage, BT_REMOTES_LAUNCHER_DIR);
 
     // Load app-level config (default BT name for new profiles)
     bt_remotes_load_app_cfg(app);
 
     dolphin_deed(DolphinDeedPluginStart);
 
+    // Deep-link: if launched via a .btremote shortcut, activate the referenced
+    // profile and start BLE (for immediate-connect) BEFORE pushing Profile
+    // Select — its on_enter sees `ble_started` and skips its normal setup,
+    // queueing an AutoAdvance event that pushes Start (same short-circuit used
+    // right after profile_new). Delay-connect profiles fall through Profile
+    // Select's normal path; we push Start explicitly below to cover that case.
+    bool launcher_ok = false;
+    if(p != NULL && ((const char*)p)[0] != '\0') {
+        const char* arg = (const char*)p;
+        if(bt_remotes_launcher_try_load(app, arg)) {
+            bt_remotes_start_ble_if_immediate(app);
+            launcher_ok = true;
+        } else {
+            FURI_LOG_W("BtRemotes", "Ignored launcher arg: %s", arg);
+        }
+    }
+
     scene_manager_next_scene(app->scene_manager, BtRemotesSceneProfileSelect);
+    if(launcher_ok && !app->ble_started) {
+        // delay_connect profile: Profile Select rendered normally; push Start
+        // on top so the user still lands in the profile. Start owns BLE for
+        // delay_connect (starts it on the way into any non-Settings destination).
+        scene_manager_next_scene(app->scene_manager, BtRemotesSceneStart);
+    }
 
     view_dispatcher_run(app->view_dispatcher);
 

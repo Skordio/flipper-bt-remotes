@@ -271,6 +271,51 @@ the old `disconnect_vibro` bool simply fail the uint32 read and default to 1.
   (`gesture_save`/`gesture_load`) and the runner (`gesture_run_file`), not FlipperFormat. Global =
   shared across all profiles. See **Custom Gestures** and [`WRITING_GESTURES.md`](WRITING_GESTURES.md).
 
+### Profile Launcher shortcuts — `APP_DATA_PATH("launchers/")`
+
+- **`{name}.btremote`** — `BT Remotes Launcher` v1: `Profile` field naming the profile file's
+  basename (no path, no `.cfg`), plus at most one optional target field:
+  - `Remote` — a fixed Start-menu item by its `bt_remotes_menu_default[].label` (e.g. `Media`,
+    `TikTok / YT Shorts`, `Ducky Scripts`; Settings excluded). Label-based reference survives
+    menu reorder/hiding and future enum-index shifts.
+  - `Pin` — a currently-pinned Ducky collection or Custom Gesture by name. Resolved against the
+    profile's pins at launch; if the item has been unpinned, the launch falls back to the Start
+    menu (a `FURI_LOG_W` notes it). If both fields are present, `Remote` wins.
+  Optional-field reads each `flipper_format_rewind` first — a failed key search leaves the
+  cursor at EOF, which would otherwise swallow the next read.
+- Opened from the Flipper's File Browser (or Favorites) → firmware routes the extension to the
+  `bt_remotes.fap` and hands the path in via the entry-point argument. Extension registration lives
+  in the firmware archive (`applications/main/archive/`): `ArchiveFileTypeBtRemotesLauncher` in
+  `helpers/archive_files.h`, `.btremote` in `helpers/archive_browser.h`'s `known_ext[]`, and the
+  `EXT_PATH("apps/Bluetooth/bt_remotes.fap")` mapping in `scenes/archive_scene_browser.c`.
+- `bt_remotes_launcher_try_load` (in `bt_remotes.c`) opens the file, validates filetype+version,
+  reads `Profile` (rejecting names that fail `bt_remotes_validate_name` or exceed
+  `BT_REMOTES_PROFILE_NAME_LEN`), checks the matching `.cfg` exists, sets `app->active_profile`,
+  and calls `bt_remotes_profile_activate`. On any failure the app state is left clean and the
+  entry point falls through to Profile Select (with a `FURI_LOG_W` line for diagnosis).
+- Launcher-launched sessions push Profile Select underneath Start so Back from Start still lands on
+  Profile Select (matching the normal in-app flow).
+- **Target deep-link (`Remote` / `Pin` fields):** on a match, `try_load` sets
+  `app->pending_launcher_remote` (sentinel `BT_REMOTES_LAUNCHER_REMOTE_NONE`) — a fixed index
+  for `Remote`, or `BT_REMOTES_MENU_ITEM_COUNT + pidx` for a `Pin` resolved against the pins
+  that `bt_remotes_pinned_load` loaded moments earlier. The Start scene's `on_enter` fires the
+  value as a custom event **after** resetting the field (so Back-from-remote re-entry doesn't
+  re-fire), and the event lands in Start's own `on_event` — reusing the normal routing verbatim:
+  delay-connect BLE start, index→view_id mapping, pinned-slot kind dispatch (collection view vs
+  gesture run), and stack shape (ProfileSelect → Start → destination). It is deliberately NOT
+  queued from the entry point: Profile Select consumes every custom event and its event enum
+  overlaps remote indices 0–4. Unknown targets don't fail the launch — the profile opens to
+  Start with a `FURI_LOG_W`.
+- Written by the **Create Shortcut** row under Profile Settings → Profile Management: a submenu
+  picker ("Profile Only" + every fixed item except Settings + the profile's pinned
+  collections/gestures), then the file is written to `BT_REMOTES_LAUNCHER_DIR` (overwrites if
+  present). Profile-only shortcuts are `{profile}.btremote`; target shortcuts are
+  `{profile} - {name}.btremote` with filesystem-hostile chars in the name replaced by `-`
+  ("TikTok / YT Shorts" contains `/`).
+  Users can move the file anywhere on the SD card — routing is by extension, not location.
+  Renaming a profile after creating a shortcut breaks it (documented in the Profile Management
+  help page).
+
 ---
 
 ## BLE Lifecycle

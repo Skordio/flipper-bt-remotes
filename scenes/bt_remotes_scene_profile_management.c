@@ -5,6 +5,7 @@
 
 enum BtRemotesProfileManagementIndex {
     BtRemotesProfileManagementIndexRename,
+    BtRemotesProfileManagementIndexShortcut,
     BtRemotesProfileManagementIndexDelete,
     BtRemotesProfileManagementIndexHelp,
 };
@@ -23,6 +24,12 @@ void bt_remotes_scene_profile_management_on_enter(void* context) {
         app->submenu,
         "Rename Profile",
         BtRemotesProfileManagementIndexRename,
+        bt_remotes_scene_profile_management_cb,
+        app);
+    submenu_add_item(
+        app->submenu,
+        "Create Shortcut",
+        BtRemotesProfileManagementIndexShortcut,
         bt_remotes_scene_profile_management_cb,
         app);
     submenu_add_item(
@@ -51,6 +58,8 @@ bool bt_remotes_scene_profile_management_on_event(void* context, SceneManagerEve
 
     if(event.event == BtRemotesProfileManagementIndexRename) {
         scene_manager_next_scene(app->scene_manager, BtRemotesSceneProfileRenameFile);
+    } else if(event.event == BtRemotesProfileManagementIndexShortcut) {
+        scene_manager_next_scene(app->scene_manager, BtRemotesSceneProfileShortcutCreate);
     } else if(event.event == BtRemotesProfileManagementIndexDelete) {
         scene_manager_next_scene(app->scene_manager, BtRemotesSceneDeleteProfile);
     } else if(event.event == BtRemotesProfileManagementIndexHelp) {
