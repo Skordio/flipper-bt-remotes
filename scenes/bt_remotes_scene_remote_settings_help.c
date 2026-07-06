@@ -137,7 +137,7 @@ static const char* const remote_settings_help_pages[] = {
     "- D-pad tap/hold: cursor flies in a quick burst that decelerates and "
     "stops the instant you release.\n"
     "- D-pad double-tap: held-button swipe in the opposite direction (Right "
-    "twice = swipe right).\n"
+    "twice = swipe right). Can be disabled with Dbl Tap Swipe.\n"
     "- OK press/hold: left mouse button held while OK is held.\n"
     "- Back tap: enter Swipe mode. Back double-tap: enter Slow mode. "
     "From any non-default mode, either gesture returns you to Default. "
@@ -150,6 +150,8 @@ static const char* const remote_settings_help_pages[] = {
     "Swipe Dist: total px of the held-button drag.\n"
     "Swipe Spd: drag speed in px/sec — lower if iOS misses your swipes.\n"
     "Dbl Tap ms: max gap between two short presses to count as a double-tap.\n"
+    "Dbl Tap Swipe: when Off, a default-mode double-tap never swipes — every "
+    "press is just a new burst. Swipe mode is unaffected.\n"
     "Return: when On, the cursor moves back to its pre-swipe position after "
     "each swipe.",
 };

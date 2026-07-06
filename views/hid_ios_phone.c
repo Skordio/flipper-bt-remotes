@@ -614,7 +614,8 @@ static bool hid_ios_phone_input_callback(InputEvent* event, void* context) {
             self->view,
             HidIosPhoneModel * model,
             {
-                if(model->last_release_key == event->key &&
+                if(self->hid->ios_dbl_tap_swipe &&
+                   model->last_release_key == event->key &&
                    (now - model->last_release_tick) < self->hid->ios_dbl_tap_window_ms) {
                     do_swipe = true;
                     hid_ios_swipe_delta_for_key(self->hid, event->key, &dx, &dy);

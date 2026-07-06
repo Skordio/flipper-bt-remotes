@@ -205,6 +205,11 @@ typedef enum {
 //   Return to Start: whether the cursor returns to its pre-swipe position
 //                    after a swipe gesture (on by default).
 #define IOS_SWIPE_RETURN_DEFAULT 1
+
+// Default-mode d-pad double-tap swipe: 1 = a quick second tap of the same
+// direction fires a swipe (legacy behavior), 0 = disabled; every press just
+// starts a fresh burst. Swipe mode is unaffected.
+#define IOS_DBL_TAP_SWIPE_DEFAULT 1
 // Number of selectable values for VariableItemList rows.
 #define IOS_VALUE_COUNT(min, max, step) (((max) - (min)) / (step) + 1)
 
@@ -320,6 +325,7 @@ struct Hid {
     uint16_t ios_swipe_speed_px_s;     // px/sec — drag speed during a swipe
     uint16_t ios_dbl_tap_window_ms;    // ms — max gap between two short presses
     uint8_t  ios_swipe_return_to_start; // 0 = stay, 1 = move cursor back to start
+    uint8_t  ios_dbl_tap_swipe; // 0 = off, 1 = default-mode d-pad double-tap fires a swipe
     uint8_t  delay_connect; // 0 = connect immediately; 1 = only connect inside a remote
     uint8_t  ducky_connect_per_run; // 1 = Ducky/Collections connect only during a script run
     uint16_t ducky_connect_settle_ms; // delay after link-up before sending HID (per-run)

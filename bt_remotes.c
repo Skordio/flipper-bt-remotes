@@ -181,6 +181,8 @@ void bt_remotes_save_profile_menu_cfg(Hid* app) {
         uint32_t ios_swipe_return_to_start_u32 = app->ios_swipe_return_to_start;
         flipper_format_write_uint32(
             fff, "ios_swipe_return_to_start", &ios_swipe_return_to_start_u32, 1);
+        uint32_t ios_dbl_tap_swipe_u32 = app->ios_dbl_tap_swipe;
+        flipper_format_write_uint32(fff, "ios_dbl_tap_swipe", &ios_dbl_tap_swipe_u32, 1);
         uint32_t delay_connect_u32 = app->delay_connect;
         flipper_format_write_uint32(fff, "delay_connect", &delay_connect_u32, 1);
         uint32_t ducky_connect_per_run_u32 = app->ducky_connect_per_run;
@@ -624,6 +626,13 @@ bool bt_remotes_profile_activate(Hid* app) {
                 app->ios_swipe_return_to_start = ios_swipe_return_to_start_u32 ? 1 : 0;
             } else {
                 app->ios_swipe_return_to_start = IOS_SWIPE_RETURN_DEFAULT;
+            }
+            flipper_format_rewind(mfff);
+            uint32_t ios_dbl_tap_swipe_u32 = IOS_DBL_TAP_SWIPE_DEFAULT;
+            if(flipper_format_read_uint32(mfff, "ios_dbl_tap_swipe", &ios_dbl_tap_swipe_u32, 1)) {
+                app->ios_dbl_tap_swipe = ios_dbl_tap_swipe_u32 ? 1 : 0;
+            } else {
+                app->ios_dbl_tap_swipe = IOS_DBL_TAP_SWIPE_DEFAULT;
             }
             // The three fields below appear consecutively at the end of the save
             // order, so we need only one rewind to reset past the prior reads.
