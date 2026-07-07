@@ -729,10 +729,18 @@ bool bt_remotes_profile_rename(Hid* app) {
         if(ok) {
             // Update the in-memory profile order string so apply_profile_order
             // finds the new name on the next launch instead of appending it at
-            // the end (losing the saved position in the list).
-            char* found = strstr(app->profile_order_str, app->pending_name);
+            // the end (losing the saved position in the list). The match must be
+            // a whole '|'-delimited entry — a raw strstr would match inside a
+            // longer name (e.g. "Home" inside "MyHome") and splice the wrong one.
+            size_t old_len = strlen(app->pending_name);
+            char*  found   = app->profile_order_str;
+            while((found = strstr(found, app->pending_name)) != NULL) {
+                bool entry_start = (found == app->profile_order_str) || (found[-1] == '|');
+                bool entry_end   = (found[old_len] == '\0') || (found[old_len] == '|');
+                if(entry_start && entry_end) break;
+                found++;
+            }
             if(found) {
-                size_t old_len = strlen(app->pending_name);
                 size_t new_len = strlen(app->active_profile);
                 size_t rest    = strlen(found + old_len);
                 memmove(found + new_len, found + old_len, rest + 1);
