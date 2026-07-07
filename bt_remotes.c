@@ -426,12 +426,16 @@ bool bt_remotes_profile_activate(Hid* app) {
             for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) order_u32[i] = 0xFF;
             if(flipper_format_read_uint32(
                    mfff, "menu_order", order_u32, BT_REMOTES_MENU_ORDER_LEN)) {
-                // Current format: validate and copy all slots.
+                // Current format: validate and copy all slots. Validate on the
+                // full uint32 BEFORE narrowing — truncating first would let an
+                // out-of-range value whose low byte lands in range (256 -> 0,
+                // 511 -> 0xFF) forge a duplicate slot or the unused sentinel.
                 for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) {
-                    uint8_t v = (uint8_t)order_u32[i];
+                    uint32_t v = order_u32[i];
                     // Valid values: fixed indices 0..ITEM_COUNT-1, pinned
                     // ITEM_COUNT..ORDER_LEN-1, or 0xFF sentinel.
-                    app->menu_order[i] = (v < BT_REMOTES_MENU_ORDER_LEN || v == 0xFF) ? v : 0xFF;
+                    app->menu_order[i] =
+                        (v < BT_REMOTES_MENU_ORDER_LEN || v == 0xFF) ? (uint8_t)v : 0xFF;
                 }
             } else if(
                 (flipper_format_rewind(mfff),
@@ -444,7 +448,7 @@ bool bt_remotes_profile_activate(Hid* app) {
                 // start_on_enter — same trick the V1 arm uses for Custom Gestures.
                 for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) app->menu_order[i] = 0xFF;
                 for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN_V2; i++) {
-                    uint8_t v = (uint8_t)order_u32[i];
+                    uint32_t v = order_u32[i]; // validate before narrowing (see above)
                     if(v == 0xFF) {
                         app->menu_order[i] = 0xFF;
                     } else if(
@@ -452,7 +456,7 @@ bool bt_remotes_profile_activate(Hid* app) {
                         v < BT_REMOTES_MENU_ORDER_LEN_V2) {
                         app->menu_order[i] = (uint8_t)(v + 1); // pinned slot shifted +1
                     } else if(v < BT_REMOTES_MENU_ITEM_COUNT_V2) {
-                        app->menu_order[i] = v; // fixed item index unchanged
+                        app->menu_order[i] = (uint8_t)v; // fixed item index unchanged
                     } else {
                         app->menu_order[i] = 0xFF;
                     }
@@ -469,7 +473,7 @@ bool bt_remotes_profile_activate(Hid* app) {
                 // and Settings (16) re-append via start_on_enter.
                 for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) app->menu_order[i] = 0xFF;
                 for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN_V1; i++) {
-                    uint8_t v = (uint8_t)order_u32[i];
+                    uint32_t v = order_u32[i]; // validate before narrowing (see above)
                     if(v == 0xFF) {
                         app->menu_order[i] = 0xFF;
                     } else if(
@@ -477,7 +481,7 @@ bool bt_remotes_profile_activate(Hid* app) {
                         v < BT_REMOTES_MENU_ORDER_LEN_V1) {
                         app->menu_order[i] = (uint8_t)(v + 2); // pinned slot shifted +2
                     } else if(v < BT_REMOTES_MENU_ITEM_COUNT_V1) {
-                        app->menu_order[i] = v; // fixed item index unchanged
+                        app->menu_order[i] = (uint8_t)v; // fixed item index unchanged
                     } else {
                         app->menu_order[i] = 0xFF;
                     }
