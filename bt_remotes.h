@@ -351,6 +351,7 @@ struct Hid {
     FuriTimer* connect_wait_timer;
     uint8_t    connect_wait_attempts;
     uint8_t    connect_settle_ticks; // ticks counted since the link came up (HID-ready settle)
+    bool       connect_wait_active; // run scene is waiting for the host; gates CONNECT_TICK
 };
 
 // Shared name validator: checks non-empty and no forbidden filesystem chars.

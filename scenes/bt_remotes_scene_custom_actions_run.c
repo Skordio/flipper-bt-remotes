@@ -75,6 +75,7 @@ void bt_remotes_scene_custom_actions_run_on_enter(void* context) {
         if(!app->ble_started) bt_remotes_start_ble(app);
         app->connect_wait_attempts = 0;
         app->connect_settle_ticks  = 0;
+        app->connect_wait_active   = true;
         show_connecting_popup(app);
         furi_timer_start(app->connect_wait_timer, CONNECT_WAIT_POLL_MS);
     } else {
@@ -99,6 +100,11 @@ bool bt_remotes_scene_custom_actions_run_on_event(void* context, SceneManagerEve
         consumed = true;
 
         if(event.event == BT_REMOTES_EVENT_CONNECT_TICK) {
+            // The connection callback posts this on EVERY link-up, not just while
+            // we're waiting — a drop+reconnect during or after a run would re-fire
+            // start_run (re-typing the whole script over the Done/Error popup).
+            // Only act on it while the connect wait is actually in progress.
+            if(!app->connect_wait_active) return consumed;
             // Waiting for the host while connect-per-run brings BLE up.
             if(app->connected) {
                 // Link is up — but the host still needs to finish HID discovery and
@@ -112,6 +118,7 @@ bool bt_remotes_scene_custom_actions_run_on_event(void* context, SceneManagerEve
                     (uint8_t)(app->ducky_connect_settle_ms / CONNECT_WAIT_POLL_MS);
                 if(app->connect_settle_ticks >= settle_ticks) {
                     furi_timer_stop(app->connect_wait_timer);
+                    app->connect_wait_active = false;
                     start_run(app);
                 } else {
                     app->connect_settle_ticks++;
@@ -121,6 +128,7 @@ bool bt_remotes_scene_custom_actions_run_on_event(void* context, SceneManagerEve
                 app->connect_settle_ticks = 0;
                 if(++app->connect_wait_attempts >= CONNECT_WAIT_MAX_ATTEMPTS) {
                     furi_timer_stop(app->connect_wait_timer);
+                    app->connect_wait_active = false;
                     show_connect_failed_popup(app);
                 }
             }
@@ -158,6 +166,7 @@ void bt_remotes_scene_custom_actions_run_on_exit(void* context) {
     Hid* app = context;
     // Ensure the wait poll and runner are stopped if we exit unexpectedly.
     furi_timer_stop(app->connect_wait_timer);
+    app->connect_wait_active = false;
     ducky_runner_stop(app->ducky_runner);
     // Connect-per-run: the connection existed only for this run — drop it now.
     if(app->ducky_connect_per_run) bt_remotes_stop_ble(app);
