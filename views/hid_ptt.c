@@ -825,15 +825,19 @@ static void hid_ptt_process(HidPushToTalk* hid_ptt, InputEvent* event) {
                 }
             } else if(event->type == InputTypeRelease) {
                 if(event->key == InputKeyUp) {
-                    model->up_pressed = false;
-                    if(!model->ptt_pressed) {
+                    // Pair the release with the press we actually sent: up_pressed is
+                    // set only when the press branch ran (OK not held at press time).
+                    // Gating on !ptt_pressed instead would drop the release when OK
+                    // was pressed mid-hold, leaving the host volume key stuck down.
+                    if(model->up_pressed) {
                         hid_hal_consumer_key_release(hid_ptt->hid, HID_CONSUMER_VOLUME_INCREMENT);
                     }
+                    model->up_pressed = false;
                 } else if(event->key == InputKeyDown) {
-                    model->down_pressed = false;
-                    if(!model->ptt_pressed) {
+                    if(model->down_pressed) {
                         hid_hal_consumer_key_release(hid_ptt->hid, HID_CONSUMER_VOLUME_DECREMENT);
                     }
+                    model->down_pressed = false;
                 } else if(event->key == InputKeyLeft) {
                     model->left_pressed = false;
                 } else if(event->key == InputKeyRight) {
