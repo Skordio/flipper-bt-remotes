@@ -107,6 +107,13 @@ static void hid_mouse_jiggler_stealth_exit_callback(void* context) {
     furi_assert(context);
     HidMouseJigglerStealth* hid_mouse_jiggler = context;
     furi_timer_stop(hid_mouse_jiggler->timer);
+    // Keep the UI state honest: leaving the view stops jiggling, so re-entry
+    // must show the stopped state (see hid_mouse_jiggler.c).
+    with_view_model(
+        hid_mouse_jiggler->view,
+        HidMouseJigglerStealthModel * model,
+        { model->running = false; },
+        false);
 }
 
 static bool hid_mouse_jiggler_stealth_input_callback(InputEvent* event, void* context) {
@@ -123,8 +130,8 @@ static bool hid_mouse_jiggler_stealth_input_callback(InputEvent* event, void* co
                 switch(event->key) {
                 case InputKeyOk:
                     model->running = !model->running;
+                    furi_timer_stop(hid_mouse_jiggler->timer);
                     if(model->running) {
-                        furi_timer_stop(hid_mouse_jiggler->timer);
                         int randomIntervalMinutes =
                             model->min_interval +
                             rand() % (model->max_interval - model->min_interval + 1);

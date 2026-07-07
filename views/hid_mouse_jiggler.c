@@ -92,6 +92,11 @@ static void hid_mouse_jiggler_exit_callback(void* context) {
     furi_assert(context);
     HidMouseJiggler* hid_mouse_jiggler = context;
     furi_timer_stop(hid_mouse_jiggler->timer);
+    // Keep the UI state honest: leaving the view stops jiggling, so re-entry
+    // must show "Start" — a stale running=true would claim the PC is being
+    // kept awake while the timer is dead.
+    with_view_model(
+        hid_mouse_jiggler->view, HidMouseJigglerModel * model, { model->running = false; }, false);
 }
 
 static bool hid_mouse_jiggler_input_callback(InputEvent* event, void* context) {
@@ -106,10 +111,10 @@ static bool hid_mouse_jiggler_input_callback(InputEvent* event, void* context) {
         {
             if(event->type == InputTypePress && event->key == InputKeyOk) {
                 model->running = !model->running;
+                furi_timer_stop(hid_mouse_jiggler->timer);
                 if(model->running) {
-                    furi_timer_stop(hid_mouse_jiggler->timer);
                     furi_timer_start(hid_mouse_jiggler->timer, intervals[model->interval_idx]);
-                };
+                }
                 consumed = true;
             }
             if(event->type == InputTypePress && event->key == InputKeyRight && !model->running &&
