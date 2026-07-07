@@ -236,6 +236,19 @@ static bool hid_mouse_input_callback(InputEvent* event, void* context) {
     } else if(
         event->type == InputTypeShort && event->key == InputKeyBack && hid_mouse->back_to_parent) {
         // Short Back returns to the parent view (e.g. Media) instead of right-clicking.
+        // A long-OK "Selecting..." drag latches the left button (the physical OK
+        // release intentionally keeps it pressed), so it must be released here —
+        // there is no exit callback, and leaving it latched drag-selects on the
+        // host and desyncs left_mouse_held for the next entry.
+        hid_hal_mouse_release_all(hid_mouse->hid);
+        with_view_model(
+            hid_mouse->view,
+            HidMouseModel * model,
+            {
+                model->left_mouse_held = false;
+                model->left_mouse_pressed = false;
+            },
+            false);
         // Switch outside with_view_model to avoid holding the model lock across the dispatch.
         view_dispatcher_switch_to_view(hid_mouse->hid->view_dispatcher, hid_mouse->parent_view_id);
         consumed = true;
