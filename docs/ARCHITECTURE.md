@@ -224,7 +224,6 @@ All config files are FlipperFormat text. Constants/file-types live in `bt_remote
   ios_burst_distance / ios_swipe_distance: <uint32>   # iOS Phone px tunables
   ios_swipe_speed_px_s: <uint32>     # iOS Phone drag speed (px/sec)
   ios_dbl_tap_window_ms: <uint32>    # iOS Phone double-tap window (ms)
-  ios_swipe_return_to_start: <uint32> # 0/1 — cursor returns to pre-swipe position
   ios_dbl_tap_swipe: <uint32>        # 0/1 — default-mode d-pad double-tap fires a swipe
   delay_connect: <uint32>            # 0/1 — defer BLE start until a remote is opened
   ducky_connect_per_run: <uint32>    # 0/1 — Ducky/Collections connect only during a run

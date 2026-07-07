@@ -178,9 +178,6 @@ void bt_remotes_save_profile_menu_cfg(Hid* app) {
         flipper_format_write_uint32(fff, "ios_swipe_speed_px_s", &ios_swipe_speed_u32, 1);
         uint32_t ios_dbl_tap_window_ms_u32 = app->ios_dbl_tap_window_ms;
         flipper_format_write_uint32(fff, "ios_dbl_tap_window_ms", &ios_dbl_tap_window_ms_u32, 1);
-        uint32_t ios_swipe_return_to_start_u32 = app->ios_swipe_return_to_start;
-        flipper_format_write_uint32(
-            fff, "ios_swipe_return_to_start", &ios_swipe_return_to_start_u32, 1);
         uint32_t ios_dbl_tap_swipe_u32 = app->ios_dbl_tap_swipe;
         flipper_format_write_uint32(fff, "ios_dbl_tap_swipe", &ios_dbl_tap_swipe_u32, 1);
         uint32_t delay_connect_u32 = app->delay_connect;
@@ -622,14 +619,6 @@ bool bt_remotes_profile_activate(Hid* app) {
                 app->ios_dbl_tap_window_ms = (uint16_t)ios_dbl_tap_window_ms_u32;
             } else {
                 app->ios_dbl_tap_window_ms = IOS_DBL_TAP_WINDOW_DEFAULT;
-            }
-            flipper_format_rewind(mfff);
-            uint32_t ios_swipe_return_to_start_u32 = IOS_SWIPE_RETURN_DEFAULT;
-            if(flipper_format_read_uint32(
-                   mfff, "ios_swipe_return_to_start", &ios_swipe_return_to_start_u32, 1)) {
-                app->ios_swipe_return_to_start = ios_swipe_return_to_start_u32 ? 1 : 0;
-            } else {
-                app->ios_swipe_return_to_start = IOS_SWIPE_RETURN_DEFAULT;
             }
             flipper_format_rewind(mfff);
             uint32_t ios_dbl_tap_swipe_u32 = IOS_DBL_TAP_SWIPE_DEFAULT;

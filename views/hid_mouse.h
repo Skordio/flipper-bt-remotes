@@ -16,8 +16,8 @@ typedef struct HidMouse HidMouse;
 //     *acceleration; ramp *acceleration by +1 per repeat, capped at 20.
 //   - InputTypeRelease: clear the matching *_pressed flag, reset *acceleration.
 // Caller owns the view-model lock and passes pointers to the relevant model
-// fields. Used both by the standalone Mouse view and by iOS Phone's Slow mode
-// so the two stay behaviorally identical.
+// fields. Currently only the standalone Mouse view uses it, but it stays a
+// shared helper so other remotes can reuse the exact Mouse d-pad behavior.
 void hid_mouse_dpad_process(
     Hid*        hid,
     InputEvent* event,

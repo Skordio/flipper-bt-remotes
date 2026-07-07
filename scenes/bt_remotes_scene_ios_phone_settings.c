@@ -1,7 +1,7 @@
 #include "../bt_remotes.h"
 
 // iOS Phone per-profile settings, modeled on scene_media_settings.c. Burst /
-// Swipe distance + Double-Tap window are VariableItemList ranges; Return-To-Start
+// Swipe distance + Double-Tap window are VariableItemList ranges; Dbl Tap Swipe
 // is an On/Off toggle. Help opens via the enter callback. Each change persists
 // immediately through bt_remotes_save_profile_menu_cfg so the value survives
 // profile_activate.
@@ -11,8 +11,7 @@
 #define IOS_PHONE_ROW_SWIPE_SPD  2
 #define IOS_PHONE_ROW_DBL_TAP    3
 #define IOS_PHONE_ROW_DBL_SWIPE  4
-#define IOS_PHONE_ROW_RETURN     5
-#define IOS_PHONE_ROW_HELP       6
+#define IOS_PHONE_ROW_HELP       5
 
 static void ios_burst_distance_changed(VariableItem* item) {
     Hid* app = variable_item_get_context(item);
@@ -62,14 +61,6 @@ static void ios_dbl_tap_swipe_changed(VariableItem* item) {
     Hid* app = variable_item_get_context(item);
     uint8_t idx = variable_item_get_current_value_index(item);
     app->ios_dbl_tap_swipe = idx;
-    variable_item_set_current_value_text(item, idx ? "On" : "Off");
-    bt_remotes_save_profile_menu_cfg(app);
-}
-
-static void ios_swipe_return_changed(VariableItem* item) {
-    Hid* app = variable_item_get_context(item);
-    uint8_t idx = variable_item_get_current_value_index(item);
-    app->ios_swipe_return_to_start = idx;
     variable_item_set_current_value_text(item, idx ? "On" : "Off");
     bt_remotes_save_profile_menu_cfg(app);
 }
@@ -163,10 +154,6 @@ void bt_remotes_scene_ios_phone_settings_on_enter(void* context) {
     item = variable_item_list_add(vil, "Dbl Tap Swipe", 2, ios_dbl_tap_swipe_changed, app);
     variable_item_set_current_value_index(item, app->ios_dbl_tap_swipe ? 1 : 0);
     variable_item_set_current_value_text(item, app->ios_dbl_tap_swipe ? "On" : "Off");
-
-    item = variable_item_list_add(vil, "Return", 2, ios_swipe_return_changed, app);
-    variable_item_set_current_value_index(item, app->ios_swipe_return_to_start ? 1 : 0);
-    variable_item_set_current_value_text(item, app->ios_swipe_return_to_start ? "On" : "Off");
 
     // Help (no value; OK opens the help page via the enter callback).
     variable_item_list_add(vil, "Help", 1, NULL, app);

@@ -22,11 +22,15 @@
 // classifies touch-down as the start of a swipe vs. a tap based on whether the
 // cursor is already moving when the button goes down.
 #define IOS_SWIPE_LEAD_PX 14
+// Horizontal swipes are scaled by the width:height ratio of a modern iPhone
+// screen (19.5:9) so a "full swipe" left/right covers the same fraction of the
+// screen as one up/down does. 9/19.5 == 6/13.
+#define IOS_SWIPE_H_SCALE_NUM 6
+#define IOS_SWIPE_H_SCALE_DEN 13
 
 typedef enum {
     IosModeDefault = 0,
     IosModeSwipe,
-    IosModeSlow,
 } IosMode;
 
 // Phases of a non-blocking swipe gesture. The swipe_timer ticks every
@@ -46,9 +50,6 @@ struct HidIosPhone {
     // Burst timer drives the decelerating cursor move in Default mode while a
     // d-pad direction is held. Periodic; allocated once.
     FuriTimer* burst_timer;
-    // Back single-tap action is deferred by dbl_tap_window_ms so a second short
-    // press can override it as a double-tap. One-shot timer.
-    FuriTimer* back_tap_timer;
     // Swipe state-machine timer; ticks every IOS_SWIPE_STEP_MS while a swipe
     // is in progress so the input thread isn't blocked for the gesture duration.
     FuriTimer* swipe_timer;
@@ -64,9 +65,6 @@ typedef struct {
     bool    left_pressed;
     bool    right_pressed;
     bool    ok_pressed;
-    // Slow mode uses the same acceleration ramp as the Mouse view: 1 on press,
-    // +1 per repeat, capped at 20, reset on release.
-    uint8_t acceleration;
     // Default-mode burst state. Only one direction can be bursting at a time.
     bool     burst_active;
     InputKey burst_key;
@@ -81,10 +79,6 @@ typedef struct {
     // press as a double-tap. Without this, holding a key through a full burst
     // and re-pressing within the double-tap window would fire an unintended swipe.
     uint32_t current_press_tick;
-    // Back single-tap is deferred so a second short press promotes it to a
-    // double-tap. The flag mirrors the back_tap_timer's pending state for the
-    // input callback to test from inside the model lock.
-    bool back_short_pending;
     // Non-blocking swipe state. swipe_phase != Idle means a swipe is mid-flight
     // and new swipe triggers are ignored.
     IosSwipePhase swipe_phase;
@@ -128,13 +122,15 @@ static void hid_ios_swipe_reset_state(HidIosPhoneModel* model) {
 // Map a d-pad key + the per-profile swipe distance to the (dx, dy) the cursor
 // should travel during a swipe. The drag direction is OPPOSITE the pressed
 // key — pressing Right intends "swipe right" on the phone, which is a
-// finger-drag from right to left.
+// finger-drag from right to left. Horizontal swipes are shortened by the
+// screen's width:height ratio (see IOS_SWIPE_H_SCALE_*).
 static void hid_ios_swipe_delta_for_key(Hid* hid, InputKey key, int* out_dx, int* out_dy) {
     int dist = (int)hid->ios_swipe_distance;
+    int h_dist = dist * IOS_SWIPE_H_SCALE_NUM / IOS_SWIPE_H_SCALE_DEN;
     *out_dx = 0;
     *out_dy = 0;
-    if(key == InputKeyRight)      *out_dx = -dist;
-    else if(key == InputKeyLeft)  *out_dx = dist;
+    if(key == InputKeyRight)      *out_dx = -h_dist;
+    else if(key == InputKeyLeft)  *out_dx = h_dist;
     else if(key == InputKeyDown)  *out_dy = -dist;
     else if(key == InputKeyUp)    *out_dy = dist;
 }
@@ -246,21 +242,19 @@ static void hid_ios_phone_swipe_timer_cb(void* context) {
                 break;
             case IosSwipePhaseRelease:
                 do_release = true;
-                if(self->hid->ios_swipe_return_to_start) {
-                    model->swipe_phase = IosSwipePhaseReturn;
-                    model->swipe_remaining_x = -model->swipe_total_x;
-                    model->swipe_remaining_y = -model->swipe_total_y;
-                } else {
-                    hid_ios_swipe_reset_state(model);
-                    furi_timer_stop(self->swipe_timer);
-                }
+                model->swipe_phase = IosSwipePhaseReturn;
+                model->swipe_remaining_x = -model->swipe_total_x;
+                model->swipe_remaining_y = -model->swipe_total_y;
                 break;
             case IosSwipePhaseReturn:
+                // Return at the max HID delta per tick (no button held, so iOS
+                // can't misread the motion as a gesture) — the cursor snaps
+                // back to its pre-swipe position as fast as the link allows.
                 if(model->swipe_remaining_x != 0) {
-                    dx = hid_ios_chunk_step(model->swipe_remaining_x, model->swipe_chunk_px);
+                    dx = hid_ios_chunk_step(model->swipe_remaining_x, 127);
                     model->swipe_remaining_x -= dx;
                 } else if(model->swipe_remaining_y != 0) {
-                    dy = hid_ios_chunk_step(model->swipe_remaining_y, model->swipe_chunk_px);
+                    dy = hid_ios_chunk_step(model->swipe_remaining_y, 127);
                     model->swipe_remaining_y -= dy;
                 } else {
                     hid_ios_swipe_reset_state(model);
@@ -302,10 +296,8 @@ static void hid_ios_phone_draw_callback(Canvas* canvas, void* context) {
     canvas_set_font(canvas, FontSecondary);
 
     // Mode indicator just under the title.
-    const char* mode_label = NULL;
-    if(model->mode == IosModeSwipe) mode_label = "Swipe mode";
-    else if(model->mode == IosModeSlow) mode_label = "Slow mode";
-    if(mode_label) elements_multiline_text_aligned(canvas, 3, 22, AlignLeft, AlignTop, mode_label);
+    if(model->mode == IosModeSwipe)
+        elements_multiline_text_aligned(canvas, 3, 22, AlignLeft, AlignTop, "Swipe mode");
 
     if(model->ok_pressed) {
         elements_multiline_text_aligned(canvas, 0, 62, AlignLeft, AlignBottom, "Holding...");
@@ -431,52 +423,8 @@ static void hid_ios_phone_burst_timer_cb(void* context) {
 }
 
 // ---------------------------------------------------------------------------
-// Back tap timer (single-tap deferred action)
-// ---------------------------------------------------------------------------
-
-// Apply a single-tap Back: enter Swipe from Default, exit to Default from any
-// non-Default mode. Guarded by back_short_pending so a racing double-tap path
-// (which clears the flag before the timer can run) can't double-toggle the mode.
-static void hid_ios_phone_back_tap_timer_cb(void* context) {
-    furi_assert(context);
-    HidIosPhone* self = context;
-    bool fire = false;
-    with_view_model(
-        self->view,
-        HidIosPhoneModel * model,
-        {
-            // If the input thread already promoted to a double-tap it cleared
-            // back_short_pending; the queued callback then no-ops here.
-            if(model->back_short_pending) {
-                model->back_short_pending = false;
-                model->mode = (model->mode == IosModeDefault) ? IosModeSwipe : IosModeDefault;
-                model->burst_active = false;
-                model->acceleration = 0;
-                fire = true;
-            }
-        },
-        true);
-    if(fire) furi_timer_stop(self->burst_timer);
-}
-
-// ---------------------------------------------------------------------------
 // Input
 // ---------------------------------------------------------------------------
-
-// Slow mode input handling: forwards to the standalone Mouse view's shared
-// helper so behavior stays in lockstep with the regular Mouse remote.
-static void hid_ios_slow_process(HidIosPhone* self, InputEvent* event) {
-    with_view_model(
-        self->view,
-        HidIosPhoneModel * model,
-        {
-            hid_mouse_dpad_process(
-                self->hid, event, &model->acceleration,
-                &model->up_pressed, &model->down_pressed,
-                &model->left_pressed, &model->right_pressed);
-        },
-        true);
-}
 
 static bool hid_ios_phone_input_callback(InputEvent* event, void* context) {
     furi_assert(context);
@@ -488,7 +436,6 @@ static bool hid_ios_phone_input_callback(InputEvent* event, void* context) {
     if(event->type == InputTypeLong && event->key == InputKeyBack) {
         hid_hal_mouse_release_all(self->hid);
         furi_timer_stop(self->burst_timer);
-        furi_timer_stop(self->back_tap_timer);
         furi_timer_stop(self->swipe_timer);
         with_view_model(
             self->view,
@@ -496,7 +443,6 @@ static bool hid_ios_phone_input_callback(InputEvent* event, void* context) {
             {
                 model->burst_active = false;
                 model->ok_pressed = false;
-                model->back_short_pending = false;
                 hid_ios_swipe_reset_state(model);
             },
             true);
@@ -520,61 +466,24 @@ static bool hid_ios_phone_input_callback(InputEvent* event, void* context) {
         return true;
     }
 
-    // Back short = mode toggle, single vs double tap distinguished by a deferred
-    // timer fire (see hid_ios_phone_back_tap_timer_cb).
+    // Back short = immediate Default <-> Swipe toggle.
     if(event->key == InputKeyBack && event->type == InputTypeShort) {
-        bool fire_double = false;
         with_view_model(
             self->view,
             HidIosPhoneModel * model,
             {
-                if(model->back_short_pending) {
-                    // Second tap inside the window — promote to double-tap.
-                    model->back_short_pending = false;
-                    fire_double = true;
-                } else {
-                    model->back_short_pending = true;
-                }
+                model->mode = (model->mode == IosModeDefault) ? IosModeSwipe : IosModeDefault;
+                // Reset transient state on mode change.
+                model->burst_active = false;
             },
-            false);
-        if(fire_double) {
-            furi_timer_stop(self->back_tap_timer);
-            with_view_model(
-                self->view,
-                HidIosPhoneModel * model,
-                {
-                    // Same "Default <-> mode" symmetry as the single-tap path:
-                    // a double-tap from Default enters Slow; from any non-Default
-                    // mode (Slow or Swipe) it returns to Default.
-                    model->mode = (model->mode == IosModeDefault) ? IosModeSlow : IosModeDefault;
-                    // Reset transient state on mode change.
-                    model->burst_active = false;
-                    model->acceleration = 0;
-                },
-                true);
-            furi_timer_stop(self->burst_timer);
-        } else {
-            furi_timer_stop(self->back_tap_timer);
-            uint32_t window = self->hid->ios_dbl_tap_window_ms;
-            if(window < 60) window = 60;
-            furi_timer_start(self->back_tap_timer, window);
-        }
+            true);
+        furi_timer_stop(self->burst_timer);
         return true;
     }
 
-    // Slow mode — let the standalone Mouse remote's input model handle the d-pad.
     IosMode mode;
     with_view_model(
         self->view, HidIosPhoneModel * model, { mode = model->mode; }, false);
-
-    if(mode == IosModeSlow) {
-        if(event->key == InputKeyRight || event->key == InputKeyLeft ||
-           event->key == InputKeyUp || event->key == InputKeyDown) {
-            hid_ios_slow_process(self, event);
-            return true;
-        }
-        return false;
-    }
 
     // Default and Swipe modes share most of the d-pad handling. We dispatch on
     // (mode, event type) below.
@@ -682,7 +591,6 @@ static void hid_ios_phone_exit_callback(void* context) {
     // leave the mouse button stuck on the host.
     hid_hal_mouse_release_all(self->hid);
     furi_timer_stop(self->burst_timer);
-    furi_timer_stop(self->back_tap_timer);
     furi_timer_stop(self->swipe_timer);
 }
 
@@ -699,8 +607,6 @@ HidIosPhone* hid_ios_phone_alloc(Hid* bt_hid) {
 
     self->burst_timer =
         furi_timer_alloc(hid_ios_phone_burst_timer_cb, FuriTimerTypePeriodic, self);
-    self->back_tap_timer =
-        furi_timer_alloc(hid_ios_phone_back_tap_timer_cb, FuriTimerTypeOnce, self);
     self->swipe_timer =
         furi_timer_alloc(hid_ios_phone_swipe_timer_cb, FuriTimerTypePeriodic, self);
 
@@ -720,8 +626,6 @@ void hid_ios_phone_free(HidIosPhone* self) {
     furi_assert(self);
     furi_timer_stop(self->burst_timer);
     furi_timer_free(self->burst_timer);
-    furi_timer_stop(self->back_tap_timer);
-    furi_timer_free(self->back_tap_timer);
     furi_timer_stop(self->swipe_timer);
     furi_timer_free(self->swipe_timer);
     view_free(self->view);

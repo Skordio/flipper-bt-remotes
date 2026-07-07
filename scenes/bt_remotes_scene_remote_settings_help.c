@@ -139,21 +139,17 @@ static const char* const remote_settings_help_pages[] = {
     "- D-pad double-tap: held-button swipe in the opposite direction (Right "
     "twice = swipe right). Can be disabled with Dbl Tap Swipe.\n"
     "- OK press/hold: left mouse button held while OK is held.\n"
-    "- Back tap: enter Swipe mode. Back double-tap: enter Slow mode. "
-    "From any non-default mode, either gesture returns you to Default. "
-    "Hold Back: exit the remote.\n\n"
+    "- Back tap: toggle Swipe mode. Hold Back: exit the remote.\n\n"
     "Swipe mode: a SINGLE d-pad press performs the swipe gesture. Tap Back "
     "to return.\n\n"
-    "Slow mode: d-pad behaves like the standalone Mouse remote (small steps, "
-    "accelerating on hold). Double-tap Back to return.\n\n"
+    "After every swipe the cursor snaps back to its pre-swipe position.\n\n"
     "Burst Dist: total px traveled in a default-mode burst.\n"
-    "Swipe Dist: total px of the held-button drag.\n"
+    "Swipe Dist: total px of the held-button drag. Left/right swipes travel "
+    "about half this (scaled to the screen's width:height ratio).\n"
     "Swipe Spd: drag speed in px/sec — lower if iOS misses your swipes.\n"
     "Dbl Tap ms: max gap between two short presses to count as a double-tap.\n"
     "Dbl Tap Swipe: when Off, a default-mode double-tap never swipes — every "
-    "press is just a new burst. Swipe mode is unaffected.\n"
-    "Return: when On, the cursor moves back to its pre-swipe position after "
-    "each swipe.",
+    "press is just a new burst. Swipe mode is unaffected.",
 };
 
 void bt_remotes_scene_remote_settings_help_on_enter(void* context) {

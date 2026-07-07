@@ -197,17 +197,13 @@ typedef enum {
 #define IOS_SWIPE_SPEED_MIN     150
 #define IOS_SWIPE_SPEED_MAX     1500
 #define IOS_SWIPE_SPEED_STEP    50
-#define IOS_SWIPE_SPEED_DEFAULT 450
-//   Double-Tap Window: max ms gap between two short presses to count as a
-//                      double-tap (Back single-tap action is deferred by this
-//                      same window).
+#define IOS_SWIPE_SPEED_DEFAULT 1100
+//   Double-Tap Window: max ms gap between two short d-pad presses to count as
+//                      a double-tap.
 #define IOS_DBL_TAP_WINDOW_MIN     150
 #define IOS_DBL_TAP_WINDOW_MAX     400
 #define IOS_DBL_TAP_WINDOW_STEP    25
 #define IOS_DBL_TAP_WINDOW_DEFAULT 250
-//   Return to Start: whether the cursor returns to its pre-swipe position
-//                    after a swipe gesture (on by default).
-#define IOS_SWIPE_RETURN_DEFAULT 1
 
 // Default-mode d-pad double-tap swipe: 1 = a quick second tap of the same
 // direction fires a swipe (legacy behavior), 0 = disabled; every press just
@@ -327,7 +323,6 @@ struct Hid {
     uint16_t ios_swipe_distance;       // px — held-button drag distance for swipes
     uint16_t ios_swipe_speed_px_s;     // px/sec — drag speed during a swipe
     uint16_t ios_dbl_tap_window_ms;    // ms — max gap between two short presses
-    uint8_t  ios_swipe_return_to_start; // 0 = stay, 1 = move cursor back to start
     uint8_t  ios_dbl_tap_swipe; // 0 = off, 1 = default-mode d-pad double-tap fires a swipe
     uint8_t  delay_connect; // 0 = connect immediately; 1 = only connect inside a remote
     uint8_t  ducky_connect_per_run; // 1 = Ducky/Collections connect only during a script run
