@@ -682,15 +682,22 @@ bool bt_remotes_profile_delete(Hid* app) {
         "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
     FuriString* keys = furi_string_alloc_printf(
         "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_KEYS_EXT);
+    FuriString* pins = furi_string_alloc_printf(
+        "%s/%s.pins", BT_REMOTES_PROFILES_DIR, app->active_profile);
 
     FS_Error e1 = storage_common_remove(app->storage, furi_string_get_cstr(cfg));
     FS_Error e2 = storage_common_remove(app->storage, furi_string_get_cstr(keys));
+    // Pins too — a leftover .pins file would be resurrected by a later
+    // profile created with the same name.
+    FS_Error e3 = storage_common_remove(app->storage, furi_string_get_cstr(pins));
 
     furi_string_free(cfg);
     furi_string_free(keys);
+    furi_string_free(pins);
 
     return (e1 == FSE_OK || e1 == FSE_NOT_EXIST) &&
-           (e2 == FSE_OK || e2 == FSE_NOT_EXIST);
+           (e2 == FSE_OK || e2 == FSE_NOT_EXIST) &&
+           (e3 == FSE_OK || e3 == FSE_NOT_EXIST);
 }
 
 bool bt_remotes_profile_rename(Hid* app) {
@@ -703,6 +710,10 @@ bool bt_remotes_profile_rename(Hid* app) {
         "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
     FuriString* new_keys = furi_string_alloc_printf(
         "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_KEYS_EXT);
+    FuriString* old_pins = furi_string_alloc_printf(
+        "%s/%s.pins", BT_REMOTES_PROFILES_DIR, app->pending_name);
+    FuriString* new_pins = furi_string_alloc_printf(
+        "%s/%s.pins", BT_REMOTES_PROFILES_DIR, app->active_profile);
 
     FS_Error err = storage_common_copy(
         app->storage, furi_string_get_cstr(old_cfg), furi_string_get_cstr(new_cfg));
@@ -722,6 +733,22 @@ bool bt_remotes_profile_rename(Hid* app) {
                 // Keys copy failed — treat rename as failed so the scene doesn't
                 // report success with pairing data silently lost.
                 FURI_LOG_E(TAG, "Profile rename: keys copy failed (%d)", err);
+                ok = false;
+            }
+        }
+
+        // Pins follow the profile name too (bt_remotes_pinned_load keys off it);
+        // leaving the old file behind would drop every pin after a rename and
+        // resurrect them on a later same-name profile.
+        if(ok && storage_file_exists(app->storage, furi_string_get_cstr(old_pins))) {
+            err = storage_common_copy(
+                app->storage,
+                furi_string_get_cstr(old_pins),
+                furi_string_get_cstr(new_pins));
+            if(err == FSE_OK) {
+                storage_common_remove(app->storage, furi_string_get_cstr(old_pins));
+            } else {
+                FURI_LOG_E(TAG, "Profile rename: pins copy failed (%d)", err);
                 ok = false;
             }
         }
@@ -757,6 +784,8 @@ bool bt_remotes_profile_rename(Hid* app) {
     furi_string_free(old_keys);
     furi_string_free(new_cfg);
     furi_string_free(new_keys);
+    furi_string_free(old_pins);
+    furi_string_free(new_pins);
     return ok;
 }
 
