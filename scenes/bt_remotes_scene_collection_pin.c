@@ -57,26 +57,11 @@ bool bt_remotes_scene_collection_pin_on_event(void* context, SceneManagerEvent e
         }
 
         if(pin_pos >= 0) {
-            // Unpin
-            for(uint8_t j = (uint8_t)pin_pos + 1; j < app->pinned_count; j++) {
-                strlcpy(
-                    app->pinned_collections[j - 1],
-                    app->pinned_collections[j],
-                    BT_REMOTES_COLLECTION_NAME_LEN);
-                app->pinned_kinds[j - 1] = app->pinned_kinds[j];
-            }
-            app->pinned_count--;
-        } else if(app->pinned_count < BT_REMOTES_PINNED_MAX) {
-            // Pin
-            strlcpy(
-                app->pinned_collections[app->pinned_count],
-                name,
-                BT_REMOTES_COLLECTION_NAME_LEN);
-            app->pinned_kinds[app->pinned_count] = 0; // collection
-            app->pinned_count++;
+            bt_remotes_pin_remove(app, (uint8_t)pin_pos);
+        } else {
+            bt_remotes_pin_add(app, name, 0); // collection; no-op when full
         }
 
-        bt_remotes_pinned_save(app);
         build_pin_submenu(app);
         submenu_set_selected_item(app->submenu, idx);
         return true;

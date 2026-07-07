@@ -24,30 +24,12 @@ void bt_remotes_scene_gesture_pin_on_enter(void* context) {
     }
 
     if(already_pinned) {
-        // Unpin
-        for(uint8_t j = pin_idx; j + 1 < app->pinned_count; j++) {
-            strlcpy(
-                app->pinned_collections[j],
-                app->pinned_collections[j + 1],
-                BT_REMOTES_COLLECTION_NAME_LEN);
-            app->pinned_kinds[j] = app->pinned_kinds[j + 1];
-        }
-        app->pinned_count--;
-        bt_remotes_pinned_save(app);
+        bt_remotes_pin_remove(app, pin_idx);
         popup_set_header(app->popup, "Unpinned!", 64, 30, AlignCenter, AlignCenter);
+    } else if(bt_remotes_pin_add(app, app->editing_gesture_name, 1)) {
+        popup_set_header(app->popup, "Pinned!", 64, 30, AlignCenter, AlignCenter);
     } else {
-        if(app->pinned_count < BT_REMOTES_PINNED_MAX) {
-            strlcpy(
-                app->pinned_collections[app->pinned_count],
-                app->editing_gesture_name,
-                BT_REMOTES_COLLECTION_NAME_LEN);
-            app->pinned_kinds[app->pinned_count] = 1; // gesture
-            app->pinned_count++;
-            bt_remotes_pinned_save(app);
-            popup_set_header(app->popup, "Pinned!", 64, 30, AlignCenter, AlignCenter);
-        } else {
-            popup_set_header(app->popup, "Pin list full", 64, 30, AlignCenter, AlignCenter);
-        }
+        popup_set_header(app->popup, "Pin list full", 64, 30, AlignCenter, AlignCenter);
     }
 
     popup_set_timeout(app->popup, 1000);

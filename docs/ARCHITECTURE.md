@@ -445,6 +445,10 @@ several guards rely on this.
 - **`menu_hidden`** (per profile): bitmask, bit `i` set → fixed item `i` hidden.
 - **Pins**: `pinned_collections[i]` + `pinned_kinds[i]` (0 = collection, 1 = gesture), persisted
   per profile in `{name}.pins`. A pinned slot launches `CollectionView` or `GestureRun` by kind.
+  Add/remove pins only through `bt_remotes_pin_add` / `bt_remotes_pin_remove`: because
+  `menu_order` references pins positionally, `pin_remove` also remaps the slots (removed pin →
+  `0xFF`, later pins shift down one) and persists both files — hand-shifting the arrays would
+  silently repoint every later `menu_order` slot at the wrong pin.
 
 `start_on_enter` rebuilds the displayed list from `menu_order`, then **appends** (a) any fixed
 item missing from a saved order — so items added in a firmware update (e.g. Custom Gestures, iOS

@@ -401,6 +401,13 @@ bool bt_remotes_collection_save(Hid* app);
 bool bt_remotes_collection_delete(Hid* app, const char* name);
 void bt_remotes_pinned_load(Hid* app);
 void bt_remotes_pinned_save(Hid* app);
+// Append a pin (kind 0 = collection, 1 = gesture) and persist. False when full.
+bool bt_remotes_pin_add(Hid* app, const char* name, uint8_t kind);
+// Remove the pin at pidx: compacts the parallel arrays, remaps the menu_order
+// slots that reference pins positionally (MENU_ITEM_COUNT + pidx), and persists
+// both. Always use this instead of hand-shifting the arrays — without the
+// remap, every menu_order slot after the removed pin launches the wrong item.
+void bt_remotes_pin_remove(Hid* app, uint8_t pidx);
 
 // Custom Gesture operations (global library; mirror the collection ops)
 void bt_remotes_gesture_load_list(Hid* app);

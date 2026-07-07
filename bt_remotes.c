@@ -927,23 +927,13 @@ bool bt_remotes_collection_delete(Hid* app, const char* name) {
     FS_Error err = storage_common_remove(app->storage, furi_string_get_cstr(path));
     furi_string_free(path);
 
-    // Remove from pinned list if present
-    bool was_pinned = false;
+    // Remove from pinned list if present (pin_remove also remaps menu_order and persists)
     for(uint8_t i = 0; i < app->pinned_count; i++) {
         if(app->pinned_kinds[i] == 0 && strcmp(app->pinned_collections[i], name) == 0) {
-            was_pinned = true;
-            for(uint8_t j = i; j + 1 < app->pinned_count; j++) {
-                strlcpy(
-                    app->pinned_collections[j],
-                    app->pinned_collections[j + 1],
-                    BT_REMOTES_COLLECTION_NAME_LEN);
-                app->pinned_kinds[j] = app->pinned_kinds[j + 1];
-            }
-            app->pinned_count--;
+            bt_remotes_pin_remove(app, i);
             break;
         }
     }
-    if(was_pinned) bt_remotes_pinned_save(app);
 
     return (err == FSE_OK || err == FSE_NOT_EXIST);
 }
@@ -1018,6 +1008,45 @@ void bt_remotes_pinned_save(Hid* app) {
     }
     flipper_format_free(fff);
     furi_string_free(path);
+}
+
+bool bt_remotes_pin_add(Hid* app, const char* name, uint8_t kind) {
+    if(app->pinned_count >= BT_REMOTES_PINNED_MAX) return false;
+    strlcpy(
+        app->pinned_collections[app->pinned_count], name, BT_REMOTES_COLLECTION_NAME_LEN);
+    app->pinned_kinds[app->pinned_count] = kind;
+    app->pinned_count++;
+    bt_remotes_pinned_save(app);
+    return true;
+}
+
+void bt_remotes_pin_remove(Hid* app, uint8_t pidx) {
+    if(pidx >= app->pinned_count) return;
+    for(uint8_t j = pidx; j + 1 < app->pinned_count; j++) {
+        strlcpy(
+            app->pinned_collections[j],
+            app->pinned_collections[j + 1],
+            BT_REMOTES_COLLECTION_NAME_LEN);
+        app->pinned_kinds[j] = app->pinned_kinds[j + 1];
+    }
+    app->pinned_count--;
+
+    // menu_order references pins positionally (MENU_ITEM_COUNT + pidx). Drop the
+    // removed pin's slot and shift every later pin reference down one so each
+    // saved slot keeps pointing at the same pin it was placed for.
+    uint8_t removed_slot = (uint8_t)(BT_REMOTES_MENU_ITEM_COUNT + pidx);
+    for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) {
+        uint8_t v = app->menu_order[i];
+        if(v == 0xFF || v < BT_REMOTES_MENU_ITEM_COUNT) continue;
+        if(v == removed_slot) {
+            app->menu_order[i] = 0xFF;
+        } else if(v > removed_slot) {
+            app->menu_order[i] = (uint8_t)(v - 1);
+        }
+    }
+
+    bt_remotes_pinned_save(app);
+    bt_remotes_save_profile_menu_cfg(app); // menu_order changed — persist it
 }
 
 // ---------------------------------------------------------------------------
