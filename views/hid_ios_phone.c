@@ -193,8 +193,16 @@ static void hid_ios_phone_swipe_timer_cb(void* context) {
     int8_t dx = 0, dy = 0;
     bool   do_press    = false;
     bool   do_release  = false;
-    bool   stop_timer  = false;
 
+    // NOTE: transitions to Idle must post furi_timer_stop while STILL HOLDING
+    // the model lock (inside the with_view_model block below). furi_timer_stop
+    // is fire-and-forget (it queues a command; only furi_timer_free flushes),
+    // so timer commands execute in FIFO post order. If the stop were posted
+    // after releasing the lock, hid_ios_swipe_start could observe Idle, restart
+    // the timer, and then have this callback's stale stop kill it — leaving
+    // swipe_phase at Lead with no timer running (swipe mode bricked until the
+    // view exits). Holding the lock guarantees any new swipe's stop+start
+    // commands are queued after ours.
     with_view_model(
         self->view,
         HidIosPhoneModel * model,
@@ -244,7 +252,7 @@ static void hid_ios_phone_swipe_timer_cb(void* context) {
                     model->swipe_remaining_y = -model->swipe_total_y;
                 } else {
                     hid_ios_swipe_reset_state(model);
-                    stop_timer = true;
+                    furi_timer_stop(self->swipe_timer);
                 }
                 break;
             case IosSwipePhaseReturn:
@@ -256,12 +264,12 @@ static void hid_ios_phone_swipe_timer_cb(void* context) {
                     model->swipe_remaining_y -= dy;
                 } else {
                     hid_ios_swipe_reset_state(model);
-                    stop_timer = true;
+                    furi_timer_stop(self->swipe_timer);
                 }
                 break;
             case IosSwipePhaseIdle:
             default:
-                stop_timer = true;
+                furi_timer_stop(self->swipe_timer);
                 break;
             }
         },
@@ -270,7 +278,6 @@ static void hid_ios_phone_swipe_timer_cb(void* context) {
     if(dx != 0 || dy != 0) hid_hal_mouse_move(self->hid, dx, dy);
     if(do_press) hid_hal_mouse_press(self->hid, HID_MOUSE_BTN_LEFT);
     if(do_release) hid_hal_mouse_release(self->hid, HID_MOUSE_BTN_LEFT);
-    if(stop_timer) furi_timer_stop(self->swipe_timer);
 }
 
 // ---------------------------------------------------------------------------
