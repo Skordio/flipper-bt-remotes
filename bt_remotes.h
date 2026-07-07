@@ -128,6 +128,9 @@ typedef enum {
 // Custom view-dispatcher event posted by the connect-wait timer so the run scene
 // re-checks app->connected. High sentinel to avoid colliding with scene-local enums.
 #define BT_REMOTES_EVENT_CONNECT_TICK 0xC0FFEE01u
+// Posted by the pair-save poll timer; handled globally in
+// bt_remotes_custom_event_callback (never reaches the scenes).
+#define BT_REMOTES_EVENT_PAIR_SAVE_TICK 0xC0FFEE02u
 
 // Ducky "connect per run": poll period + cap while the run scene waits for the host.
 #define CONNECT_WAIT_POLL_MS      150

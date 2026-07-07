@@ -1127,10 +1127,19 @@ bool bt_remotes_validate_name(const char* text, FuriString* error) {
 // ---------------------------------------------------------------------------
 
 // Runs on the FuriTimer thread every PAIR_SAVE_POLL_MS after a first-time BLE connect.
-// Polls for .bt_hid.keys (written by the BT stack when SMP bonding completes) and saves
-// the profile as soon as it appears.  Stops itself on success or after max attempts.
+// The actual poll-and-save does blocking SD I/O (keys copy + full cfg rewrite), which
+// must not run on the shared timer service thread — it would stall every other system
+// timer for the duration of the write. Post to the view dispatcher instead; the save
+// happens in bt_remotes_custom_event_callback on the dispatcher thread.
 static void bt_remotes_pair_save_timer_cb(void* context) {
     Hid* app = context;
+    view_dispatcher_send_custom_event(app->view_dispatcher, BT_REMOTES_EVENT_PAIR_SAVE_TICK);
+}
+
+// Dispatcher-thread half of the pair-save poll: checks for .bt_hid.keys (written by
+// the BT stack when SMP bonding completes) and saves the profile as soon as it
+// appears. Stops the poll on success or after max attempts.
+static void bt_remotes_pair_save_tick(Hid* app) {
     app->pair_save_attempts++;
     if(bt_remotes_profile_save(app)) {
         furi_timer_stop(app->pair_save_timer);
@@ -1274,6 +1283,12 @@ static void bt_remotes_connection_status_changed_callback(BtStatus status, void*
 static bool bt_remotes_custom_event_callback(void* context, uint32_t event) {
     furi_assert(context);
     Hid* app = context;
+    if(event == BT_REMOTES_EVENT_PAIR_SAVE_TICK) {
+        // Pair-save poll (posted from the timer thread): do the SD I/O here on
+        // the dispatcher thread and don't route the event to the scenes.
+        bt_remotes_pair_save_tick(app);
+        return true;
+    }
     return scene_manager_handle_custom_event(app->scene_manager, event);
 }
 
