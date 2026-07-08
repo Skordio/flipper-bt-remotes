@@ -509,8 +509,9 @@ in `bt_remotes_scene_start_on_event`.
 **Critical navigation rule**: BLE stays up through the whole Profile Settings sub-tree in the
 default (immediate-connect) mode. `start_on_event` no longer calls `stop_ble` for the Settings
 selection, and `profile_settings_on_event` no longer restarts BLE on Back — sub-scenes inherit a
-live BLE session and the host doesn't drop. The one Settings action that needs to re-advertise is
-the per-profile **Bluetooth Name** rename: `scene_rename.c` performs a local
+live BLE session and the host doesn't drop. Two Settings actions need to re-advertise — the
+per-profile **Bluetooth Name** rename (`scene_rename.c`) and **Reset Name to Default**
+(`scene_reset_bt_name.c`): each performs a local
 `stop_ble` → `profile_activate` → `start_ble_if_immediate` after persisting the new name (the
 `_if_immediate` keeps `delay_connect` profiles offline). Ducky Scripts / Custom Gestures /
 pinned-slot launches don't stop BLE either. In `delay_connect` mode the Start scene's

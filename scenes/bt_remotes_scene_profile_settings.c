@@ -4,9 +4,9 @@
 // opens a focused sub-scene. App-wide settings live in BtRemotesSceneGlobalSettings.
 //
 // BLE policy: BLE stays up through the whole Settings sub-tree so the paired host
-// doesn't drop while the user is tweaking knobs. The one action that needs to
-// re-advertise (renaming the active profile's BT name) cycles BLE locally in
-// scene_rename.c. Delay-connect profiles keep BLE off in Settings as before —
+// doesn't drop while the user is tweaking knobs. The two actions that need to
+// re-advertise (BT name rename in scene_rename.c, Reset Name to Default in
+// scene_reset_bt_name.c) cycle BLE locally. Delay-connect profiles keep BLE off in Settings as before —
 // the Start scene's delay-connect branch already excludes the Settings selection
 // from starting BLE.
 
