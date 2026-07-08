@@ -163,6 +163,14 @@ struct DuckyRunner {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+// Parse a non-negative script argument (delay ms, repeat count). Negative or
+// garbage input must not wrap through the uint32_t cast into a ~50-day delay
+// or a ~4-billion-iteration REPEAT — clamp to 0 instead.
+static uint32_t ducky_parse_u32(const char* p) {
+    int v = atoi(p);
+    return (v > 0) ? (uint32_t)v : 0;
+}
+
 // Interruptible delay: returns false if the stop flag fired, true on normal expiry.
 static bool ducky_delay(uint32_t ms) {
     while(ms > 0) {
@@ -369,35 +377,35 @@ static bool ducky_exec_line(DuckyRunner* runner, const char* raw) {
 
     // DELAY -------------------------------------------------------------------
     if(strncmp(line, "DELAY ", 6) == 0)
-        return ducky_delay((uint32_t)atoi(line + 6));
+        return ducky_delay(ducky_parse_u32(line + 6));
 
     // DEFAULTDELAY / DEFAULT_DELAY --------------------------------------------
     if(strncmp(line, "DEFAULTDELAY ", 13) == 0) {
-        runner->default_delay = (uint32_t)atoi(line + 13);
+        runner->default_delay = ducky_parse_u32(line + 13);
         return true;
     }
     if(strncmp(line, "DEFAULT_DELAY ", 14) == 0) {
-        runner->default_delay = (uint32_t)atoi(line + 14);
+        runner->default_delay = ducky_parse_u32(line + 14);
         return true;
     }
 
     // STRINGDELAY / STRING_DELAY (one-shot, resets after next STRING) ----------
     if(strncmp(line, "STRINGDELAY ", 12) == 0) {
-        runner->string_delay = (uint32_t)atoi(line + 12);
+        runner->string_delay = ducky_parse_u32(line + 12);
         return true;
     }
     if(strncmp(line, "STRING_DELAY ", 13) == 0) {
-        runner->string_delay = (uint32_t)atoi(line + 13);
+        runner->string_delay = ducky_parse_u32(line + 13);
         return true;
     }
 
     // DEFAULTSTRINGDELAY / DEFAULT_STRING_DELAY (persistent) ------------------
     if(strncmp(line, "DEFAULTSTRINGDELAY ", 19) == 0) {
-        runner->default_string_delay = (uint32_t)atoi(line + 19);
+        runner->default_string_delay = ducky_parse_u32(line + 19);
         return true;
     }
     if(strncmp(line, "DEFAULT_STRING_DELAY ", 21) == 0) {
-        runner->default_string_delay = (uint32_t)atoi(line + 21);
+        runner->default_string_delay = ducky_parse_u32(line + 21);
         return true;
     }
 
@@ -539,7 +547,7 @@ static int32_t ducky_worker(void* context) {
 
         // REPEAT N — re-execute the previous substantive line N times.
         if(strncmp(trimmed, "REPEAT ", 7) == 0 && prev_line[0] != '\0') {
-            uint32_t n = (uint32_t)atoi(trimmed + 7);
+            uint32_t n = ducky_parse_u32(trimmed + 7);
             for(uint32_t r = 0; r < n && keep_going; r++) {
                 if(ducky_should_stop()) {
                     keep_going = false;
