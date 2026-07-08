@@ -49,9 +49,14 @@ bool bt_remotes_scene_reset_menu_on_event(void* context, SceneManagerEvent event
     if(event.type == SceneManagerEventTypeCustom) {
         consumed = true;
         if(event.event == BtRemotesResetMenuEventConfirmed) {
-            // Restore identity order and show all remote types
+            // Restore identity order and show all remote types. Pinned slots
+            // reset to unplaced (0xFF) so the Start scene re-appends pins after
+            // the fixed items in their natural pin order — the default layout.
             for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) {
                 app->menu_order[i] = i;
+            }
+            for(uint8_t i = BT_REMOTES_MENU_ITEM_COUNT; i < BT_REMOTES_MENU_ORDER_LEN; i++) {
+                app->menu_order[i] = 0xFF;
             }
             app->menu_hidden = 0;
             bt_remotes_save_profile_menu_cfg(app);
