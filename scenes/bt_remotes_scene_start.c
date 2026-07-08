@@ -2,6 +2,13 @@
 #include "../views.h"
 #include "../views/hid_remote_menu.h"
 
+// The menu view clamps to its array capacity; if it's ever smaller than the
+// full order length (all fixed items visible + all pin slots used), the last
+// entries silently vanish from the Start menu.
+_Static_assert(
+    REMOTE_MENU_MAX_ITEMS >= BT_REMOTES_MENU_ORDER_LEN,
+    "REMOTE_MENU_MAX_ITEMS must hold every fixed item plus every pin slot");
+
 // ---------------------------------------------------------------------------
 // Static default item table — labels parallel to the enum values above
 // ---------------------------------------------------------------------------

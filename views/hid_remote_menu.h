@@ -3,6 +3,12 @@
 #include <gui/view.h>
 #include <stdint.h>
 
+// Capacity of the menu's internal item arrays. Must be at least
+// BT_REMOTES_MENU_ORDER_LEN (fixed items + pin slots) — a static assert in
+// bt_remotes_scene_start.c enforces this, since hid_remote_menu_set_items
+// clamps to this capacity and would otherwise silently drop trailing items.
+#define REMOTE_MENU_MAX_ITEMS 33 // 17 fixed items + 16 pinned collection/gesture slots
+
 // Forward declarations
 typedef struct HidRemoteMenu HidRemoteMenu;
 
