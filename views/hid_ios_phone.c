@@ -247,14 +247,15 @@ static void hid_ios_phone_swipe_timer_cb(void* context) {
                 model->swipe_remaining_y = -model->swipe_total_y;
                 break;
             case IosSwipePhaseReturn:
-                // Return at the max HID delta per tick (no button held, so iOS
-                // can't misread the motion as a gesture) — the cursor snaps
-                // back to its pre-swipe position as fast as the link allows.
+                // The return MUST use the same per-report chunk size as the
+                // drag: iOS pointer acceleration scales with the delta in each
+                // report, so a faster return (bigger reports) travels farther
+                // on-screen than the drag did and overshoots the start point.
                 if(model->swipe_remaining_x != 0) {
-                    dx = hid_ios_chunk_step(model->swipe_remaining_x, 127);
+                    dx = hid_ios_chunk_step(model->swipe_remaining_x, model->swipe_chunk_px);
                     model->swipe_remaining_x -= dx;
                 } else if(model->swipe_remaining_y != 0) {
-                    dy = hid_ios_chunk_step(model->swipe_remaining_y, 127);
+                    dy = hid_ios_chunk_step(model->swipe_remaining_y, model->swipe_chunk_px);
                     model->swipe_remaining_y -= dy;
                 } else {
                     hid_ios_swipe_reset_state(model);
