@@ -131,6 +131,16 @@ typedef enum {
 // Posted by the pair-save poll timer; handled globally in
 // bt_remotes_custom_event_callback (never reaches the scenes).
 #define BT_REMOTES_EVENT_PAIR_SAVE_TICK 0xC0FFEE02u
+// Posted by the hold-Back-to-quit timer; handled globally in
+// bt_remotes_custom_event_callback, which quits the whole app.
+#define BT_REMOTES_EVENT_HOLD_EXIT 0xC0FFEE03u
+
+// Hold-Back-to-Quit (app-level): holding Back for this many seconds anywhere in
+// the app quits it entirely. The quick long-press that exits a remote to the
+// Start menu is separate and unaffected.
+#define BT_REMOTES_BACK_HOLD_EXIT_S_MIN     2
+#define BT_REMOTES_BACK_HOLD_EXIT_S_MAX     10
+#define BT_REMOTES_BACK_HOLD_EXIT_S_DEFAULT 6
 
 // Ducky "connect per run": poll period + cap while the run scene waits for the host.
 #define CONNECT_WAIT_POLL_MS      150
@@ -330,6 +340,7 @@ struct Hid {
     // App-level settings
     // 0=Neither, 1=Disconnect, 2=Connect, 3=Both
     uint8_t vibro_mode;
+    uint8_t back_hold_exit_s; // seconds Back must be held to quit the whole app
     // Persistent visual order for the Start menu.  0xFF = sentinel (unused slot).
     uint8_t  menu_order[BT_REMOTES_MENU_ORDER_LEN];
     uint32_t menu_hidden; // bitmask: bit i set → BtRemotesStartIndex i hidden in Start menu
@@ -345,6 +356,10 @@ struct Hid {
     // Post-pairing auto-save: polls for .bt_hid.keys after first-time BLE connect
     FuriTimer* pair_save_timer;
     uint8_t    pair_save_attempts;
+    // Hold-Back-to-Quit: raw-input watchdog armed on Back press, disarmed on release
+    FuriTimer*              back_hold_timer;
+    FuriPubSub*             input_events;
+    FuriPubSubSubscription* input_subscription;
     // Ducky "connect per run": polls app->connected while the run scene waits for the host
     FuriTimer* connect_wait_timer;
     uint8_t    connect_wait_attempts;

@@ -63,7 +63,11 @@ static const char* const remote_settings_help_pages[] = {
     "- Neither: no buzz.\n"
     "- Connect: buzz when a device connects.\n"
     "- Disconnect: buzz when a device disconnects.\n"
-    "- Both: buzz on connect AND disconnect.",
+    "- Both: buzz on connect AND disconnect.\n\n"
+    "Hold Back to Quit:\n"
+    "Holding Back for this many seconds anywhere in the app quits it "
+    "completely. The quick long-press that exits a remote to its menu is "
+    "unaffected.",
 
     // Connection
     "Bluetooth name and connection behavior for the active profile.\n\n"

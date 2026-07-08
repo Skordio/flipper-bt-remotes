@@ -184,6 +184,7 @@ struct Hid {
 
     // App-level + menu layout
     uint8_t  vibro_mode;                          // 0=Neither 1=Disconnect 2=Connect 3=Both
+    uint8_t  back_hold_exit_s;                    // seconds Back must be held to quit the app
     uint8_t  menu_order[BT_REMOTES_MENU_ORDER_LEN]; // 0xFF = unused slot; >=MENU_ITEM_COUNT = pinned slot
     uint32_t menu_hidden;                          // bitmask: bit i set → item i hidden
     char     profile_order_str[...];               // pipe-separated saved profile order
@@ -256,10 +257,11 @@ Filetype: Flipper BT Remotes App Config
 Version: 1
 default_name: Flipper Zero       # BT name new profiles inherit ("" if unset)
 vibro_mode: 1                    # 0=Neither 1=Disconnect 2=Connect 3=Both (default 1)
+back_hold_exit_s: 6              # seconds Back must be held to quit the app (2-10, default 6)
 profile_order: Keyboard|Mouse|…  # pipe-separated saved profile display order
 ```
-Missing keys fall back to defaults (default_name "", vibro 1, no profile order). Legacy files with
-the old `disconnect_vibro` bool simply fail the uint32 read and default to 1.
+Missing keys fall back to defaults (default_name "", vibro 1, back-hold 6 s, no profile order).
+Legacy files with the old `disconnect_vibro` bool simply fail the uint32 read and default to 1.
 
 ### Collections (Ducky Scripts) — `APP_DATA_PATH("collections/")`
 
@@ -489,9 +491,10 @@ ProfileSelect ──► ProfileNew ──► (back to ProfileSelect, auto-advanc
     │                                  │     SaveProfile, DeleteProfile           │
     │                                  └──► Help (RemoteSettingsHelp / Profile)   │
     │
-    └──► GlobalSettings (from ProfileSelect, no active profile)
-            ├──► Rename (Default Bluetooth Name → app->default_ble_name)
-            ├──► (inline) Vibration cycle
+    └──► GlobalSettings (VariableItemList, from ProfileSelect, no active profile)
+            ├──► Rename (Default BT Name → app->default_ble_name)
+            ├──► (L/R row) Vibration
+            ├──► (L/R row) Hold Back Quit (2-10 s)
             └──► Help (RemoteSettingsHelp / Global)
 ```
 
@@ -510,6 +513,20 @@ pinned-slot launches don't stop BLE either. In `delay_connect` mode the Start sc
 `on_enter`/`on_event` own the stop-at-menu / start-into-remote transitions; the Start scene's
 `delay_connect` BLE-start branch already excludes the Settings selection, so delay-connect profiles
 stay offline through Settings as before. `GlobalSettings` has no profile and never touches BLE.
+
+**Hold-Back-to-Quit watchdog**: independent of scene navigation, `bt_remotes.c` subscribes to the
+raw input pubsub (`RECORD_INPUT_EVENTS`) — Back **press** arms a one-shot `back_hold_timer` for
+`back_hold_exit_s` seconds (app-level setting, 2–10 s, default 6), Back **release** disarms it.
+Because the pubsub delivers every press/release regardless of view focus or event consumption, the
+gesture works everywhere (remotes, text inputs, running scripts). When the timer fires it posts
+`BT_REMOTES_EVENT_HOLD_EXIT`; `bt_remotes_custom_event_callback` handles it globally with
+`scene_manager_stop` (so the current scene's `on_exit` cleanup runs) + `view_dispatcher_stop`,
+then the normal teardown in `bt_remotes_free` stops BLE and frees everything. One wrinkle: after
+stop, `view_dispatcher_run` blocks until all ongoing input is released — since Back is still
+physically held at the deadline, the handler also publishes a synthetic Back `InputTypeRelease`
+(software sequence source, same pubsub path as the `input send` CLI) so the app exits immediately;
+the later real Release is discarded as non-complementary. The quick long-press Back that exits a
+remote to the Start menu is a separate, unchanged mechanism.
 
 ---
 
@@ -620,8 +637,8 @@ sub-scenes, each a `VariableItemList`, all persisted in the profile `.cfg`:
 | `bt_remotes_profile_delete(app)` | Removes profile `.cfg` and `.keys` (tolerates already-absent). |
 | `bt_remotes_profile_clear_pairing(app)` | Deletes both key files (active + profile) without touching BLE stack. Use instead of `bt_hid_remove_pairing` whenever BLE is stopped. |
 | `bt_remotes_save_profile_menu_cfg(app)` | Writes the full profile `.cfg` (name+mac+menu+per-remote settings). No-op if no active profile. |
-| `bt_remotes_load_app_cfg(app)` | Reads `app.cfg` → `default_ble_name`, `vibro_mode`, `profile_order_str`. Sets defaults if file/keys missing. |
-| `bt_remotes_save_app_cfg(app)` | Writes `default_name`, `vibro_mode`, `profile_order` to `app.cfg`. |
+| `bt_remotes_load_app_cfg(app)` | Reads `app.cfg` → `default_ble_name`, `vibro_mode`, `back_hold_exit_s`, `profile_order_str`. Sets defaults if file/keys missing. |
+| `bt_remotes_save_app_cfg(app)` | Writes `default_name`, `vibro_mode`, `back_hold_exit_s`, `profile_order` to `app.cfg`. |
 
 (Collection/gesture/pins ops mirror these — see `bt_remotes_collection_*`, `bt_remotes_gesture_*`,
 `bt_remotes_pinned_load/save`.)

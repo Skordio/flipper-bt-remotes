@@ -38,6 +38,7 @@ static void
 
 void bt_remotes_load_app_cfg(Hid* app) {
     app->vibro_mode = 1; // default: Disconnect
+    app->back_hold_exit_s = BT_REMOTES_BACK_HOLD_EXIT_S_DEFAULT;
     // menu_order and menu_hidden are per-profile — loaded by bt_remotes_profile_activate.
     // Initialise to safe defaults here so the struct is never uninitialised.
     for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) app->menu_order[i] = i;
@@ -71,6 +72,16 @@ void bt_remotes_load_app_cfg(Hid* app) {
             if(vibro_mode_u32 > 3) vibro_mode_u32 = 1;
             app->vibro_mode = (uint8_t)vibro_mode_u32;
         }
+        // Hold-Back-to-Quit duration (seconds)
+        flipper_format_rewind(fff);
+        uint32_t back_hold_u32 = BT_REMOTES_BACK_HOLD_EXIT_S_DEFAULT;
+        if(flipper_format_read_uint32(fff, "back_hold_exit_s", &back_hold_u32, 1)) {
+            if(back_hold_u32 < BT_REMOTES_BACK_HOLD_EXIT_S_MIN)
+                back_hold_u32 = BT_REMOTES_BACK_HOLD_EXIT_S_MIN;
+            if(back_hold_u32 > BT_REMOTES_BACK_HOLD_EXIT_S_MAX)
+                back_hold_u32 = BT_REMOTES_BACK_HOLD_EXIT_S_MAX;
+            app->back_hold_exit_s = (uint8_t)back_hold_u32;
+        }
         // Profile order: pipe-separated profile names
         flipper_format_rewind(fff);
         if(flipper_format_read_string(fff, "profile_order", tmp)) {
@@ -92,6 +103,8 @@ void bt_remotes_save_app_cfg(Hid* app) {
         flipper_format_write_string_cstr(fff, "default_name", app->default_ble_name);
         uint32_t vibro_mode_u32 = app->vibro_mode;
         flipper_format_write_uint32(fff, "vibro_mode", &vibro_mode_u32, 1);
+        uint32_t back_hold_u32 = app->back_hold_exit_s;
+        flipper_format_write_uint32(fff, "back_hold_exit_s", &back_hold_u32, 1);
         flipper_format_write_string_cstr(fff, "profile_order", app->profile_order_str);
         flipper_format_file_close(fff);
     }
@@ -1150,6 +1163,34 @@ static void bt_remotes_connect_wait_timer_cb(void* context) {
     view_dispatcher_send_custom_event(app->view_dispatcher, BT_REMOTES_EVENT_CONNECT_TICK);
 }
 
+// ---------------------------------------------------------------------------
+// Hold-Back-to-Quit
+// ---------------------------------------------------------------------------
+
+// Fires when Back has been held for back_hold_exit_s seconds. Runs on the
+// FuriTimer thread; the actual teardown happens on the dispatcher thread in
+// bt_remotes_custom_event_callback.
+static void bt_remotes_back_hold_timer_cb(void* context) {
+    Hid* app = context;
+    view_dispatcher_send_custom_event(app->view_dispatcher, BT_REMOTES_EVENT_HOLD_EXIT);
+}
+
+// Raw input-pubsub watchdog: sees every Back press/release regardless of which
+// view has focus or whether the view consumes the event, so the hold-to-quit
+// gesture works everywhere (remotes, menus, text inputs, running scripts).
+// Runs on the input service thread — only arms/disarms the timer, never blocks.
+static void bt_remotes_back_hold_input_cb(const void* value, void* context) {
+    const InputEvent* event = value;
+    Hid* app = context;
+    if(event->key != InputKeyBack) return;
+    if(event->type == InputTypePress) {
+        furi_timer_start(
+            app->back_hold_timer, furi_ms_to_ticks((uint32_t)app->back_hold_exit_s * 1000));
+    } else if(event->type == InputTypeRelease) {
+        furi_timer_stop(app->back_hold_timer);
+    }
+}
+
 // Forward declaration so bt_remotes_start_ble can register it
 static void bt_remotes_connection_status_changed_callback(BtStatus status, void* context);
 
@@ -1282,6 +1323,27 @@ static bool bt_remotes_custom_event_callback(void* context, uint32_t event) {
         bt_remotes_pair_save_tick(app);
         return true;
     }
+    if(event == BT_REMOTES_EVENT_HOLD_EXIT) {
+        // Back held for back_hold_exit_s seconds: quit the whole app. Exit the
+        // current scene first so its on_exit cleanup runs (release HID keys,
+        // stop ducky/gesture workers); underlying scenes only save cursor
+        // state, which doesn't matter during teardown.
+        scene_manager_stop(app->scene_manager);
+        view_dispatcher_stop(app->view_dispatcher);
+        // Back is still physically held, and after stop view_dispatcher_run
+        // blocks until every ongoing input is released. Publish a synthetic
+        // Release (same pubsub path the `input send` CLI uses) so the app
+        // quits at the deadline instead of waiting for the finger to lift;
+        // the eventual real Release is discarded as non-complementary.
+        InputEvent release = {
+            .sequence_source = INPUT_SEQUENCE_SOURCE_SOFTWARE,
+            .sequence_counter = 0,
+            .key = InputKeyBack,
+            .type = InputTypeRelease,
+        };
+        furi_pubsub_publish(app->input_events, &release);
+        return true;
+    }
     return scene_manager_handle_custom_event(app->scene_manager, event);
 }
 
@@ -1300,6 +1362,9 @@ static Hid* bt_remotes_alloc(void) {
     Hid* app = malloc(sizeof(Hid));
     memset(app, 0, sizeof(Hid));
     app->pending_launcher_remote = BT_REMOTES_LAUNCHER_REMOTE_NONE;
+    // The input watchdog subscribes below, before bt_remotes_load_app_cfg runs
+    // in the entry point — never leave the hold duration at 0.
+    app->back_hold_exit_s = BT_REMOTES_BACK_HOLD_EXIT_S_DEFAULT;
 
     app->gui = furi_record_open(RECORD_GUI);
     app->bt = furi_record_open(RECORD_BT);
@@ -1429,11 +1494,23 @@ static Hid* bt_remotes_alloc(void) {
     app->connect_wait_timer =
         furi_timer_alloc(bt_remotes_connect_wait_timer_cb, FuriTimerTypePeriodic, app);
 
+    app->back_hold_timer =
+        furi_timer_alloc(bt_remotes_back_hold_timer_cb, FuriTimerTypeOnce, app);
+    app->input_events = furi_record_open(RECORD_INPUT_EVENTS);
+    app->input_subscription =
+        furi_pubsub_subscribe(app->input_events, bt_remotes_back_hold_input_cb, app);
+
     return app;
 }
 
 static void bt_remotes_free(Hid* app) {
     furi_assert(app);
+
+    // Tear down the hold-Back watchdog first so nothing can re-arm the timer
+    // while the rest of the app is being freed.
+    furi_pubsub_unsubscribe(app->input_events, app->input_subscription);
+    furi_record_close(RECORD_INPUT_EVENTS);
+    furi_timer_stop(app->back_hold_timer);
 
     if(app->ble_started) {
         bt_remotes_stop_ble(app);
@@ -1490,6 +1567,7 @@ static void bt_remotes_free(Hid* app) {
     gesture_runner_free(app->gesture_runner);
     furi_timer_free(app->pair_save_timer);
     furi_timer_free(app->connect_wait_timer);
+    furi_timer_free(app->back_hold_timer);
 
     scene_manager_free(app->scene_manager);
     view_dispatcher_free(app->view_dispatcher);
