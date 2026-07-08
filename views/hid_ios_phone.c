@@ -466,16 +466,25 @@ static bool hid_ios_phone_input_callback(InputEvent* event, void* context) {
 
     // Back short = immediate Default <-> Swipe toggle.
     if(event->key == InputKeyBack && event->type == InputTypeShort) {
+        bool swipe_held_button = false;
         with_view_model(
             self->view,
             HidIosPhoneModel * model,
             {
                 model->mode = (model->mode == IosModeDefault) ? IosModeSwipe : IosModeDefault;
-                // Reset transient state on mode change.
+                // Reset transient state on mode change — including an in-flight
+                // swipe, whose timer would otherwise keep emitting mouse reports
+                // into the new mode.
                 model->move_active = false;
+                swipe_held_button = (model->swipe_phase == IosSwipePhaseDrag) ||
+                                    (model->swipe_phase == IosSwipePhaseRelease);
+                hid_ios_swipe_reset_state(model);
             },
             true);
         furi_timer_stop(self->move_timer);
+        furi_timer_stop(self->swipe_timer);
+        // A swipe aborted mid-Drag leaves the left button held down.
+        if(swipe_held_button) hid_hal_mouse_release(self->hid, HID_MOUSE_BTN_LEFT);
         return true;
     }
 
