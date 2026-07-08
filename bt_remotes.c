@@ -183,8 +183,14 @@ void bt_remotes_save_profile_menu_cfg(Hid* app) {
         flipper_format_write_uint32(fff, "tiktok_gesture_margin", &tiktok_gesture_margin_u32, 1);
         uint32_t tiktok_gesture_swipe_u32 = app->tiktok_gesture_swipe;
         flipper_format_write_uint32(fff, "tiktok_gesture_swipe", &tiktok_gesture_swipe_u32, 1);
-        uint32_t ios_burst_distance_u32 = app->ios_burst_distance;
-        flipper_format_write_uint32(fff, "ios_burst_distance", &ios_burst_distance_u32, 1);
+        uint32_t ios_cursor_mode_u32 = app->ios_cursor_mode;
+        flipper_format_write_uint32(fff, "ios_cursor_mode", &ios_cursor_mode_u32, 1);
+        uint32_t ios_cursor_speed_u32 = app->ios_cursor_speed_px_s;
+        flipper_format_write_uint32(fff, "ios_cursor_speed_px_s", &ios_cursor_speed_u32, 1);
+        uint32_t ios_ramp_start_pct_u32 = app->ios_ramp_start_pct;
+        flipper_format_write_uint32(fff, "ios_ramp_start_pct", &ios_ramp_start_pct_u32, 1);
+        uint32_t ios_ramp_time_ms_u32 = app->ios_ramp_time_ms;
+        flipper_format_write_uint32(fff, "ios_ramp_time_ms", &ios_ramp_time_ms_u32, 1);
         uint32_t ios_swipe_distance_u32 = app->ios_swipe_distance;
         flipper_format_write_uint32(fff, "ios_swipe_distance", &ios_swipe_distance_u32, 1);
         uint32_t ios_swipe_speed_u32 = app->ios_swipe_speed_px_s;
@@ -586,16 +592,48 @@ bool bt_remotes_profile_activate(Hid* app) {
                 app->tiktok_gesture_swipe = TIKTOK_GESTURE_SWIPE_DEFAULT;
             }
             flipper_format_rewind(mfff);
-            uint32_t ios_burst_distance_u32 = IOS_BURST_DISTANCE_DEFAULT;
-            if(flipper_format_read_uint32(
-                   mfff, "ios_burst_distance", &ios_burst_distance_u32, 1)) {
-                if(ios_burst_distance_u32 < IOS_BURST_DISTANCE_MIN)
-                    ios_burst_distance_u32 = IOS_BURST_DISTANCE_MIN;
-                if(ios_burst_distance_u32 > IOS_BURST_DISTANCE_MAX)
-                    ios_burst_distance_u32 = IOS_BURST_DISTANCE_MAX;
-                app->ios_burst_distance = (uint16_t)ios_burst_distance_u32;
+            uint32_t ios_cursor_mode_u32 = IOS_CURSOR_MODE_DEFAULT;
+            if(flipper_format_read_uint32(mfff, "ios_cursor_mode", &ios_cursor_mode_u32, 1)) {
+                if(ios_cursor_mode_u32 >= IOS_CURSOR_MODE_COUNT)
+                    ios_cursor_mode_u32 = IOS_CURSOR_MODE_DEFAULT;
+                app->ios_cursor_mode = (uint8_t)ios_cursor_mode_u32;
             } else {
-                app->ios_burst_distance = IOS_BURST_DISTANCE_DEFAULT;
+                app->ios_cursor_mode = IOS_CURSOR_MODE_DEFAULT;
+            }
+            flipper_format_rewind(mfff);
+            uint32_t ios_cursor_speed_u32 = IOS_CURSOR_SPEED_DEFAULT;
+            if(flipper_format_read_uint32(
+                   mfff, "ios_cursor_speed_px_s", &ios_cursor_speed_u32, 1)) {
+                if(ios_cursor_speed_u32 < IOS_CURSOR_SPEED_MIN)
+                    ios_cursor_speed_u32 = IOS_CURSOR_SPEED_MIN;
+                if(ios_cursor_speed_u32 > IOS_CURSOR_SPEED_MAX)
+                    ios_cursor_speed_u32 = IOS_CURSOR_SPEED_MAX;
+                app->ios_cursor_speed_px_s = (uint16_t)ios_cursor_speed_u32;
+            } else {
+                app->ios_cursor_speed_px_s = IOS_CURSOR_SPEED_DEFAULT;
+            }
+            flipper_format_rewind(mfff);
+            uint32_t ios_ramp_start_pct_u32 = IOS_RAMP_START_PCT_DEFAULT;
+            if(flipper_format_read_uint32(
+                   mfff, "ios_ramp_start_pct", &ios_ramp_start_pct_u32, 1)) {
+                if(ios_ramp_start_pct_u32 < IOS_RAMP_START_PCT_MIN)
+                    ios_ramp_start_pct_u32 = IOS_RAMP_START_PCT_MIN;
+                if(ios_ramp_start_pct_u32 > IOS_RAMP_START_PCT_MAX)
+                    ios_ramp_start_pct_u32 = IOS_RAMP_START_PCT_MAX;
+                app->ios_ramp_start_pct = (uint8_t)ios_ramp_start_pct_u32;
+            } else {
+                app->ios_ramp_start_pct = IOS_RAMP_START_PCT_DEFAULT;
+            }
+            flipper_format_rewind(mfff);
+            uint32_t ios_ramp_time_ms_u32 = IOS_RAMP_TIME_DEFAULT;
+            if(flipper_format_read_uint32(mfff, "ios_ramp_time_ms", &ios_ramp_time_ms_u32, 1)) {
+                if(ios_ramp_time_ms_u32 < IOS_RAMP_TIME_MIN)
+                    ios_ramp_time_ms_u32 = IOS_RAMP_TIME_MIN;
+                if(ios_ramp_time_ms_u32 > IOS_RAMP_TIME_MAX)
+                    ios_ramp_time_ms_u32 = IOS_RAMP_TIME_MAX;
+                app->ios_ramp_time_ms = (uint16_t)ios_ramp_time_ms_u32;
+            } else {
+                app->ios_ramp_time_ms = IOS_RAMP_TIME_DEFAULT;
             }
             flipper_format_rewind(mfff);
             uint32_t ios_swipe_distance_u32 = IOS_SWIPE_DISTANCE_DEFAULT;

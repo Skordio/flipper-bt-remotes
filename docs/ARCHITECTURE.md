@@ -222,7 +222,11 @@ All config files are FlipperFormat text. Constants/file-types live in `bt_remote
   media_mouse_switch: <uint32>       # 0/1
   tiktok_scroll_mode: <uint32>       # TikTokScrollMode enum
   tiktok_gesture_inset / _margin / _swipe: <uint32>   # px tunables
-  ios_burst_distance / ios_swipe_distance: <uint32>   # iOS Phone px tunables
+  ios_cursor_mode: <uint32>          # iOS Phone hold movement: 0=Constant 1=Ramp
+  ios_cursor_speed_px_s: <uint32>    # iOS Phone hold speed (px/sec; ramp top speed)
+  ios_ramp_start_pct: <uint32>       # iOS Phone ramp start (% of cursor speed)
+  ios_ramp_time_ms: <uint32>         # iOS Phone ramp climb time (ms)
+  ios_swipe_distance: <uint32>       # iOS Phone drag distance (px)
   ios_swipe_speed_px_s: <uint32>     # iOS Phone drag speed (px/sec)
   ios_dbl_tap_window_ms: <uint32>    # iOS Phone double-tap window (ms)
   ios_dbl_tap_swipe: <uint32>        # 0/1 — default-mode d-pad double-tap fires a swipe

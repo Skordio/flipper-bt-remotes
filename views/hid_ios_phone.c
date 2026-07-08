@@ -6,14 +6,11 @@
 
 #define TAG "HidIosPhone"
 
-// Period of the burst-move timer in ms. One mouse-move packet per tick; each BLE
-// connection interval is ~15-30 ms, so 15 ms keeps the host fed without
-// flooding it.
-#define IOS_BURST_TICK_MS 15
-// Total duration of a single burst at base speed. Tuned so a default-distance
-// burst (480 px) plays out in ~825 ms — long enough to feel the deceleration
-// curve clearly while keeping average velocity around 580 px/s.
-#define IOS_BURST_DURATION_MS 825
+// Period of the cursor-move timer in ms. One mouse-move packet per tick; each
+// BLE connection interval is ~15-30 ms, so 15 ms keeps the host fed without
+// flooding it. The cursor moves while a d-pad direction is held, at either a
+// constant rate or a slow-start ramp (ios_cursor_mode).
+#define IOS_MOVE_TICK_MS 15
 // Delay between swipe-chunk packets in ms. Chunk size is computed at swipe
 // start from ios_swipe_speed_px_s so the user's px/sec setting controls
 // drag speed at a fixed tick rate (HID mouse delta is int8, max 127).
@@ -47,9 +44,9 @@ typedef enum {
 struct HidIosPhone {
     View* view;
     Hid*  hid;
-    // Burst timer drives the decelerating cursor move in Default mode while a
-    // d-pad direction is held. Periodic; allocated once.
-    FuriTimer* burst_timer;
+    // Move timer drives the cursor in Default mode while a d-pad direction is
+    // held (constant or ramping speed). Periodic; allocated once.
+    FuriTimer* move_timer;
     // Swipe state-machine timer; ticks every IOS_SWIPE_STEP_MS while a swipe
     // is in progress so the input thread isn't blocked for the gesture duration.
     FuriTimer* swipe_timer;
@@ -65,10 +62,14 @@ typedef struct {
     bool    left_pressed;
     bool    right_pressed;
     bool    ok_pressed;
-    // Default-mode burst state. Only one direction can be bursting at a time.
-    bool     burst_active;
-    InputKey burst_key;
-    uint32_t burst_start_tick;
+    // Default-mode move state. Only one direction can be moving at a time.
+    bool     move_active;
+    InputKey move_key;
+    uint32_t move_start_tick;
+    // Milli-px accumulator: each tick banks speed_px_s * IOS_MOVE_TICK_MS and
+    // emits accum/1000 whole px, so slow ramp starts are genuinely slow
+    // (sub-1 px/tick) instead of clamping to 1 px per tick.
+    uint32_t move_accum_mpx;
     // Double-tap detection for the d-pad in Default mode: remember the last
     // direction release so a follow-up press within dbl_tap_window can be
     // promoted to a swipe.
@@ -76,7 +77,7 @@ typedef struct {
     uint32_t last_release_tick;
     // Wall-clock of the most recent d-pad Press, used to require that the prior
     // press was a TAP (release - press < window) before treating the current
-    // press as a double-tap. Without this, holding a key through a full burst
+    // press as a double-tap. Without this, holding a key to cruise the cursor
     // and re-pressing within the double-tap window would fire an unintended swipe.
     uint32_t current_press_tick;
     // Non-blocking swipe state. swipe_phase != Idle means a swipe is mid-flight
@@ -362,10 +363,10 @@ static void hid_ios_phone_draw_callback(Canvas* canvas, void* context) {
 }
 
 // ---------------------------------------------------------------------------
-// Burst timer (Default mode)
+// Move timer (Default mode)
 // ---------------------------------------------------------------------------
 
-static void hid_ios_phone_burst_timer_cb(void* context) {
+static void hid_ios_phone_move_timer_cb(void* context) {
     furi_assert(context);
     HidIosPhone* self = context;
 
@@ -377,47 +378,43 @@ static void hid_ios_phone_burst_timer_cb(void* context) {
         self->view,
         HidIosPhoneModel * model,
         {
-            if(!model->burst_active) {
+            if(!model->move_active) {
                 stop = true;
             } else {
-                // Symmetric triangle velocity profile: ramp from 0.5*peak at
-                // t=0 up to peak at t=T/2, then back down to 0.5*peak at t=T.
-                // Past T, the `delta < 1` clamp below takes over so a held key
-                // keeps producing a slow precision crawl until release. Average
-                // height is 0.75*peak, so peak = (4*dist) / (3*N) keeps the
-                // total area equal to ios_burst_distance.
-                uint32_t elapsed = hid_ios_now_ms() - model->burst_start_tick;
-                int32_t dist = (int32_t)self->hid->ios_burst_distance;
-                int32_t n_ticks = IOS_BURST_DURATION_MS / IOS_BURST_TICK_MS;
-                if(n_ticks < 1) n_ticks = 1;
-                int32_t peak = (4 * dist + 3 * n_ticks - 1) / (3 * n_ticks); // round up
-                int32_t delta = 0;
-                if(elapsed < IOS_BURST_DURATION_MS) {
-                    int32_t T = (int32_t)IOS_BURST_DURATION_MS;
-                    if((int32_t)elapsed * 2 <= T) {
-                        // First half: 0.5*peak -> peak.
-                        delta = peak * (T + 2 * (int32_t)elapsed) / (2 * T);
-                    } else {
-                        // Second half: peak -> 0.5*peak.
-                        delta = peak * (3 * T - 2 * (int32_t)elapsed) / (2 * T);
+                // Current speed in px/s: the full cursor speed in Constant
+                // mode; in Ramp mode, a linear climb from ios_ramp_start_pct
+                // of it to all of it over ios_ramp_time_ms.
+                uint32_t speed = self->hid->ios_cursor_speed_px_s;
+                if(self->hid->ios_cursor_mode == IosCursorModeRamp) {
+                    uint32_t elapsed = hid_ios_now_ms() - model->move_start_tick;
+                    uint32_t ramp_ms = self->hid->ios_ramp_time_ms;
+                    if(ramp_ms < 1) ramp_ms = 1;
+                    if(elapsed < ramp_ms) {
+                        uint32_t start = speed * self->hid->ios_ramp_start_pct / 100;
+                        speed = start + (speed - start) * elapsed / ramp_ms;
                     }
                 }
-                if(delta < 1) delta = 1;
-                if(delta > 127) delta = 127;
 
-                switch(model->burst_key) {
+                // Bank this tick's travel in milli-px and emit the whole px.
+                // Ticks that bank less than 1 px emit nothing (dx==dy==0).
+                model->move_accum_mpx += speed * IOS_MOVE_TICK_MS;
+                uint32_t delta = model->move_accum_mpx / 1000;
+                if(delta > 127) delta = 127; // HID mouse delta is int8
+                model->move_accum_mpx -= delta * 1000;
+
+                switch(model->move_key) {
                 case InputKeyRight: dx = (int8_t)delta;   break;
                 case InputKeyLeft:  dx = (int8_t)-delta;  break;
                 case InputKeyDown:  dy = (int8_t)delta;   break;
                 case InputKeyUp:    dy = (int8_t)-delta;  break;
-                default: stop = true; model->burst_active = false; break;
+                default: stop = true; model->move_active = false; break;
                 }
             }
         },
         false);
 
     if(stop) {
-        furi_timer_stop(self->burst_timer);
+        furi_timer_stop(self->move_timer);
     } else if(dx != 0 || dy != 0) {
         hid_hal_mouse_move(self->hid, dx, dy);
     }
@@ -436,13 +433,13 @@ static bool hid_ios_phone_input_callback(InputEvent* event, void* context) {
     // consume the event so the view dispatcher's default Back handler fires.
     if(event->type == InputTypeLong && event->key == InputKeyBack) {
         hid_hal_mouse_release_all(self->hid);
-        furi_timer_stop(self->burst_timer);
+        furi_timer_stop(self->move_timer);
         furi_timer_stop(self->swipe_timer);
         with_view_model(
             self->view,
             HidIosPhoneModel * model,
             {
-                model->burst_active = false;
+                model->move_active = false;
                 model->ok_pressed = false;
                 hid_ios_swipe_reset_state(model);
             },
@@ -475,10 +472,10 @@ static bool hid_ios_phone_input_callback(InputEvent* event, void* context) {
             {
                 model->mode = (model->mode == IosModeDefault) ? IosModeSwipe : IosModeDefault;
                 // Reset transient state on mode change.
-                model->burst_active = false;
+                model->move_active = false;
             },
             true);
-        furi_timer_stop(self->burst_timer);
+        furi_timer_stop(self->move_timer);
         return true;
     }
 
@@ -539,10 +536,11 @@ static bool hid_ios_phone_input_callback(InputEvent* event, void* context) {
                     // Clear so a triple-tap doesn't chain swipes.
                     model->last_release_key = InputKeyMAX;
                 } else {
-                    // Start a fresh burst.
-                    model->burst_active = true;
-                    model->burst_key = event->key;
-                    model->burst_start_tick = now;
+                    // Start moving in this direction.
+                    model->move_active = true;
+                    model->move_key = event->key;
+                    model->move_start_tick = now;
+                    model->move_accum_mpx = 0;
                 }
                 // Always record press start so the matching Release can decide
                 // whether to arm a double-tap (short press only).
@@ -552,8 +550,8 @@ static bool hid_ios_phone_input_callback(InputEvent* event, void* context) {
         if(do_swipe) {
             hid_ios_swipe_start(self, dx, dy);
         } else {
-            furi_timer_stop(self->burst_timer);
-            furi_timer_start(self->burst_timer, IOS_BURST_TICK_MS);
+            furi_timer_stop(self->move_timer);
+            furi_timer_start(self->move_timer, IOS_MOVE_TICK_MS);
         }
     } else if(event->type == InputTypeRelease) {
         uint32_t now = hid_ios_now_ms();
@@ -561,12 +559,12 @@ static bool hid_ios_phone_input_callback(InputEvent* event, void* context) {
             self->view,
             HidIosPhoneModel * model,
             {
-                if(model->burst_active && model->burst_key == event->key) {
-                    model->burst_active = false;
+                if(model->move_active && model->move_key == event->key) {
+                    model->move_active = false;
                 }
                 // Only arm a double-tap candidate if this was a TAP — a long
-                // hold (e.g. the user kept the burst pinned for a second)
-                // should not pair with the next press as a double-tap.
+                // hold (e.g. the user cruised the cursor for a second) should
+                // not pair with the next press as a double-tap.
                 if((now - model->current_press_tick) < self->hid->ios_dbl_tap_window_ms) {
                     model->last_release_key = event->key;
                     model->last_release_tick = now;
@@ -575,7 +573,7 @@ static bool hid_ios_phone_input_callback(InputEvent* event, void* context) {
                 }
             },
             true);
-        furi_timer_stop(self->burst_timer);
+        furi_timer_stop(self->move_timer);
     }
 
     return consumed;
@@ -591,7 +589,7 @@ static void hid_ios_phone_exit_callback(void* context) {
     // Releasing the view: drop any held state so leaving via long-Back doesn't
     // leave the mouse button stuck on the host.
     hid_hal_mouse_release_all(self->hid);
-    furi_timer_stop(self->burst_timer);
+    furi_timer_stop(self->move_timer);
     furi_timer_stop(self->swipe_timer);
 }
 
@@ -606,8 +604,8 @@ HidIosPhone* hid_ios_phone_alloc(Hid* bt_hid) {
     view_set_input_callback(self->view, hid_ios_phone_input_callback);
     view_set_exit_callback(self->view, hid_ios_phone_exit_callback);
 
-    self->burst_timer =
-        furi_timer_alloc(hid_ios_phone_burst_timer_cb, FuriTimerTypePeriodic, self);
+    self->move_timer =
+        furi_timer_alloc(hid_ios_phone_move_timer_cb, FuriTimerTypePeriodic, self);
     self->swipe_timer =
         furi_timer_alloc(hid_ios_phone_swipe_timer_cb, FuriTimerTypePeriodic, self);
 
@@ -625,8 +623,8 @@ HidIosPhone* hid_ios_phone_alloc(Hid* bt_hid) {
 
 void hid_ios_phone_free(HidIosPhone* self) {
     furi_assert(self);
-    furi_timer_stop(self->burst_timer);
-    furi_timer_free(self->burst_timer);
+    furi_timer_stop(self->move_timer);
+    furi_timer_free(self->move_timer);
     furi_timer_stop(self->swipe_timer);
     furi_timer_free(self->swipe_timer);
     view_free(self->view);

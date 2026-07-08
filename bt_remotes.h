@@ -189,12 +189,30 @@ typedef enum {
 
 // iOS Phone remote (per-profile). Defaults tuned for a typical iPhone screen
 // scale; the user can tweak any of them via Per-Remote Settings → iOS Phone.
-//   Burst Distance: total px the cursor travels during a default-mode burst at
-//                   base speed. Larger = farther travel per d-pad tap.
-#define IOS_BURST_DISTANCE_MIN     40
-#define IOS_BURST_DISTANCE_MAX     800
-#define IOS_BURST_DISTANCE_STEP    20
-#define IOS_BURST_DISTANCE_DEFAULT 480
+//   Cursor Mode: how the cursor moves while a d-pad direction is held.
+typedef enum {
+    IosCursorModeConstant = 0, // one fixed speed the whole hold
+    IosCursorModeRamp     = 1, // starts slow, climbs to full speed over Ramp Time
+} IosCursorMode;
+
+#define IOS_CURSOR_MODE_DEFAULT IosCursorModeRamp
+#define IOS_CURSOR_MODE_COUNT   2
+//   Cursor Speed: px/sec while held — the constant-mode speed AND the ramp's
+//                 top speed.
+#define IOS_CURSOR_SPEED_MIN     100
+#define IOS_CURSOR_SPEED_MAX     1500
+#define IOS_CURSOR_SPEED_STEP    50
+#define IOS_CURSOR_SPEED_DEFAULT 600
+//   Ramp Start: starting speed as a percentage of Cursor Speed (Ramp mode only).
+#define IOS_RAMP_START_PCT_MIN     10
+#define IOS_RAMP_START_PCT_MAX     90
+#define IOS_RAMP_START_PCT_STEP    10
+#define IOS_RAMP_START_PCT_DEFAULT 20
+//   Ramp Time: ms to climb from the start speed to full speed (Ramp mode only).
+#define IOS_RAMP_TIME_MIN     200
+#define IOS_RAMP_TIME_MAX     2000
+#define IOS_RAMP_TIME_STEP    100
+#define IOS_RAMP_TIME_DEFAULT 800
 //   Swipe Distance: total px of the held-button drag (default-mode double-tap,
 //                   plus every Swipe-mode single press).
 #define IOS_SWIPE_DISTANCE_MIN     120
@@ -217,7 +235,7 @@ typedef enum {
 
 // Default-mode d-pad double-tap swipe: 1 = a quick second tap of the same
 // direction fires a swipe (legacy behavior), 0 = disabled; every press just
-// starts a fresh burst. Swipe mode is unaffected.
+// starts fresh cursor movement. Swipe mode is unaffected.
 #define IOS_DBL_TAP_SWIPE_DEFAULT 1
 // Number of selectable values for VariableItemList rows.
 #define IOS_VALUE_COUNT(min, max, step) (((max) - (min)) / (step) + 1)
@@ -329,7 +347,10 @@ struct Hid {
     uint16_t tiktok_gesture_inset;  // px — horizontal inset before the vertical swipe
     uint16_t tiktok_gesture_margin; // px — vertical travel off the edge before press
     uint16_t tiktok_gesture_swipe;  // px — drag distance while the button is held
-    uint16_t ios_burst_distance;       // px — total travel of a default-mode burst
+    uint8_t  ios_cursor_mode;          // IosCursorMode — Constant vs Ramp while held
+    uint16_t ios_cursor_speed_px_s;    // px/sec — hold speed (ramp top speed)
+    uint8_t  ios_ramp_start_pct;       // % of cursor speed the ramp starts at
+    uint16_t ios_ramp_time_ms;         // ms — ramp climb time to full speed
     uint16_t ios_swipe_distance;       // px — held-button drag distance for swipes
     uint16_t ios_swipe_speed_px_s;     // px/sec — drag speed during a swipe
     uint16_t ios_dbl_tap_window_ms;    // ms — max gap between two short presses

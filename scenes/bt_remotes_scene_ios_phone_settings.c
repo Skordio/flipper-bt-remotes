@@ -1,23 +1,61 @@
 #include "../bt_remotes.h"
 
-// iOS Phone per-profile settings, modeled on scene_media_settings.c. Burst /
-// Swipe distance + Double-Tap window are VariableItemList ranges; Dbl Tap Swipe
-// is an On/Off toggle. Help opens via the enter callback. Each change persists
-// immediately through bt_remotes_save_profile_menu_cfg so the value survives
-// profile_activate.
+// iOS Phone per-profile settings, modeled on scene_media_settings.c. Cursor
+// speed/ramp + Swipe distance + Double-Tap window are VariableItemList ranges;
+// Cursor Mode and Dbl Tap Swipe are toggles. Help opens via the enter callback.
+// Each change persists immediately through bt_remotes_save_profile_menu_cfg so
+// the value survives profile_activate.
 
-#define IOS_PHONE_ROW_BURST      0
-#define IOS_PHONE_ROW_SWIPE      1
-#define IOS_PHONE_ROW_SWIPE_SPD  2
-#define IOS_PHONE_ROW_DBL_TAP    3
-#define IOS_PHONE_ROW_DBL_SWIPE  4
-#define IOS_PHONE_ROW_HELP       5
+#define IOS_PHONE_ROW_CURSOR_MODE 0
+#define IOS_PHONE_ROW_CURSOR_SPD  1
+#define IOS_PHONE_ROW_RAMP_START  2
+#define IOS_PHONE_ROW_RAMP_TIME   3
+#define IOS_PHONE_ROW_SWIPE       4
+#define IOS_PHONE_ROW_SWIPE_SPD   5
+#define IOS_PHONE_ROW_DBL_TAP     6
+#define IOS_PHONE_ROW_DBL_SWIPE   7
+#define IOS_PHONE_ROW_HELP        8
 
-static void ios_burst_distance_changed(VariableItem* item) {
+static const char* const ios_cursor_mode_labels[IOS_CURSOR_MODE_COUNT] = {
+    "Constant",
+    "Ramp",
+};
+
+static void ios_cursor_mode_changed(VariableItem* item) {
     Hid* app = variable_item_get_context(item);
     uint8_t idx = variable_item_get_current_value_index(item);
-    uint16_t val = IOS_BURST_DISTANCE_MIN + (uint16_t)idx * IOS_BURST_DISTANCE_STEP;
-    app->ios_burst_distance = val;
+    app->ios_cursor_mode = idx;
+    variable_item_set_current_value_text(item, ios_cursor_mode_labels[idx]);
+    bt_remotes_save_profile_menu_cfg(app);
+}
+
+static void ios_cursor_speed_changed(VariableItem* item) {
+    Hid* app = variable_item_get_context(item);
+    uint8_t idx = variable_item_get_current_value_index(item);
+    uint16_t val = IOS_CURSOR_SPEED_MIN + (uint16_t)idx * IOS_CURSOR_SPEED_STEP;
+    app->ios_cursor_speed_px_s = val;
+    FuriString* s = furi_string_alloc_printf("%u", val);
+    variable_item_set_current_value_text(item, furi_string_get_cstr(s));
+    furi_string_free(s);
+    bt_remotes_save_profile_menu_cfg(app);
+}
+
+static void ios_ramp_start_changed(VariableItem* item) {
+    Hid* app = variable_item_get_context(item);
+    uint8_t idx = variable_item_get_current_value_index(item);
+    uint8_t val = IOS_RAMP_START_PCT_MIN + idx * IOS_RAMP_START_PCT_STEP;
+    app->ios_ramp_start_pct = val;
+    FuriString* s = furi_string_alloc_printf("%u%%", val);
+    variable_item_set_current_value_text(item, furi_string_get_cstr(s));
+    furi_string_free(s);
+    bt_remotes_save_profile_menu_cfg(app);
+}
+
+static void ios_ramp_time_changed(VariableItem* item) {
+    Hid* app = variable_item_get_context(item);
+    uint8_t idx = variable_item_get_current_value_index(item);
+    uint16_t val = IOS_RAMP_TIME_MIN + (uint16_t)idx * IOS_RAMP_TIME_STEP;
+    app->ios_ramp_time_ms = val;
     FuriString* s = furi_string_alloc_printf("%u", val);
     variable_item_set_current_value_text(item, furi_string_get_cstr(s));
     furi_string_free(s);
@@ -84,16 +122,59 @@ void bt_remotes_scene_ios_phone_settings_on_enter(void* context) {
     FuriString*   s;
 
     item = variable_item_list_add(
+        vil, "Cursor Mode", IOS_CURSOR_MODE_COUNT, ios_cursor_mode_changed, app);
+    {
+        uint8_t cur = app->ios_cursor_mode;
+        if(cur >= IOS_CURSOR_MODE_COUNT) cur = IOS_CURSOR_MODE_DEFAULT;
+        variable_item_set_current_value_index(item, cur);
+        variable_item_set_current_value_text(item, ios_cursor_mode_labels[cur]);
+    }
+
+    item = variable_item_list_add(
         vil,
-        "Burst Dist",
-        IOS_VALUE_COUNT(IOS_BURST_DISTANCE_MIN, IOS_BURST_DISTANCE_MAX, IOS_BURST_DISTANCE_STEP),
-        ios_burst_distance_changed,
+        "Cursor Spd",
+        IOS_VALUE_COUNT(IOS_CURSOR_SPEED_MIN, IOS_CURSOR_SPEED_MAX, IOS_CURSOR_SPEED_STEP),
+        ios_cursor_speed_changed,
         app);
     {
-        uint16_t cur = app->ios_burst_distance;
-        if(cur < IOS_BURST_DISTANCE_MIN) cur = IOS_BURST_DISTANCE_MIN;
-        if(cur > IOS_BURST_DISTANCE_MAX) cur = IOS_BURST_DISTANCE_MAX;
-        uint8_t idx = (uint8_t)((cur - IOS_BURST_DISTANCE_MIN) / IOS_BURST_DISTANCE_STEP);
+        uint16_t cur = app->ios_cursor_speed_px_s;
+        if(cur < IOS_CURSOR_SPEED_MIN) cur = IOS_CURSOR_SPEED_MIN;
+        if(cur > IOS_CURSOR_SPEED_MAX) cur = IOS_CURSOR_SPEED_MAX;
+        uint8_t idx = (uint8_t)((cur - IOS_CURSOR_SPEED_MIN) / IOS_CURSOR_SPEED_STEP);
+        variable_item_set_current_value_index(item, idx);
+        s = furi_string_alloc_printf("%u", cur);
+        variable_item_set_current_value_text(item, furi_string_get_cstr(s));
+        furi_string_free(s);
+    }
+
+    item = variable_item_list_add(
+        vil,
+        "Ramp Start",
+        IOS_VALUE_COUNT(IOS_RAMP_START_PCT_MIN, IOS_RAMP_START_PCT_MAX, IOS_RAMP_START_PCT_STEP),
+        ios_ramp_start_changed,
+        app);
+    {
+        uint8_t cur = app->ios_ramp_start_pct;
+        if(cur < IOS_RAMP_START_PCT_MIN) cur = IOS_RAMP_START_PCT_MIN;
+        if(cur > IOS_RAMP_START_PCT_MAX) cur = IOS_RAMP_START_PCT_MAX;
+        uint8_t idx = (uint8_t)((cur - IOS_RAMP_START_PCT_MIN) / IOS_RAMP_START_PCT_STEP);
+        variable_item_set_current_value_index(item, idx);
+        s = furi_string_alloc_printf("%u%%", cur);
+        variable_item_set_current_value_text(item, furi_string_get_cstr(s));
+        furi_string_free(s);
+    }
+
+    item = variable_item_list_add(
+        vil,
+        "Ramp Time",
+        IOS_VALUE_COUNT(IOS_RAMP_TIME_MIN, IOS_RAMP_TIME_MAX, IOS_RAMP_TIME_STEP),
+        ios_ramp_time_changed,
+        app);
+    {
+        uint16_t cur = app->ios_ramp_time_ms;
+        if(cur < IOS_RAMP_TIME_MIN) cur = IOS_RAMP_TIME_MIN;
+        if(cur > IOS_RAMP_TIME_MAX) cur = IOS_RAMP_TIME_MAX;
+        uint8_t idx = (uint8_t)((cur - IOS_RAMP_TIME_MIN) / IOS_RAMP_TIME_STEP);
         variable_item_set_current_value_index(item, idx);
         s = furi_string_alloc_printf("%u", cur);
         variable_item_set_current_value_text(item, furi_string_get_cstr(s));
