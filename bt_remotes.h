@@ -157,6 +157,10 @@ typedef enum {
 #define DUCKY_CONNECT_SETTLE_COUNT \
     (((DUCKY_CONNECT_SETTLE_MAX) - (DUCKY_CONNECT_SETTLE_MIN)) / (DUCKY_CONNECT_SETTLE_STEP) + 1)
 
+// Number of selectable values in a min..max/step settings range — the item
+// count for that range's VariableItemList row. Shared by every settings grid.
+#define BT_REMOTES_VALUE_COUNT(min, max, step) (((max) - (min)) / (step) + 1)
+
 // TikTok / YT Shorts scroll behavior (per-profile)
 typedef enum {
     TikTokScrollWheel   = 0, // scroll-wheel burst (current behavior)
@@ -184,9 +188,6 @@ typedef enum {
 #define TIKTOK_GESTURE_SWIPE_MAX     600
 #define TIKTOK_GESTURE_SWIPE_STEP    50
 #define TIKTOK_GESTURE_SWIPE_DEFAULT 350
-// Number of selectable values for each range (used as VariableItemList counts).
-#define TIKTOK_GESTURE_VALUE_COUNT(min, max, step) (((max) - (min)) / (step) + 1)
-
 // iOS Phone remote (per-profile). Defaults tuned for a typical iPhone screen
 // scale; the user can tweak any of them via Per-Remote Settings → iOS Phone.
 //   Cursor Mode: how the cursor moves while a d-pad direction is held.
@@ -237,8 +238,6 @@ typedef enum {
 // direction fires a swipe (legacy behavior), 0 = disabled; every press just
 // starts fresh cursor movement. Swipe mode is unaffected.
 #define IOS_DBL_TAP_SWIPE_DEFAULT 1
-// Number of selectable values for VariableItemList rows.
-#define IOS_VALUE_COUNT(min, max, step) (((max) - (min)) / (step) + 1)
 
 // Topics for the shared Per-Remote Settings Help scene
 // (bt_remotes_scene_remote_settings_help.c). The launching settings scene stores

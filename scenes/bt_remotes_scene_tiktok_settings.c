@@ -92,7 +92,7 @@ static void build_tiktok_list(Hid* app) {
         item = variable_item_list_add(
             vil,
             "Inward Margin",
-            TIKTOK_GESTURE_VALUE_COUNT(
+            BT_REMOTES_VALUE_COUNT(
                 TIKTOK_GESTURE_INSET_MIN, TIKTOK_GESTURE_INSET_MAX, TIKTOK_GESTURE_INSET_STEP),
             tiktok_inset_changed,
             app);
@@ -105,7 +105,7 @@ static void build_tiktok_list(Hid* app) {
         item = variable_item_list_add(
             vil,
             "Edge Margin",
-            TIKTOK_GESTURE_VALUE_COUNT(
+            BT_REMOTES_VALUE_COUNT(
                 TIKTOK_GESTURE_MARGIN_MIN, TIKTOK_GESTURE_MARGIN_MAX, TIKTOK_GESTURE_MARGIN_STEP),
             tiktok_margin_changed,
             app);
@@ -118,7 +118,7 @@ static void build_tiktok_list(Hid* app) {
         item = variable_item_list_add(
             vil,
             "Swipe Length",
-            TIKTOK_GESTURE_VALUE_COUNT(
+            BT_REMOTES_VALUE_COUNT(
                 TIKTOK_GESTURE_SWIPE_MIN, TIKTOK_GESTURE_SWIPE_MAX, TIKTOK_GESTURE_SWIPE_STEP),
             tiktok_swipe_changed,
             app);

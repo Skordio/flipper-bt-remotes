@@ -133,7 +133,7 @@ void bt_remotes_scene_ios_phone_settings_on_enter(void* context) {
     item = variable_item_list_add(
         vil,
         "Cursor Spd",
-        IOS_VALUE_COUNT(IOS_CURSOR_SPEED_MIN, IOS_CURSOR_SPEED_MAX, IOS_CURSOR_SPEED_STEP),
+        BT_REMOTES_VALUE_COUNT(IOS_CURSOR_SPEED_MIN, IOS_CURSOR_SPEED_MAX, IOS_CURSOR_SPEED_STEP),
         ios_cursor_speed_changed,
         app);
     {
@@ -150,7 +150,7 @@ void bt_remotes_scene_ios_phone_settings_on_enter(void* context) {
     item = variable_item_list_add(
         vil,
         "Ramp Start",
-        IOS_VALUE_COUNT(IOS_RAMP_START_PCT_MIN, IOS_RAMP_START_PCT_MAX, IOS_RAMP_START_PCT_STEP),
+        BT_REMOTES_VALUE_COUNT(IOS_RAMP_START_PCT_MIN, IOS_RAMP_START_PCT_MAX, IOS_RAMP_START_PCT_STEP),
         ios_ramp_start_changed,
         app);
     {
@@ -167,7 +167,7 @@ void bt_remotes_scene_ios_phone_settings_on_enter(void* context) {
     item = variable_item_list_add(
         vil,
         "Ramp Time",
-        IOS_VALUE_COUNT(IOS_RAMP_TIME_MIN, IOS_RAMP_TIME_MAX, IOS_RAMP_TIME_STEP),
+        BT_REMOTES_VALUE_COUNT(IOS_RAMP_TIME_MIN, IOS_RAMP_TIME_MAX, IOS_RAMP_TIME_STEP),
         ios_ramp_time_changed,
         app);
     {
@@ -184,7 +184,7 @@ void bt_remotes_scene_ios_phone_settings_on_enter(void* context) {
     item = variable_item_list_add(
         vil,
         "Swipe Dist",
-        IOS_VALUE_COUNT(IOS_SWIPE_DISTANCE_MIN, IOS_SWIPE_DISTANCE_MAX, IOS_SWIPE_DISTANCE_STEP),
+        BT_REMOTES_VALUE_COUNT(IOS_SWIPE_DISTANCE_MIN, IOS_SWIPE_DISTANCE_MAX, IOS_SWIPE_DISTANCE_STEP),
         ios_swipe_distance_changed,
         app);
     {
@@ -201,7 +201,7 @@ void bt_remotes_scene_ios_phone_settings_on_enter(void* context) {
     item = variable_item_list_add(
         vil,
         "Swipe Spd",
-        IOS_VALUE_COUNT(IOS_SWIPE_SPEED_MIN, IOS_SWIPE_SPEED_MAX, IOS_SWIPE_SPEED_STEP),
+        BT_REMOTES_VALUE_COUNT(IOS_SWIPE_SPEED_MIN, IOS_SWIPE_SPEED_MAX, IOS_SWIPE_SPEED_STEP),
         ios_swipe_speed_changed,
         app);
     {
@@ -218,7 +218,7 @@ void bt_remotes_scene_ios_phone_settings_on_enter(void* context) {
     item = variable_item_list_add(
         vil,
         "Dbl Tap ms",
-        IOS_VALUE_COUNT(IOS_DBL_TAP_WINDOW_MIN, IOS_DBL_TAP_WINDOW_MAX, IOS_DBL_TAP_WINDOW_STEP),
+        BT_REMOTES_VALUE_COUNT(IOS_DBL_TAP_WINDOW_MIN, IOS_DBL_TAP_WINDOW_MAX, IOS_DBL_TAP_WINDOW_STEP),
         ios_dbl_tap_window_changed,
         app);
     {
