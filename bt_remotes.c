@@ -216,9 +216,16 @@ void bt_remotes_save_profile_menu_cfg(Hid* app) {
 // Pairing helpers
 // ---------------------------------------------------------------------------
 
-void bt_hid_remove_pairing(Hid* app) {
+// bt_disconnect + settle. The 200 ms settle exists to let core2 drop a live
+// link and flush bond data to NVM before the profile changes underneath it —
+// when nothing could have been connected it's pure dead time, so skip it.
+static void bt_remotes_disconnect_and_settle(Hid* app, bool maybe_connected) {
     bt_disconnect(app->bt);
-    furi_delay_ms(200);
+    if(maybe_connected) furi_delay_ms(200);
+}
+
+void bt_hid_remove_pairing(Hid* app) {
+    bt_remotes_disconnect_and_settle(app, app->connected);
     furi_hal_bt_stop_advertising();
     bt_forget_bonded_devices(app->bt);
     furi_hal_bt_start_advertising();
@@ -847,11 +854,7 @@ bool bt_remotes_profile_reset(Hid* app) {
     bt_remotes_save_profile_menu_cfg(app);
 
     // Wipe all bonding data so host must pair fresh
-    FuriString* prof_keys = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_KEYS_EXT);
-    storage_common_remove(app->storage, furi_string_get_cstr(prof_keys));
-    furi_string_free(prof_keys);
-    storage_common_remove(app->storage, APP_DATA_PATH(HID_BT_KEYS_STORAGE_NAME));
+    bt_remotes_profile_clear_pairing(app);
 
     FURI_LOG_I(TAG, "Profile reset: %s", app->active_profile);
     return true;
@@ -1270,8 +1273,8 @@ void bt_remotes_stop_ble(Hid* app) {
     furi_timer_stop(app->pair_save_timer);
     bt_set_status_changed_callback(app->bt, NULL, NULL);
     notification_internal_message(app->notifications, &sequence_reset_blue);
-    bt_disconnect(app->bt);
-    furi_delay_ms(200);
+    // app->connected still holds the last callback-reported state (cleared below).
+    bt_remotes_disconnect_and_settle(app, app->connected);
     bt_keys_storage_set_default_path(app->bt);
     furi_check(bt_profile_restore_default(app->bt));
     app->ble_started     = false;
@@ -1733,8 +1736,10 @@ int32_t bt_remotes_app(void* p) {
 
     notification_internal_message(app->notifications, &sequence_reset_blue);
 
-    bt_disconnect(app->bt);
-    furi_delay_ms(200);
+    // The status callback isn't attached yet, so use the radio state as the
+    // connected-proxy: is_active covers connected-or-advertising, which still
+    // skips the settle whenever system Bluetooth is off entirely.
+    bt_remotes_disconnect_and_settle(app, furi_hal_bt_is_active());
 
     // Migrate legacy sd-card keys if present
     storage_common_migrate(
