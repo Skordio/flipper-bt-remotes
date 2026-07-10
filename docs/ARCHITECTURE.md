@@ -111,6 +111,10 @@ bt_remotes/
 
 (Plus `assets/` — PNG icons for the remote views — and `bt_remotes_10px.png`, the app icon.)
 
+The two custom list views (`hid_remote_menu`, the PTT menu's Up/Down list) honor Momentum's
+global "List Wraparound" setting (`momentum_settings.wrap_on_hold`) at the list extremes, same
+as the firmware's submenu/variable_item_list. PTT Left/Right tab cycling is unaffected.
+
 ---
 
 ## Key Constants (`bt_remotes.h`)
@@ -440,7 +444,10 @@ modeled on the TikTok settings scene). Off by default.
 
 The Start screen is a custom reorderable list, not a submenu. Item identity is the
 `BtRemotesStartIndex` enum (`0..BT_REMOTES_MENU_ITEM_COUNT-1`, Settings always last at the
-highest index). `bt_remotes_menu_default[]` (in `bt_remotes_scene_start.c`) maps each index to a
+highest index). Normal-mode navigation wraps at the extremes per Momentum's global
+"List Wraparound" setting (`momentum_settings.wrap_on_hold`: Instant wraps even mid-hold;
+Re-press clamps during a hold and wraps only on a fresh press), always within the *visible*
+(divider-limited) range; reorder mode never wraps. `bt_remotes_menu_default[]` (in `bt_remotes_scene_start.c`) maps each index to a
 label and is kept in **enum order** so `bt_remotes_menu_default[i].index == i` — `hide_items` and
 several guards rely on this.
 
@@ -498,7 +505,7 @@ ProfileSelect ──► ProfileNew ──► (back to ProfileSelect, auto-advanc
     └──► GlobalSettings (VariableItemList, from ProfileSelect, no active profile)
             ├──► Rename (Default BT Name → app->default_ble_name)
             ├──► (L/R row) Vibration
-            ├──► (L/R row) Hold Back Quit (2-10 s)
+            ├──► (L/R row) Hold Back Quit (1-10 s)
             └──► Help (RemoteSettingsHelp / Global)
 ```
 

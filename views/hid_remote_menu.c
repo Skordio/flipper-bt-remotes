@@ -3,6 +3,7 @@
 #include <gui/elements.h>
 #include <input/input.h>
 #include <furi.h>
+#include <momentum/settings.h>
 
 #define TAG "HidRemoteMenu"
 
@@ -28,6 +29,7 @@ typedef struct {
     uint8_t     divider_pos;    // current visual position of divider item; 0xFF if not found
     uint8_t     cursor;         // current visual position (0-based)
     bool        reorder_mode;   // true while an item is being dragged
+    bool        repeat_scrolled; // a Repeat event moved the cursor during the current hold
 } HidRemoteMenuModel;
 
 // ---------------------------------------------------------------------------
@@ -180,18 +182,41 @@ static bool hid_remote_menu_input_cb(InputEvent* event, void* context) {
                 }
             }
 
+            // Wraparound gating (momentum "List Wraparound" setting): a fresh
+            // press at an extreme always wraps; a hold that already scrolled
+            // (Repeat with repeat_scrolled set) wraps only in Instant mode.
+            // Press/Release of Up/Down mark the start/end of a hold.
+            bool allow_wrap = true;
+            if(event->key == InputKeyUp || event->key == InputKeyDown) {
+                if(event->type == InputTypeShort || event->type == InputTypeRepeat) {
+                    allow_wrap = momentum_settings.wrap_on_hold ||
+                                 !(event->type == InputTypeRepeat && model->repeat_scrolled);
+                    if(event->type == InputTypeRepeat) model->repeat_scrolled = true;
+                } else if(event->type == InputTypePress || event->type == InputTypeRelease) {
+                    model->repeat_scrolled = false;
+                }
+            }
+
             if(event->key == InputKeyUp &&
                (event->type == InputTypeShort || event->type == InputTypeRepeat)) {
-                if(model->reorder_mode && model->cursor > 0) {
-                    swap_items(model, model->cursor, model->cursor - 1);
+                if(model->reorder_mode) {
+                    // Dragging never wraps
+                    if(model->cursor > 0) {
+                        swap_items(model, model->cursor, model->cursor - 1);
+                        model->cursor--;
+                    }
+                } else if(model->cursor > 0) {
+                    model->cursor--;
+                } else {
+                    uint8_t eff = hid_remote_menu_eff_count(model);
+                    if(eff > 1 && allow_wrap) model->cursor = eff - 1;
                 }
-                if(model->cursor > 0) model->cursor--;
                 consumed = true;
 
             } else if(event->key == InputKeyDown &&
                       (event->type == InputTypeShort || event->type == InputTypeRepeat)) {
                 if(model->reorder_mode) {
-                    // Don't allow dragging into the fixed zone
+                    // Don't allow dragging into the fixed zone (and never wrap)
                     if(model->cursor + 1 < reorder_max) {
                         swap_items(model, model->cursor, model->cursor + 1);
                         model->cursor++;
@@ -200,7 +225,11 @@ static bool hid_remote_menu_input_cb(InputEvent* event, void* context) {
                     // In normal mode, navigation stops at the divider (or end of list)
                     uint8_t eff = hid_remote_menu_eff_count(model);
                     uint8_t max_cursor = (eff > 0) ? (eff - 1) : 0;
-                    if(model->cursor < max_cursor) model->cursor++;
+                    if(model->cursor < max_cursor) {
+                        model->cursor++;
+                    } else if(eff > 1 && allow_wrap) {
+                        model->cursor = 0;
+                    }
                 }
                 consumed = true;
 
@@ -280,6 +309,7 @@ HidRemoteMenu* hid_remote_menu_alloc(void) {
             model->divider_pos   = 0xFF;
             model->cursor       = 0;
             model->reorder_mode = false;
+            model->repeat_scrolled = false;
         },
         false);
 

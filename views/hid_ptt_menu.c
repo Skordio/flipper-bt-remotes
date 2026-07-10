@@ -2,6 +2,7 @@
 #include "hid_ptt.h"
 #include <gui/elements.h>
 #include <m-array.h>
+#include <momentum/settings.h>
 #include "../hid.h"
 #include "../views.h"
 
@@ -60,6 +61,7 @@ typedef struct {
     size_t window_position;
     PushToTalkMenuList* lists;
     int lists_count;
+    bool repeat_scrolled; // a Repeat event moved the cursor during the current hold
 } HidPushToTalkMenuModel;
 
 static void
@@ -272,7 +274,16 @@ void ptt_menu_shift_list(HidPushToTalkMenu* hid_ptt_menu, int shift) {
         true);
 }
 
-void ptt_menu_process_up(HidPushToTalkMenu* hid_ptt_menu) {
+// Wrap at the extremes always on a fresh press; during a hold that already
+// scrolled (Repeat with repeat_scrolled set) only when wrap_on_hold allows it.
+static bool ptt_menu_allow_wrap(HidPushToTalkMenuModel* model, InputType type) {
+    const bool allow = momentum_settings.wrap_on_hold ||
+                       !(type == InputTypeRepeat && model->repeat_scrolled);
+    if(type == InputTypeRepeat) model->repeat_scrolled = true;
+    return allow;
+}
+
+static void ptt_menu_process_up(HidPushToTalkMenu* hid_ptt_menu, InputType type) {
     with_view_model(
         hid_ptt_menu->view,
         HidPushToTalkMenuModel * model,
@@ -280,13 +291,14 @@ void ptt_menu_process_up(HidPushToTalkMenu* hid_ptt_menu) {
             PushToTalkMenuList* list = &model->lists[model->list_position];
             const size_t items_on_screen = 3;
             const size_t items_size = PushToTalkMenuItemArray_size(list->items);
+            const bool allow_wrap = ptt_menu_allow_wrap(model, type);
 
             if(model->position > 0) {
                 model->position--;
                 if((model->position == model->window_position) && (model->window_position > 0)) {
                     model->window_position--;
                 }
-            } else {
+            } else if(allow_wrap && items_size > 0) {
                 model->position = items_size - 1;
                 if(model->position > items_on_screen - 1) {
                     model->window_position = model->position - (items_on_screen - 1);
@@ -296,7 +308,7 @@ void ptt_menu_process_up(HidPushToTalkMenu* hid_ptt_menu) {
         true);
 }
 
-void ptt_menu_process_down(HidPushToTalkMenu* hid_ptt_menu) {
+static void ptt_menu_process_down(HidPushToTalkMenu* hid_ptt_menu, InputType type) {
     with_view_model(
         hid_ptt_menu->view,
         HidPushToTalkMenuModel * model,
@@ -304,6 +316,7 @@ void ptt_menu_process_down(HidPushToTalkMenu* hid_ptt_menu) {
             PushToTalkMenuList* list = &model->lists[model->list_position];
             const size_t items_on_screen = 3;
             const size_t items_size = PushToTalkMenuItemArray_size(list->items);
+            const bool allow_wrap = ptt_menu_allow_wrap(model, type);
 
             if(model->position < items_size - 1) {
                 model->position++;
@@ -311,7 +324,7 @@ void ptt_menu_process_down(HidPushToTalkMenu* hid_ptt_menu) {
                    (model->window_position < items_size - items_on_screen)) {
                     model->window_position++;
                 }
-            } else {
+            } else if(allow_wrap && items_size > 0) {
                 model->position = 0;
                 model->window_position = 0;
             }
@@ -346,11 +359,11 @@ static bool hid_ptt_menu_input_callback(InputEvent* event, void* context) {
         switch(event->key) {
         case InputKeyUp:
             consumed = true;
-            ptt_menu_process_up(hid_ptt_menu);
+            ptt_menu_process_up(hid_ptt_menu, event->type);
             break;
         case InputKeyDown:
             consumed = true;
-            ptt_menu_process_down(hid_ptt_menu);
+            ptt_menu_process_down(hid_ptt_menu, event->type);
             break;
         case InputKeyLeft:
             consumed = true;
@@ -370,11 +383,20 @@ static bool hid_ptt_menu_input_callback(InputEvent* event, void* context) {
     } else if(event->type == InputTypeRepeat) {
         if(event->key == InputKeyUp) {
             consumed = true;
-            ptt_menu_process_up(hid_ptt_menu);
+            ptt_menu_process_up(hid_ptt_menu, event->type);
         } else if(event->key == InputKeyDown) {
             consumed = true;
-            ptt_menu_process_down(hid_ptt_menu);
+            ptt_menu_process_down(hid_ptt_menu, event->type);
         }
+    } else if(
+        (event->type == InputTypePress || event->type == InputTypeRelease) &&
+        (event->key == InputKeyUp || event->key == InputKeyDown)) {
+        // A new hold starts fresh: it may wrap once at the extreme
+        with_view_model(
+            hid_ptt_menu->view,
+            HidPushToTalkMenuModel * model,
+            { model->repeat_scrolled = false; },
+            false);
     }
     return consumed;
 }
@@ -400,6 +422,7 @@ HidPushToTalkMenu* hid_ptt_menu_alloc(Hid* hid) {
             model->lists_count = 0;
             model->position = 0;
             model->window_position = 0;
+            model->repeat_scrolled = false;
         },
         true);
     return hid_ptt_menu;

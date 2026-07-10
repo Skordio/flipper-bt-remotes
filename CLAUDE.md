@@ -83,7 +83,9 @@ Momentum firmware tree at `applications_user/bt_remotes/`.
 - **`bt_remotes.c`** — BLE lifecycle, profile/collection/gesture/pins I/O, alloc/entry.
 - **`scenes/bt_remotes_scenes.h`** — authoritative scene list (`ADD_SCENE` macro).
 - **`scenes/bt_remotes_scene_start.c`** — Start menu build + routing + `bt_remotes_menu_default[]`.
-- **`views/hid_remote_menu.c`** — the reorderable/pinnable Start-menu view.
+- **`views/hid_remote_menu.c`** — the reorderable/pinnable Start-menu view. It and
+  `views/hid_ptt_menu.c` read `momentum_settings.wrap_on_hold` (Momentum's "List Wraparound"
+  setting, added by a carried firmware commit) to gate wrap-at-extremes during hold-scroll.
 - **`helpers/`** — `ble_hid_ext_profile` (custom MAC/name), `ducky_runner`, `gesture_runner`.
 
 When you change persistence formats, menu indices, or the BLE lifecycle, update
