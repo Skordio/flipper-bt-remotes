@@ -138,7 +138,10 @@ typedef enum {
 // Hold-Back-to-Quit (app-level): holding Back for this many seconds anywhere in
 // the app quits it entirely. The quick long-press that exits a remote to the
 // Start menu is separate and unaffected.
-#define BT_REMOTES_BACK_HOLD_EXIT_S_MIN     2
+// MIN of 1 s is close to the ~0.5 s long-press that exits a remote to the Start
+// menu — holding through both fires exit-to-menu first, then quit. Deliberate;
+// that's also why the default stays well above 1.
+#define BT_REMOTES_BACK_HOLD_EXIT_S_MIN     1
 #define BT_REMOTES_BACK_HOLD_EXIT_S_MAX     10
 #define BT_REMOTES_BACK_HOLD_EXIT_S_DEFAULT 6
 
