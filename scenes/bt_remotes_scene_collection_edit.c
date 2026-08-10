@@ -71,7 +71,7 @@ bool bt_remotes_scene_collection_edit_on_event(void* context, SceneManagerEvent 
                 strlcpy(
                     app->editing_collection_scripts[app->editing_collection_script_count],
                     path,
-                    256);
+                    BT_REMOTES_COLLECTION_SCRIPT_PATH_LEN);
                 app->editing_collection_script_count++;
                 bt_remotes_collection_save(app);
                 scene_manager_set_scene_state(

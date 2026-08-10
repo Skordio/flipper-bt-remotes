@@ -167,13 +167,14 @@ struct Hid {
     char    pinned_collections[16][32]; uint8_t pinned_kinds[16];  // 0=collection, 1=gesture
     uint8_t pinned_count;
     char    editing_collection_name[32];
-    char    editing_collection_scripts[32][256]; uint8_t editing_collection_script_count;
+    // 4 KB heap scratch: alloc'd on demand (bt_remotes_collection_scripts_ensure,
+    // called by collection_load/collection_create), freed on return to the Start
+    // menu (bt_remotes_collection_scripts_release). NULL while released.
+    char    (*editing_collection_scripts)[256]; uint8_t editing_collection_script_count;
 
     // Custom Gestures (global library + editing buffer)
     char    gesture_names[32][32]; uint8_t gesture_count;
     char    editing_gesture_name[32];
-    char    editing_gesture_lines[GESTURE_LINE_MAX][GESTURE_LINE_LEN];
-    uint8_t editing_gesture_line_count;
 
     // Profile management
     char active_profile[32];   // filename stem of the active profile; "" = none selected

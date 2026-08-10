@@ -83,6 +83,10 @@ void bt_remotes_scene_start_on_enter(void* context) {
         bt_remotes_start_ble(app);
     }
 
+    // Back at the menu — the collection editing scratch (4 KB) is no longer
+    // needed; it is re-allocated on demand when a collections flow starts.
+    bt_remotes_collection_scripts_release(app);
+
     // Max items: BT_REMOTES_MENU_ITEM_COUNT fixed + BT_REMOTES_PINNED_MAX pinned
     BtRemotesMenuEntry entries[BT_REMOTES_MENU_ORDER_LEN];
     uint8_t            order[BT_REMOTES_MENU_ORDER_LEN];

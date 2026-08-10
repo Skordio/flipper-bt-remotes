@@ -857,7 +857,21 @@ void bt_remotes_collection_load_list(Hid* app) {
     storage_file_free(dir);
 }
 
+void bt_remotes_collection_scripts_ensure(Hid* app) {
+    if(!app->editing_collection_scripts) {
+        app->editing_collection_scripts = malloc(
+            (size_t)BT_REMOTES_COLLECTION_SCRIPT_MAX * BT_REMOTES_COLLECTION_SCRIPT_PATH_LEN);
+    }
+}
+
+void bt_remotes_collection_scripts_release(Hid* app) {
+    free(app->editing_collection_scripts);
+    app->editing_collection_scripts = NULL;
+    app->editing_collection_script_count = 0;
+}
+
 bool bt_remotes_collection_load(Hid* app, const char* name) {
+    bt_remotes_collection_scripts_ensure(app);
     strlcpy(app->editing_collection_name, name, BT_REMOTES_COLLECTION_NAME_LEN);
     app->editing_collection_script_count = 0;
 
@@ -886,7 +900,7 @@ bool bt_remotes_collection_load(Hid* app, const char* name) {
                 strlcpy(
                     app->editing_collection_scripts[app->editing_collection_script_count],
                     furi_string_get_cstr(tmp),
-                    256);
+                    BT_REMOTES_COLLECTION_SCRIPT_PATH_LEN);
                 app->editing_collection_script_count++;
             }
         }
@@ -1507,6 +1521,8 @@ static void bt_remotes_free(Hid* app) {
     if(app->ble_started) {
         bt_remotes_stop_ble(app);
     }
+
+    bt_remotes_collection_scripts_release(app);
 
     notification_internal_message(app->notifications, &sequence_reset_blue);
 

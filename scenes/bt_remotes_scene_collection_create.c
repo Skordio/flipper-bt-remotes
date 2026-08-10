@@ -24,6 +24,8 @@ static bool
 void bt_remotes_scene_collection_create_on_enter(void* context) {
     Hid* app = context;
 
+    // The edit scene pushed after name entry writes into the scripts scratch.
+    bt_remotes_collection_scripts_ensure(app);
     app->editing_collection_name[0] = '\0';
     app->editing_collection_script_count = 0;
 

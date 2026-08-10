@@ -82,8 +82,9 @@
 #define BT_REMOTES_COLLECTION_DIR        APP_DATA_PATH("collections")
 #define BT_REMOTES_COLLECTION_EXT        ".collection"
 #define BT_REMOTES_COLLECTION_NAME_LEN   32
-#define BT_REMOTES_COLLECTION_MAX        16
-#define BT_REMOTES_COLLECTION_SCRIPT_MAX 16
+#define BT_REMOTES_COLLECTION_MAX             16
+#define BT_REMOTES_COLLECTION_SCRIPT_MAX      16
+#define BT_REMOTES_COLLECTION_SCRIPT_PATH_LEN 256
 
 // Custom Gestures (global library; GESTURE_LINE_MAX/_LEN live in gesture_runner.h)
 #define BT_REMOTES_GESTURE_DIR      APP_DATA_PATH("gestures")
@@ -323,7 +324,11 @@ struct Hid {
     uint8_t pinned_kinds[BT_REMOTES_PINNED_MAX]; // 0 = collection, 1 = gesture
     uint8_t pinned_count;
     char    editing_collection_name[BT_REMOTES_COLLECTION_NAME_LEN];
-    char    editing_collection_scripts[BT_REMOTES_COLLECTION_SCRIPT_MAX][256];
+    // 4 KB scratch for the collection being viewed/edited. Heap-allocated on
+    // demand (collection_scripts_ensure) and freed when the flow returns to the
+    // Start menu (collection_scripts_release) instead of living here for the
+    // app's whole lifetime.
+    char (*editing_collection_scripts)[BT_REMOTES_COLLECTION_SCRIPT_PATH_LEN];
     uint8_t editing_collection_script_count;
     // Custom Gestures (global library + editing buffer)
     char    gesture_names[BT_REMOTES_GESTURE_MAX][BT_REMOTES_GESTURE_NAME_LEN];
@@ -429,6 +434,11 @@ bool bt_remotes_profile_rename(Hid* app);
 bool bt_remotes_profile_reset(Hid* app);
 
 // Collection operations
+// Alloc/free the editing_collection_scripts scratch. ensure is idempotent and
+// called by collection_load / collection_create; release is called on return to
+// the Start menu and at app teardown.
+void bt_remotes_collection_scripts_ensure(Hid* app);
+void bt_remotes_collection_scripts_release(Hid* app);
 void bt_remotes_collection_load_list(Hid* app);
 bool bt_remotes_collection_load(Hid* app, const char* name);
 bool bt_remotes_collection_save(Hid* app);
