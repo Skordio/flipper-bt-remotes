@@ -4,6 +4,7 @@
 #include <extra_profiles/hid_profile.h>
 #include <gui/elements.h>
 #include "../hid.h"
+#include "hid_draw_shared.h"
 
 #include "hid_icons.h"
 
@@ -23,19 +24,6 @@ typedef struct {
     bool connected;
     bool back_pressed;
 } HidMovieModel;
-
-static void hid_movie_draw_arrow(Canvas* canvas, uint8_t x, uint8_t y, CanvasDirection dir) {
-    canvas_draw_triangle(canvas, x, y, 5, 3, dir);
-    if(dir == CanvasDirectionBottomToTop) {
-        canvas_draw_dot(canvas, x, y - 1);
-    } else if(dir == CanvasDirectionTopToBottom) {
-        canvas_draw_dot(canvas, x, y + 1);
-    } else if(dir == CanvasDirectionRightToLeft) {
-        canvas_draw_dot(canvas, x - 1, y);
-    } else if(dir == CanvasDirectionLeftToRight) {
-        canvas_draw_dot(canvas, x + 1, y);
-    }
-}
 
 static void hid_movie_draw_callback(Canvas* canvas, void* context) {
     furi_assert(context);
@@ -84,8 +72,8 @@ static void hid_movie_draw_callback(Canvas* canvas, void* context) {
         canvas_set_bitmap_mode(canvas, false);
         canvas_set_color(canvas, ColorWhite);
     }
-    hid_movie_draw_arrow(canvas, 65, 28, CanvasDirectionRightToLeft);
-    hid_movie_draw_arrow(canvas, 70, 28, CanvasDirectionRightToLeft);
+    hid_draw_arrow_dot(canvas, 65, 28, CanvasDirectionRightToLeft);
+    hid_draw_arrow_dot(canvas, 70, 28, CanvasDirectionRightToLeft);
     canvas_set_color(canvas, ColorBlack);
 
     // Right
@@ -95,8 +83,8 @@ static void hid_movie_draw_callback(Canvas* canvas, void* context) {
         canvas_set_bitmap_mode(canvas, false);
         canvas_set_color(canvas, ColorWhite);
     }
-    hid_movie_draw_arrow(canvas, 96, 28, CanvasDirectionLeftToRight);
-    hid_movie_draw_arrow(canvas, 101, 28, CanvasDirectionLeftToRight);
+    hid_draw_arrow_dot(canvas, 96, 28, CanvasDirectionLeftToRight);
+    hid_draw_arrow_dot(canvas, 101, 28, CanvasDirectionLeftToRight);
     canvas_set_color(canvas, ColorBlack);
 
     // Ok
@@ -106,7 +94,7 @@ static void hid_movie_draw_callback(Canvas* canvas, void* context) {
         canvas_set_bitmap_mode(canvas, false);
         canvas_set_color(canvas, ColorWhite);
     }
-    hid_movie_draw_arrow(canvas, 80, 28, CanvasDirectionLeftToRight);
+    hid_draw_arrow_dot(canvas, 80, 28, CanvasDirectionLeftToRight);
     canvas_draw_line(canvas, 84, 26, 84, 30);
     canvas_draw_line(canvas, 86, 26, 86, 30);
     canvas_set_color(canvas, ColorBlack);

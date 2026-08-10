@@ -1,6 +1,7 @@
 #include "hid_keynote.h"
 #include <gui/elements.h>
 #include "../hid.h"
+#include "hid_draw_shared.h"
 
 #include "hid_icons.h"
 
@@ -20,19 +21,6 @@ typedef struct {
     bool back_pressed;
     bool connected;
 } HidKeynoteModel;
-
-static void hid_keynote_draw_arrow(Canvas* canvas, uint8_t x, uint8_t y, CanvasDirection dir) {
-    canvas_draw_triangle(canvas, x, y, 5, 3, dir);
-    if(dir == CanvasDirectionBottomToTop) {
-        canvas_draw_line(canvas, x, y + 6, x, y - 1);
-    } else if(dir == CanvasDirectionTopToBottom) {
-        canvas_draw_line(canvas, x, y - 6, x, y + 1);
-    } else if(dir == CanvasDirectionRightToLeft) {
-        canvas_draw_line(canvas, x + 6, y, x - 1, y);
-    } else if(dir == CanvasDirectionLeftToRight) {
-        canvas_draw_line(canvas, x - 6, y, x + 1, y);
-    }
-}
 
 static void hid_keynote_draw_callback(Canvas* canvas, void* context) {
     furi_assert(context);
@@ -60,7 +48,7 @@ static void hid_keynote_draw_callback(Canvas* canvas, void* context) {
         elements_slightly_rounded_box(canvas, 24, 26, 13, 13);
         canvas_set_color(canvas, ColorWhite);
     }
-    hid_keynote_draw_arrow(canvas, 30, 30, CanvasDirectionBottomToTop);
+    hid_draw_arrow_line(canvas, 30, 30, CanvasDirectionBottomToTop);
     canvas_set_color(canvas, ColorBlack);
 
     // Down
@@ -69,7 +57,7 @@ static void hid_keynote_draw_callback(Canvas* canvas, void* context) {
         elements_slightly_rounded_box(canvas, 24, 47, 13, 13);
         canvas_set_color(canvas, ColorWhite);
     }
-    hid_keynote_draw_arrow(canvas, 30, 55, CanvasDirectionTopToBottom);
+    hid_draw_arrow_line(canvas, 30, 55, CanvasDirectionTopToBottom);
     canvas_set_color(canvas, ColorBlack);
 
     // Left
@@ -78,7 +66,7 @@ static void hid_keynote_draw_callback(Canvas* canvas, void* context) {
         elements_slightly_rounded_box(canvas, 3, 47, 13, 13);
         canvas_set_color(canvas, ColorWhite);
     }
-    hid_keynote_draw_arrow(canvas, 7, 53, CanvasDirectionRightToLeft);
+    hid_draw_arrow_line(canvas, 7, 53, CanvasDirectionRightToLeft);
     canvas_set_color(canvas, ColorBlack);
 
     // Right
@@ -87,7 +75,7 @@ static void hid_keynote_draw_callback(Canvas* canvas, void* context) {
         elements_slightly_rounded_box(canvas, 45, 47, 13, 13);
         canvas_set_color(canvas, ColorWhite);
     }
-    hid_keynote_draw_arrow(canvas, 53, 53, CanvasDirectionLeftToRight);
+    hid_draw_arrow_line(canvas, 53, 53, CanvasDirectionLeftToRight);
     canvas_set_color(canvas, ColorBlack);
 
     // Ok
@@ -145,7 +133,7 @@ static void hid_keynote_draw_vertical_callback(Canvas* canvas, void* context) {
         elements_slightly_rounded_box(canvas, x_2 + 3, y_1 + 2, 13, 13);
         canvas_set_color(canvas, ColorWhite);
     }
-    hid_keynote_draw_arrow(canvas, x_2 + 9, y_1 + 6, CanvasDirectionBottomToTop);
+    hid_draw_arrow_line(canvas, x_2 + 9, y_1 + 6, CanvasDirectionBottomToTop);
     canvas_set_color(canvas, ColorBlack);
 
     // Down
@@ -154,7 +142,7 @@ static void hid_keynote_draw_vertical_callback(Canvas* canvas, void* context) {
         elements_slightly_rounded_box(canvas, x_2 + 3, y_2 + 2, 13, 13);
         canvas_set_color(canvas, ColorWhite);
     }
-    hid_keynote_draw_arrow(canvas, x_2 + 9, y_2 + 10, CanvasDirectionTopToBottom);
+    hid_draw_arrow_line(canvas, x_2 + 9, y_2 + 10, CanvasDirectionTopToBottom);
     canvas_set_color(canvas, ColorBlack);
 
     // Left
@@ -163,7 +151,7 @@ static void hid_keynote_draw_vertical_callback(Canvas* canvas, void* context) {
         elements_slightly_rounded_box(canvas, x_1 + 3, y_2 + 2, 13, 13);
         canvas_set_color(canvas, ColorWhite);
     }
-    hid_keynote_draw_arrow(canvas, x_1 + 7, y_2 + 8, CanvasDirectionRightToLeft);
+    hid_draw_arrow_line(canvas, x_1 + 7, y_2 + 8, CanvasDirectionRightToLeft);
     canvas_set_color(canvas, ColorBlack);
 
     // Right
@@ -172,7 +160,7 @@ static void hid_keynote_draw_vertical_callback(Canvas* canvas, void* context) {
         elements_slightly_rounded_box(canvas, x_3 + 3, y_2 + 2, 13, 13);
         canvas_set_color(canvas, ColorWhite);
     }
-    hid_keynote_draw_arrow(canvas, x_3 + 11, y_2 + 8, CanvasDirectionLeftToRight);
+    hid_draw_arrow_line(canvas, x_3 + 11, y_2 + 8, CanvasDirectionLeftToRight);
     canvas_set_color(canvas, ColorBlack);
 
     // Ok

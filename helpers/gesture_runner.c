@@ -2,6 +2,7 @@
 #include <furi_hal.h>
 #include <furi_hal_usb_hid.h>
 #include <storage/storage.h>
+#include <toolbox/stream/buffered_file_stream.h>
 #include <ble_profile/extra_profiles/hid_profile.h>
 #include <ctype.h>
 
@@ -96,16 +97,18 @@ static bool gesture_should_stop(void) {
 }
 
 // Read one text line (strips \r\n, NUL-terminates). Returns false at EOF.
-static bool gesture_read_line(File* file, char* buf, size_t buf_size) {
-    size_t i = 0;
-    char   c;
-    bool   got_any = false;
+// The stream is a buffered_file_stream, so the per-char reads hit the RAM
+// buffer, not the SD card.
+static bool gesture_read_line(Stream* stream, char* buf, size_t buf_size) {
+    size_t  i = 0;
+    uint8_t c;
+    bool    got_any = false;
     while(i < buf_size - 1) {
-        if(storage_file_read(file, &c, 1) != 1) break;
+        if(stream_read(stream, &c, 1) != 1) break;
         got_any = true;
         if(c == '\n') break;
         if(c == '\r') continue;
-        buf[i++] = c;
+        buf[i++] = (char)c;
     }
     buf[i] = '\0';
     return got_any;
@@ -456,10 +459,10 @@ static bool gesture_run_file(GestureRunner* runner, const char* path, int depth)
     if(depth > GESTURE_MAX_DEPTH) return true; // nesting too deep: ignore this run
 
     Storage* storage = furi_record_open(RECORD_STORAGE);
-    File*    file    = storage_file_alloc(storage);
+    Stream*  stream  = buffered_file_stream_alloc(storage);
 
-    if(!storage_file_open(file, path, FSAM_READ, FSOM_OPEN_EXISTING)) {
-        storage_file_free(file);
+    if(!buffered_file_stream_open(stream, path, FSAM_READ, FSOM_OPEN_EXISTING)) {
+        stream_free(stream);
         furi_record_close(RECORD_STORAGE);
         if(depth == 0) {
             runner->state = GestureRunnerStateError;
@@ -475,7 +478,7 @@ static bool gesture_run_file(GestureRunner* runner, const char* path, int depth)
     char line[GESTURE_LINE_LEN];
     bool keep_going = true;
 
-    while(keep_going && gesture_read_line(file, line, sizeof(line))) {
+    while(keep_going && gesture_read_line(stream, line, sizeof(line))) {
         if(gesture_should_stop()) {
             keep_going = false;
             break;
@@ -500,8 +503,8 @@ static bool gesture_run_file(GestureRunner* runner, const char* path, int depth)
         }
     }
 
-    storage_file_close(file);
-    storage_file_free(file);
+    buffered_file_stream_close(stream);
+    stream_free(stream);
     furi_record_close(RECORD_STORAGE);
     return keep_going;
 }

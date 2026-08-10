@@ -2,6 +2,7 @@
 #include <furi_hal.h>
 #include <furi_hal_usb_hid.h>
 #include <storage/storage.h>
+#include <toolbox/stream/buffered_file_stream.h>
 #include <ble_profile/extra_profiles/hid_profile.h>
 
 #define TAG "DuckyRunner"
@@ -193,16 +194,18 @@ static bool ducky_should_stop(void) {
 }
 
 // Read one text line (strips \r\n, NUL-terminates). Returns false at EOF.
-static bool ducky_read_line(File* file, char* buf, size_t buf_size) {
-    size_t i = 0;
-    char   c;
-    bool   got_any = false;
+// The stream is a buffered_file_stream, so the per-char reads hit the RAM
+// buffer, not the SD card.
+static bool ducky_read_line(Stream* stream, char* buf, size_t buf_size) {
+    size_t  i = 0;
+    uint8_t c;
+    bool    got_any = false;
     while(i < buf_size - 1) {
-        if(storage_file_read(file, &c, 1) != 1) break;
+        if(stream_read(stream, &c, 1) != 1) break;
         got_any = true;
         if(c == '\n') break;
         if(c == '\r') continue;
-        buf[i++] = c;
+        buf[i++] = (char)c;
     }
     buf[i] = '\0';
     return got_any;
@@ -514,14 +517,14 @@ static int32_t ducky_worker(void* context) {
     DuckyRunner* runner = context;
 
     Storage* storage = furi_record_open(RECORD_STORAGE);
-    File*    file    = storage_file_alloc(storage);
+    Stream*  stream  = buffered_file_stream_alloc(storage);
 
-    if(!storage_file_open(file, runner->path, FSAM_READ, FSOM_OPEN_EXISTING)) {
+    if(!buffered_file_stream_open(stream, runner->path, FSAM_READ, FSOM_OPEN_EXISTING)) {
         runner->state = DuckyRunnerStateError;
         strlcpy(runner->error, "Cannot open script", sizeof(runner->error));
         FURI_LOG_E(TAG, "Failed to open: %s", runner->path);
         if(runner->callback) runner->callback(runner->callback_context);
-        storage_file_free(file);
+        stream_free(stream);
         furi_record_close(RECORD_STORAGE);
         return 0;
     }
@@ -538,7 +541,7 @@ static int32_t ducky_worker(void* context) {
     prev_line[0] = '\0';
     bool keep_going = true;
 
-    while(keep_going && ducky_read_line(file, line, sizeof(line))) {
+    while(keep_going && ducky_read_line(stream, line, sizeof(line))) {
         if(ducky_should_stop()) break;
 
         // Trim for classification only (exec functions do their own trimming)
@@ -601,8 +604,8 @@ static int32_t ducky_worker(void* context) {
         if(runner->callback) runner->callback(runner->callback_context);
     }
 
-    storage_file_close(file);
-    storage_file_free(file);
+    buffered_file_stream_close(stream);
+    stream_free(stream);
     furi_record_close(RECORD_STORAGE);
     FURI_LOG_I(TAG, "Worker done");
     return 0;
