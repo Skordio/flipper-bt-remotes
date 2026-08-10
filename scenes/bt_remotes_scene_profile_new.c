@@ -21,8 +21,7 @@ static bool
 
     if(!bt_remotes_validate_name(text, error)) return false;
 
-    FuriString* path = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_PROFILES_DIR, text, BT_REMOTES_CFG_EXT);
+    FuriString* path = bt_remotes_path(BT_REMOTES_PROFILES_DIR, text, BT_REMOTES_CFG_EXT);
     bool exists = storage_file_exists(app->storage, furi_string_get_cstr(path));
     furi_string_free(path);
     if(exists) {

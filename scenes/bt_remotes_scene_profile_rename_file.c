@@ -38,8 +38,7 @@ static bool bt_remotes_scene_profile_rename_file_validator(
 
     // Allow keeping the same name (no collision check against self)
     if(strcmp(text, app->pending_name) != 0) {
-        FuriString* path = furi_string_alloc_printf(
-            "%s/%s%s", BT_REMOTES_PROFILES_DIR, text, BT_REMOTES_CFG_EXT);
+        FuriString* path = bt_remotes_path(BT_REMOTES_PROFILES_DIR, text, BT_REMOTES_CFG_EXT);
         bool exists = storage_file_exists(app->storage, furi_string_get_cstr(path));
         furi_string_free(path);
         if(exists) {

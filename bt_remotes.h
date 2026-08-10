@@ -397,6 +397,8 @@ struct Hid {
 // Shared name validator: checks non-empty and no forbidden filesystem chars.
 // Returns false and sets error on failure.  Collision check is caller's responsibility.
 bool bt_remotes_validate_name(const char* text, FuriString* error);
+// Build "<dir>/<name><ext>" (profile/collection/pins paths). Caller frees.
+FuriString* bt_remotes_path(const char* dir, const char* name, const char* ext);
 // Shared popup helpers used by both run scenes (ducky + gesture).
 const char* bt_remotes_path_basename(const char* path);
 void        bt_remotes_show_running_popup(Hid* app);

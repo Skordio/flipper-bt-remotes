@@ -95,6 +95,12 @@ void bt_remotes_save_app_cfg(Hid* app) {
     flipper_format_free(fff);
 }
 
+// Build "<dir>/<name><ext>" — the shape of every profile/collection/pins path.
+// Caller frees the returned FuriString.
+FuriString* bt_remotes_path(const char* dir, const char* name, const char* ext) {
+    return furi_string_alloc_printf("%s/%s%s", dir, name, ext);
+}
+
 // Write the complete profile .cfg (name + mac + menu_order + menu_hidden) for the active profile.
 // The profile .cfg is the single on-disk source of truth for the BLE identity; the in-memory
 // app->ble_hid_cfg must already hold the values being persisted (callers update it first).
@@ -102,8 +108,7 @@ void bt_remotes_save_app_cfg(Hid* app) {
 void bt_remotes_save_profile_menu_cfg(Hid* app) {
     if(app->active_profile[0] == '\0') return;
 
-    FuriString* path = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
+    FuriString* path = bt_remotes_path(BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
 
     FlipperFormat* fff = flipper_format_file_alloc(app->storage);
     if(flipper_format_file_open_always(fff, furi_string_get_cstr(path))) {
@@ -184,8 +189,7 @@ void bt_hid_remove_pairing(Hid* app) {
 void bt_remotes_profile_clear_pairing(Hid* app) {
     storage_common_remove(app->storage, APP_DATA_PATH(HID_BT_KEYS_STORAGE_NAME));
     if(app->active_profile[0] != '\0') {
-        FuriString* prof_keys = furi_string_alloc_printf(
-            "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_KEYS_EXT);
+        FuriString* prof_keys = bt_remotes_path(BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_KEYS_EXT);
         storage_common_remove(app->storage, furi_string_get_cstr(prof_keys));
         furi_string_free(prof_keys);
         FURI_LOG_I(TAG, "Pairing cleared for profile: %s", app->active_profile);
@@ -196,33 +200,49 @@ void bt_remotes_profile_clear_pairing(Hid* app) {
 // Profile operations
 // ---------------------------------------------------------------------------
 
-void bt_remotes_profile_load_list(Hid* app) {
-    app->profile_count = 0;
+// Scan `dir_path` for regular files ending in `ext`; strip the extension and
+// copy up to `max` names into the fixed-stride 2-D array `names` (row width
+// `name_len`). Returns the number found. Shared by the profile, collection and
+// gesture list loaders.
+static uint8_t bt_remotes_scan_name_list(
+    Hid* app,
+    const char* dir_path,
+    const char* ext,
+    char* names,
+    size_t name_len,
+    uint8_t max) {
+    uint8_t count = 0;
     File* dir = storage_file_alloc(app->storage);
     FileInfo info;
-    char name[BT_REMOTES_PROFILE_NAME_LEN + 8];
+    char name[BT_REMOTES_PROFILE_NAME_LEN + 16]; // all name lens are 32; +ext headroom
+    size_t ext_len = strlen(ext);
 
-    if(storage_dir_open(dir, BT_REMOTES_PROFILES_DIR)) {
+    if(storage_dir_open(dir, dir_path)) {
         while(storage_dir_read(dir, &info, name, sizeof(name))) {
             if(info.flags & FSF_DIRECTORY) continue;
             if(name[0] == '.') continue;
-            if(app->profile_count >= BT_REMOTES_PROFILE_MAX_COUNT) break;
-
+            if(count >= max) break;
             size_t len = strlen(name);
-            size_t ext_len = strlen(BT_REMOTES_CFG_EXT);
             if(len <= ext_len) continue;
-            if(strcmp(name + len - ext_len, BT_REMOTES_CFG_EXT) != 0) continue;
-
+            if(strcmp(name + len - ext_len, ext) != 0) continue;
             name[len - ext_len] = '\0';
-            strlcpy(
-                app->profile_list[app->profile_count],
-                name,
-                BT_REMOTES_PROFILE_NAME_LEN);
-            app->profile_count++;
+            strlcpy(&names[(size_t)count * name_len], name, name_len);
+            count++;
         }
         storage_dir_close(dir);
     }
     storage_file_free(dir);
+    return count;
+}
+
+void bt_remotes_profile_load_list(Hid* app) {
+    app->profile_count = bt_remotes_scan_name_list(
+        app,
+        BT_REMOTES_PROFILES_DIR,
+        BT_REMOTES_CFG_EXT,
+        &app->profile_list[0][0],
+        BT_REMOTES_PROFILE_NAME_LEN,
+        BT_REMOTES_PROFILE_MAX_COUNT);
 
     bt_remotes_apply_profile_order(app);
 }
@@ -283,8 +303,7 @@ bool bt_remotes_profile_create(Hid* app) {
     mac[5] |= 0xC0;
 
     // Write profile cfg — inherit the current default BT name
-    FuriString* dst = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
+    FuriString* dst = bt_remotes_path(BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
     bool ok = false;
     FlipperFormat* fff = flipper_format_file_alloc(app->storage);
     if(flipper_format_file_open_always(fff, furi_string_get_cstr(dst))) {
@@ -317,8 +336,7 @@ bool bt_remotes_profile_save(Hid* app) {
 
     storage_simply_mkdir(app->storage, BT_REMOTES_PROFILES_DIR);
 
-    FuriString* dst = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_KEYS_EXT);
+    FuriString* dst = bt_remotes_path(BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_KEYS_EXT);
 
     storage_common_remove(app->storage, furi_string_get_cstr(dst));
     FS_Error err =
@@ -340,10 +358,8 @@ bool bt_remotes_profile_save(Hid* app) {
 }
 
 bool bt_remotes_profile_activate(Hid* app) {
-    FuriString* src_cfg = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
-    FuriString* src_keys = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_KEYS_EXT);
+    FuriString* src_cfg = bt_remotes_path(BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
+    FuriString* src_keys = bt_remotes_path(BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_KEYS_EXT);
 
     // Restore cfg (contains the profile's MAC)
     if(!storage_file_exists(app->storage, furi_string_get_cstr(src_cfg))) {
@@ -691,12 +707,9 @@ bool bt_remotes_profile_activate(Hid* app) {
 }
 
 bool bt_remotes_profile_delete(Hid* app) {
-    FuriString* cfg = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
-    FuriString* keys = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_KEYS_EXT);
-    FuriString* pins = furi_string_alloc_printf(
-        "%s/%s.pins", BT_REMOTES_PROFILES_DIR, app->active_profile);
+    FuriString* cfg = bt_remotes_path(BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
+    FuriString* keys = bt_remotes_path(BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_KEYS_EXT);
+    FuriString* pins = bt_remotes_path(BT_REMOTES_PROFILES_DIR, app->active_profile, ".pins");
 
     FS_Error e1 = storage_common_remove(app->storage, furi_string_get_cstr(cfg));
     FS_Error e2 = storage_common_remove(app->storage, furi_string_get_cstr(keys));
@@ -715,18 +728,12 @@ bool bt_remotes_profile_delete(Hid* app) {
 
 bool bt_remotes_profile_rename(Hid* app) {
     // pending_name = old filename, active_profile = new filename (written by text_input)
-    FuriString* old_cfg = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->pending_name, BT_REMOTES_CFG_EXT);
-    FuriString* old_keys = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->pending_name, BT_REMOTES_KEYS_EXT);
-    FuriString* new_cfg = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
-    FuriString* new_keys = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_KEYS_EXT);
-    FuriString* old_pins = furi_string_alloc_printf(
-        "%s/%s.pins", BT_REMOTES_PROFILES_DIR, app->pending_name);
-    FuriString* new_pins = furi_string_alloc_printf(
-        "%s/%s.pins", BT_REMOTES_PROFILES_DIR, app->active_profile);
+    FuriString* old_cfg = bt_remotes_path(BT_REMOTES_PROFILES_DIR, app->pending_name, BT_REMOTES_CFG_EXT);
+    FuriString* old_keys = bt_remotes_path(BT_REMOTES_PROFILES_DIR, app->pending_name, BT_REMOTES_KEYS_EXT);
+    FuriString* new_cfg = bt_remotes_path(BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_CFG_EXT);
+    FuriString* new_keys = bt_remotes_path(BT_REMOTES_PROFILES_DIR, app->active_profile, BT_REMOTES_KEYS_EXT);
+    FuriString* old_pins = bt_remotes_path(BT_REMOTES_PROFILES_DIR, app->pending_name, ".pins");
+    FuriString* new_pins = bt_remotes_path(BT_REMOTES_PROFILES_DIR, app->active_profile, ".pins");
 
     FS_Error err = storage_common_copy(
         app->storage, furi_string_get_cstr(old_cfg), furi_string_get_cstr(new_cfg));
@@ -830,31 +837,13 @@ bool bt_remotes_profile_reset(Hid* app) {
 #define BT_REMOTES_PINS_FILE_VERSION       (1)
 
 void bt_remotes_collection_load_list(Hid* app) {
-    app->collection_count = 0;
-
-    File*    dir = storage_file_alloc(app->storage);
-    FileInfo info;
-    char     name[BT_REMOTES_COLLECTION_NAME_LEN + 16];
-
-    if(storage_dir_open(dir, BT_REMOTES_COLLECTION_DIR)) {
-        while(storage_dir_read(dir, &info, name, sizeof(name))) {
-            if(info.flags & FSF_DIRECTORY) continue;
-            if(name[0] == '.') continue;
-            if(app->collection_count >= BT_REMOTES_COLLECTION_MAX) break;
-            size_t len     = strlen(name);
-            size_t ext_len = strlen(BT_REMOTES_COLLECTION_EXT);
-            if(len <= ext_len) continue;
-            if(strcmp(name + len - ext_len, BT_REMOTES_COLLECTION_EXT) != 0) continue;
-            name[len - ext_len] = '\0';
-            strlcpy(
-                app->collection_names[app->collection_count],
-                name,
-                BT_REMOTES_COLLECTION_NAME_LEN);
-            app->collection_count++;
-        }
-        storage_dir_close(dir);
-    }
-    storage_file_free(dir);
+    app->collection_count = bt_remotes_scan_name_list(
+        app,
+        BT_REMOTES_COLLECTION_DIR,
+        BT_REMOTES_COLLECTION_EXT,
+        &app->collection_names[0][0],
+        BT_REMOTES_COLLECTION_NAME_LEN,
+        BT_REMOTES_COLLECTION_MAX);
 }
 
 void bt_remotes_collection_scripts_ensure(Hid* app) {
@@ -875,8 +864,7 @@ bool bt_remotes_collection_load(Hid* app, const char* name) {
     strlcpy(app->editing_collection_name, name, BT_REMOTES_COLLECTION_NAME_LEN);
     app->editing_collection_script_count = 0;
 
-    FuriString* path = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_COLLECTION_DIR, name, BT_REMOTES_COLLECTION_EXT);
+    FuriString* path = bt_remotes_path(BT_REMOTES_COLLECTION_DIR, name, BT_REMOTES_COLLECTION_EXT);
 
     FlipperFormat* fff = flipper_format_file_alloc(app->storage);
     FuriString*    tmp = furi_string_alloc();
@@ -915,11 +903,7 @@ bool bt_remotes_collection_load(Hid* app, const char* name) {
 bool bt_remotes_collection_save(Hid* app) {
     storage_simply_mkdir(app->storage, BT_REMOTES_COLLECTION_DIR);
 
-    FuriString* path = furi_string_alloc_printf(
-        "%s/%s%s",
-        BT_REMOTES_COLLECTION_DIR,
-        app->editing_collection_name,
-        BT_REMOTES_COLLECTION_EXT);
+    FuriString* path = bt_remotes_path(BT_REMOTES_COLLECTION_DIR, app->editing_collection_name, BT_REMOTES_COLLECTION_EXT);
 
     FlipperFormat* fff = flipper_format_file_alloc(app->storage);
     bool           ok  = false;
@@ -943,8 +927,7 @@ bool bt_remotes_collection_save(Hid* app) {
 }
 
 bool bt_remotes_collection_delete(Hid* app, const char* name) {
-    FuriString* path = furi_string_alloc_printf(
-        "%s/%s%s", BT_REMOTES_COLLECTION_DIR, name, BT_REMOTES_COLLECTION_EXT);
+    FuriString* path = bt_remotes_path(BT_REMOTES_COLLECTION_DIR, name, BT_REMOTES_COLLECTION_EXT);
     FS_Error err = storage_common_remove(app->storage, furi_string_get_cstr(path));
     furi_string_free(path);
 
@@ -963,8 +946,7 @@ void bt_remotes_pinned_load(Hid* app) {
     app->pinned_count = 0;
     if(app->active_profile[0] == '\0') return;
 
-    FuriString* path = furi_string_alloc_printf(
-        "%s/%s.pins", BT_REMOTES_PROFILES_DIR, app->active_profile);
+    FuriString* path = bt_remotes_path(BT_REMOTES_PROFILES_DIR, app->active_profile, ".pins");
 
     FlipperFormat* fff = flipper_format_file_alloc(app->storage);
     FuriString*    tmp = furi_string_alloc();
@@ -1008,8 +990,7 @@ void bt_remotes_pinned_load(Hid* app) {
 void bt_remotes_pinned_save(Hid* app) {
     if(app->active_profile[0] == '\0') return;
 
-    FuriString* path = furi_string_alloc_printf(
-        "%s/%s.pins", BT_REMOTES_PROFILES_DIR, app->active_profile);
+    FuriString* path = bt_remotes_path(BT_REMOTES_PROFILES_DIR, app->active_profile, ".pins");
 
     FlipperFormat* fff = flipper_format_file_alloc(app->storage);
     if(flipper_format_file_open_always(fff, furi_string_get_cstr(path))) {
@@ -1079,28 +1060,13 @@ void bt_remotes_gesture_path(const char* name, char* out, size_t out_size) {
 }
 
 void bt_remotes_gesture_load_list(Hid* app) {
-    app->gesture_count = 0;
-
-    File*    dir = storage_file_alloc(app->storage);
-    FileInfo info;
-    char     name[BT_REMOTES_GESTURE_NAME_LEN + 16];
-
-    if(storage_dir_open(dir, BT_REMOTES_GESTURE_DIR)) {
-        while(storage_dir_read(dir, &info, name, sizeof(name))) {
-            if(info.flags & FSF_DIRECTORY) continue;
-            if(name[0] == '.') continue;
-            if(app->gesture_count >= BT_REMOTES_GESTURE_MAX) break;
-            size_t len     = strlen(name);
-            size_t ext_len = strlen(BT_REMOTES_GESTURE_EXT);
-            if(len <= ext_len) continue;
-            if(strcmp(name + len - ext_len, BT_REMOTES_GESTURE_EXT) != 0) continue;
-            name[len - ext_len] = '\0';
-            strlcpy(app->gesture_names[app->gesture_count], name, BT_REMOTES_GESTURE_NAME_LEN);
-            app->gesture_count++;
-        }
-        storage_dir_close(dir);
-    }
-    storage_file_free(dir);
+    app->gesture_count = bt_remotes_scan_name_list(
+        app,
+        BT_REMOTES_GESTURE_DIR,
+        BT_REMOTES_GESTURE_EXT,
+        &app->gesture_names[0][0],
+        BT_REMOTES_GESTURE_NAME_LEN,
+        BT_REMOTES_GESTURE_MAX);
 }
 
 
@@ -1726,11 +1692,7 @@ static bool bt_remotes_launcher_try_load(Hid* app, const char* path) {
         if(!bt_remotes_validate_name(furi_string_get_cstr(prof), tmp)) break;
         if(furi_string_size(prof) >= BT_REMOTES_PROFILE_NAME_LEN) break;
 
-        FuriString* profile_path = furi_string_alloc_printf(
-            "%s/%s%s",
-            BT_REMOTES_PROFILES_DIR,
-            furi_string_get_cstr(prof),
-            BT_REMOTES_CFG_EXT);
+        FuriString* profile_path = bt_remotes_path(BT_REMOTES_PROFILES_DIR, furi_string_get_cstr(prof), BT_REMOTES_CFG_EXT);
         bool exists = storage_file_exists(app->storage, furi_string_get_cstr(profile_path));
         furi_string_free(profile_path);
         if(!exists) break;
