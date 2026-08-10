@@ -220,6 +220,7 @@ All config files are FlipperFormat text. Constants/file-types live in `bt_remote
   name: My Keyboard
   mac: C0 AB CD EF 12 34
   menu_order: <33 uint32 values>     # fixed idx 0‥16, pinned slot 17‥32, 0xFF = unused
+  menu_item_count: <uint32>          # fixed-item count menu_order was saved with (generic migration)
   menu_hidden: <uint32 bitmask>      # bit i set → fixed item i hidden
   keynote_back_key: <uint32>         # KeynoteBackKey enum
   media_mode: <uint32>               # MediaMode enum

@@ -200,6 +200,11 @@ void bt_remotes_save_profile_menu_cfg(Hid* app) {
         uint32_t order_u32[BT_REMOTES_MENU_ORDER_LEN];
         for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) order_u32[i] = app->menu_order[i];
         flipper_format_write_uint32(fff, "menu_order", order_u32, BT_REMOTES_MENU_ORDER_LEN);
+        // Number of fixed items menu_order was saved with — lets future
+        // versions migrate the order generically instead of adding a new
+        // length-keyed migration arm per menu generation.
+        uint32_t item_count_u32 = BT_REMOTES_MENU_ITEM_COUNT;
+        flipper_format_write_uint32(fff, "menu_item_count", &item_count_u32, 1);
         uint32_t hidden_u32 = app->menu_hidden;
         flipper_format_write_uint32(fff, "menu_hidden", &hidden_u32, 1);
         for(size_t i = 0; i < COUNT_OF(bt_remotes_profile_settings); i++) {
@@ -471,13 +476,46 @@ bool bt_remotes_profile_activate(Hid* app) {
             }
             flipper_format_rewind(mfff);
 
-            // Try the current 33-entry format first; fall back to V2 (32-entry,
-            // pre-iOS-Phone) then V1 (31-entry, pre-Custom-Gestures), then the
-            // very old fixed-only layout.
+            // menu_order migration. Files carry menu_item_count since 2026-08;
+            // those migrate generically below no matter how many fixed items
+            // are added later. Older files fall back to the length-keyed arms:
+            // current 33-entry, V2 (32, pre-iOS-Phone), V1 (31,
+            // pre-Custom-Gestures), then the very old fixed-only layout.
             uint32_t order_u32[BT_REMOTES_MENU_ORDER_LEN];
             for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) order_u32[i] = 0xFF;
-            if(flipper_format_read_uint32(
-                   mfff, "menu_order", order_u32, BT_REMOTES_MENU_ORDER_LEN)) {
+            uint32_t saved_count = 0;
+            bool have_count =
+                flipper_format_read_uint32(mfff, "menu_item_count", &saved_count, 1) &&
+                saved_count >= 1 && saved_count <= BT_REMOTES_MENU_ITEM_COUNT;
+            flipper_format_rewind(mfff);
+            if(have_count &&
+               flipper_format_read_uint32(
+                   mfff, "menu_order", order_u32, saved_count + BT_REMOTES_PINNED_MAX)) {
+                // Generic migration: pinned-slot values shift up by the number
+                // of fixed items added since the file was saved; fixed values
+                // stay. When items HAVE been added, the old last fixed item
+                // (Settings, value saved_count-1) is reinterpreted as the first
+                // new item and the real Settings re-appends via start_on_enter —
+                // the same trick the legacy arms below hard-code per generation.
+                uint32_t saved_len = saved_count + BT_REMOTES_PINNED_MAX;
+                uint8_t shift = (uint8_t)(BT_REMOTES_MENU_ITEM_COUNT - saved_count);
+                for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) app->menu_order[i] = 0xFF;
+                for(uint8_t i = 0; i < saved_len; i++) {
+                    uint32_t v = order_u32[i]; // validate before narrowing (see below)
+                    if(v == 0xFF) {
+                        app->menu_order[i] = 0xFF;
+                    } else if(v >= saved_count && v < saved_len) {
+                        app->menu_order[i] = (uint8_t)(v + shift); // pinned slot
+                    } else if(v < saved_count) {
+                        app->menu_order[i] = (uint8_t)v; // fixed item index unchanged
+                    } else {
+                        app->menu_order[i] = 0xFF;
+                    }
+                }
+            } else if(
+                (flipper_format_rewind(mfff),
+                 flipper_format_read_uint32(
+                     mfff, "menu_order", order_u32, BT_REMOTES_MENU_ORDER_LEN))) {
                 // Current format: validate and copy all slots. Validate on the
                 // full uint32 BEFORE narrowing — truncating first would let an
                 // out-of-range value whose low byte lands in range (256 -> 0,

@@ -41,9 +41,10 @@ Momentum firmware tree at `applications_user/bt_remotes/`.
 
 4. **Settings must stay the last fixed Start-menu item** (`BtRemotesStartIndexSettings`, highest
    index). `hide_items` and a load-time guard depend on it. To add a fixed menu item, insert it
-   *before* Settings and add a new generation of migration constants (V1, V2, … each pinning the
-   prior `BT_REMOTES_MENU_ITEM_COUNT` / `_ORDER_LEN`) plus the matching arm in
-   `bt_remotes_profile_activate`. See ARCHITECTURE → *Start Menu*.
+   *before* Settings and bump `BT_REMOTES_MENU_ITEM_COUNT`/`_ORDER_LEN` — cfg files carry
+   `menu_item_count` (since 2026-08), so saved menu orders migrate generically; no new migration
+   arm is needed. The legacy V1/V2/33-entry arms in `bt_remotes_profile_activate` only serve
+   files saved before that key existed — don't extend them. See ARCHITECTURE → *Start Menu*.
 
 5. **Persisting profile changes:** per-profile settings (name, menu layout, per-remote settings)
    live in the profile `.cfg` — the single on-disk source of truth (there is no active-cfg mirror).
