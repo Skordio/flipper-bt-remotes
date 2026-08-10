@@ -6,7 +6,8 @@
 //   Inward Margin - horizontal inset before the vertical swipe (gesture mode only)
 //   Edge Margin   - vertical travel off the edge before the button is held
 //   Swipe Length  - drag distance while the button is held
-// Every change is persisted immediately via bt_remotes_save_profile_menu_cfg.
+// Changes are applied immediately to in-memory state; persisted once on scene
+// exit (like scene_ducky_settings) instead of a full cfg rewrite per tick.
 //
 // Inward Margin / Edge Margin / Swipe Length are only meaningful in Gesture
 // mode, so they are hidden when Scroll Mode = Wheel. Toggling Scroll Mode posts
@@ -21,7 +22,6 @@ static void tiktok_scroll_mode_changed(VariableItem* item) {
     uint8_t idx = variable_item_get_current_value_index(item);
     app->tiktok_scroll_mode = idx;
     variable_item_set_current_value_text(item, (idx == TikTokScrollGesture) ? "Gesture" : "Wheel");
-    bt_remotes_save_profile_menu_cfg(app);
     view_dispatcher_send_custom_event(app->view_dispatcher, TIKTOK_SETTINGS_EVENT_REBUILD);
 }
 
@@ -33,7 +33,6 @@ static void tiktok_inset_changed(VariableItem* item) {
     char buf[8];
     snprintf(buf, sizeof(buf), "%u", (unsigned)val);
     variable_item_set_current_value_text(item, buf);
-    bt_remotes_save_profile_menu_cfg(app);
 }
 
 static void tiktok_margin_changed(VariableItem* item) {
@@ -44,7 +43,6 @@ static void tiktok_margin_changed(VariableItem* item) {
     char buf[8];
     snprintf(buf, sizeof(buf), "%u", (unsigned)val);
     variable_item_set_current_value_text(item, buf);
-    bt_remotes_save_profile_menu_cfg(app);
 }
 
 static void tiktok_swipe_changed(VariableItem* item) {
@@ -55,7 +53,6 @@ static void tiktok_swipe_changed(VariableItem* item) {
     char buf[8];
     snprintf(buf, sizeof(buf), "%u", (unsigned)val);
     variable_item_set_current_value_text(item, buf);
-    bt_remotes_save_profile_menu_cfg(app);
 }
 
 // Help is the last row; its index depends on whether the gesture rows are visible.
@@ -158,6 +155,7 @@ bool bt_remotes_scene_tiktok_settings_on_event(void* context, SceneManagerEvent 
 
 void bt_remotes_scene_tiktok_settings_on_exit(void* context) {
     Hid* app = context;
+    bt_remotes_save_profile_menu_cfg(app);
     scene_manager_set_scene_state(
         app->scene_manager,
         BtRemotesSceneTikTokSettings,

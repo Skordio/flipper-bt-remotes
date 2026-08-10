@@ -17,22 +17,6 @@
 #define BT_REMOTES_MAC_SIZE          (6)
 
 // ---------------------------------------------------------------------------
-// Config helpers
-// ---------------------------------------------------------------------------
-
-static void
-    bt_remotes_write_cfg(Hid* app, const char* path, const char* name, uint8_t mac[BT_REMOTES_MAC_SIZE]) {
-    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
-    if(flipper_format_file_open_always(fff, path)) {
-        flipper_format_write_header_cstr(fff, BT_REMOTES_CFG_FILE_TYPE, BT_REMOTES_CFG_VERSION);
-        flipper_format_write_string_cstr(fff, "name", name);
-        flipper_format_write_hex(fff, "mac", mac, BT_REMOTES_MAC_SIZE);
-        flipper_format_file_close(fff);
-    }
-    flipper_format_free(fff);
-}
-
-// ---------------------------------------------------------------------------
 // App-level config (default BT name)
 // ---------------------------------------------------------------------------
 
@@ -111,47 +95,9 @@ void bt_remotes_save_app_cfg(Hid* app) {
     flipper_format_free(fff);
 }
 
-static void bt_remotes_load_cfg(Hid* app) {
-    memset(&app->ble_hid_cfg, 0, sizeof(app->ble_hid_cfg));
-
-    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
-    FuriString* tmp = furi_string_alloc();
-    uint32_t ver = 0;
-
-    do {
-        if(!flipper_format_file_open_existing(fff, BT_REMOTES_CFG_PATH)) break;
-        if(!flipper_format_read_header(fff, tmp, &ver)) break;
-        if(strcmp(furi_string_get_cstr(tmp), BT_REMOTES_CFG_FILE_TYPE) != 0 ||
-           ver != BT_REMOTES_CFG_VERSION)
-            break;
-        if(flipper_format_read_string(fff, "name", tmp)) {
-            strlcpy(
-                app->ble_hid_cfg.name,
-                furi_string_get_cstr(tmp),
-                sizeof(app->ble_hid_cfg.name));
-        } else {
-            flipper_format_rewind(fff);
-        }
-        flipper_format_read_hex(fff, "mac", app->ble_hid_cfg.mac, sizeof(app->ble_hid_cfg.mac));
-    } while(0);
-
-    furi_string_free(tmp);
-    flipper_format_free(fff);
-}
-
-void bt_hid_save_cfg(Hid* app) {
-    FlipperFormat* fff = flipper_format_file_alloc(app->storage);
-    if(flipper_format_file_open_always(fff, BT_REMOTES_CFG_PATH)) {
-        flipper_format_write_header_cstr(fff, BT_REMOTES_CFG_FILE_TYPE, BT_REMOTES_CFG_VERSION);
-        flipper_format_write_string_cstr(fff, "name", app->ble_hid_cfg.name);
-        flipper_format_write_hex(fff, "mac", app->ble_hid_cfg.mac, BT_REMOTES_MAC_SIZE);
-        flipper_format_file_close(fff);
-    }
-    flipper_format_free(fff);
-}
-
 // Write the complete profile .cfg (name + mac + menu_order + menu_hidden) for the active profile.
-// Also keeps .bt_hid.cfg in sync so bt_remotes_profile_save's key snapshot uses the right base.
+// The profile .cfg is the single on-disk source of truth for the BLE identity; the in-memory
+// app->ble_hid_cfg must already hold the values being persisted (callers update it first).
 // No-op when no profile is active.
 void bt_remotes_save_profile_menu_cfg(Hid* app) {
     if(app->active_profile[0] == '\0') return;
@@ -352,8 +298,8 @@ bool bt_remotes_profile_create(Hid* app) {
     furi_string_free(dst);
 
     if(ok) {
-        // Push the new MAC + default name into the active cfg so BLE starts with it
-        bt_remotes_write_cfg(app, BT_REMOTES_CFG_PATH, app->default_ble_name, mac);
+        // The profile_new flow calls bt_remotes_profile_activate next, which loads
+        // the new MAC + default name from the .cfg written above into app->ble_hid_cfg.
         // Remove stale bonding data — new device will pair fresh
         storage_common_remove(app->storage, APP_DATA_PATH(HID_BT_KEYS_STORAGE_NAME));
         FURI_LOG_I(TAG, "Profile created: %s", app->active_profile);
@@ -406,9 +352,6 @@ bool bt_remotes_profile_activate(Hid* app) {
         furi_string_free(src_keys);
         return false;
     }
-    storage_common_remove(app->storage, BT_REMOTES_CFG_PATH);
-    storage_common_copy(app->storage, furi_string_get_cstr(src_cfg), BT_REMOTES_CFG_PATH);
-
     // Restore bonding keys
     const char* keys_path = APP_DATA_PATH(HID_BT_KEYS_STORAGE_NAME);
     bool ok = false;
@@ -434,6 +377,7 @@ bool bt_remotes_profile_activate(Hid* app) {
         for(uint8_t i = BT_REMOTES_MENU_ITEM_COUNT; i < BT_REMOTES_MENU_ORDER_LEN; i++)
             app->menu_order[i] = 0xFF;
         app->menu_hidden = 0;
+        memset(&app->ble_hid_cfg, 0, sizeof(app->ble_hid_cfg));
 
         FlipperFormat* mfff = flipper_format_file_alloc(app->storage);
         FuriString*    mtmp = furi_string_alloc();
@@ -441,6 +385,24 @@ bool bt_remotes_profile_activate(Hid* app) {
         do {
             if(!flipper_format_file_open_existing(mfff, furi_string_get_cstr(src_cfg))) break;
             if(!flipper_format_read_header(mfff, mtmp, &mver)) break;
+
+            // BLE identity (name + MAC): read straight into memory. start_ble uses
+            // app->ble_hid_cfg directly — the profile .cfg is the single source of
+            // truth; there is no on-disk copy of the active identity.
+            if(flipper_format_read_string(mfff, "name", mtmp)) {
+                strlcpy(
+                    app->ble_hid_cfg.name,
+                    furi_string_get_cstr(mtmp),
+                    sizeof(app->ble_hid_cfg.name));
+            } else {
+                flipper_format_rewind(mfff);
+            }
+            if(!flipper_format_read_hex(
+                   mfff, "mac", app->ble_hid_cfg.mac, sizeof(app->ble_hid_cfg.mac))) {
+                // Truncated mac: line — zero it so the all-zero "no MAC" guard holds
+                memset(app->ble_hid_cfg.mac, 0, sizeof(app->ble_hid_cfg.mac));
+            }
+            flipper_format_rewind(mfff);
 
             // Try the current 33-entry format first; fall back to V2 (32-entry,
             // pre-iOS-Phone) then V1 (31-entry, pre-Custom-Gestures), then the
@@ -848,9 +810,7 @@ bool bt_remotes_profile_reset(Hid* app) {
     memcpy(app->ble_hid_cfg.mac, mac, BT_REMOTES_MAC_SIZE);
     // name is intentionally preserved
 
-    bt_hid_save_cfg(app); // writes new MAC + existing name to .bt_hid.cfg
-
-    // Snapshot updated cfg (including menu_order + menu_hidden) into the profile directory
+    // Persist the new MAC (plus menu_order + menu_hidden etc.) to the profile .cfg
     bt_remotes_save_profile_menu_cfg(app);
 
     // Wipe all bonding data so host must pair fresh
@@ -1244,8 +1204,8 @@ void bt_remotes_start_ble(Hid* app) {
     bt_keys_storage_set_storage_path(app->bt, APP_DATA_PATH(HID_BT_KEYS_STORAGE_NAME));
     bt_set_status_changed_callback(app->bt, bt_remotes_connection_status_changed_callback, app);
 
-    bt_remotes_load_cfg(app);
-
+    // app->ble_hid_cfg (name + MAC) was populated by bt_remotes_profile_activate;
+    // with no active profile it is all-zero and the profile falls back to defaults.
     app->ble_hid_profile = bt_profile_start(app->bt, ble_profile_hid_ext, &app->ble_hid_cfg);
     furi_check(app->ble_hid_profile);
 

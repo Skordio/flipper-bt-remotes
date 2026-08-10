@@ -51,11 +51,10 @@ bool bt_remotes_scene_rename_on_event(void* context, SceneManagerEvent event) {
         consumed = true;
         if(event.event == BtRemotesRenameEventTextInput) {
             if(app->active_profile[0] != '\0') {
-                // Profile active: persist name to active cfg and to the profile's
-                // .cfg (name + mac + menu_order + menu_hidden), then cycle BLE so
+                // Profile active: persist the new name (already in ble_hid_cfg via
+                // the text-input buffer) to the profile's .cfg, then cycle BLE so
                 // the new name is broadcast right away. BLE now stays up through
                 // Settings, so this scene owns the restart.
-                bt_hid_save_cfg(app);
                 bt_remotes_save_profile_menu_cfg(app);
                 if(app->ble_started) bt_remotes_stop_ble(app);
                 bt_remotes_profile_activate(app);

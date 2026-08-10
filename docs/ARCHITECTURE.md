@@ -122,7 +122,6 @@ as the firmware's submenu/variable_item_list. PTT Left/Right tab cycling is unaf
 | Constant | Value | Purpose |
 |---|---|---|
 | `BT_REMOTES_PROFILES_DIR` | `APP_DATA_PATH("profiles")` | Profile + `.pins` storage directory |
-| `BT_REMOTES_CFG_PATH` | `APP_DATA_PATH(".bt_hid.cfg")` | Active profile cfg (name + MAC + menu layout) |
 | `BT_REMOTES_APP_CFG_PATH` | `APP_DATA_PATH("app.cfg")` | App-level config (default name, vibro, profile order) |
 | `BT_REMOTES_CFG_EXT` / `_KEYS_EXT` | `.cfg` / `.keys` | Per-profile config / bonding-keys extensions |
 | `BT_REMOTES_PROFILE_NAME_LEN` | `32` | Max profile name length (including NUL) |
@@ -152,7 +151,7 @@ The struct is large; these are the fields agents touch most. Names/types are exa
 struct Hid {
     // BLE
     FuriHalBleProfileBase* ble_hid_profile;   // live profile handle (NULL when stopped)
-    BleProfileHidExtParams ble_hid_cfg;       // .name[20], .mac[6] — loaded from .bt_hid.cfg
+    BleProfileHidExtParams ble_hid_cfg;       // .name[20], .mac[6] — loaded by profile_activate
     bool ble_started;                          // true while HID profile is running
     Bt* bt; Gui* gui; NotificationApp* notifications; Storage* storage;
 
@@ -238,11 +237,11 @@ All config files are FlipperFormat text. Constants/file-types live in `bt_remote
   ducky_connect_per_run: <uint32>    # 0/1 — Ducky/Collections connect only during a run
   ducky_connect_settle_ms: <uint32>  # ms to wait after link-up before sending HID (per-run)
   ```
-  `bt_remotes_save_profile_menu_cfg` writes the **full** set above. Note `bt_hid_save_cfg` (used
-  by rename/reset) writes only `name`+`mac` to the **active** `.bt_hid.cfg` mirror — the full
-  per-profile cfg is then re-snapshotted via `save_profile_menu_cfg`. Old cfg files missing any
-  key load with safe defaults and are migrated on read (see the V1/V2 migration arms in
-  `bt_remotes_profile_activate`).
+  `bt_remotes_save_profile_menu_cfg` writes the **full** set above and is the only writer of the
+  profile `.cfg` — the single on-disk source of truth for the BLE identity. Callers that change
+  `name`/`mac` update `app->ble_hid_cfg` in memory first, then call `save_profile_menu_cfg`.
+  Old cfg files missing any key load with safe defaults and are migrated on read (see the V1/V2
+  migration arms in `bt_remotes_profile_activate`).
 - **`{name}.keys`** — BLE bonding keys binary blob (written by the BT service).
 - **`{name}.pins`** — `Flipper BT Collection Pins` v1. Per-profile list of Start-menu pins:
   ```
@@ -254,8 +253,10 @@ All config files are FlipperFormat text. Constants/file-types live in `bt_remote
   ```
   Older `.pins` files omit `kind_N` and default to collection (kind 0).
 
-The **active** profile's cfg/keys are mirrored to `APP_DATA_PATH(".bt_hid.cfg")` /
-`APP_DATA_PATH(".bt_hid.keys")` — these are what the BT stack reads at runtime.
+The **active** profile's keys are mirrored to `APP_DATA_PATH(".bt_hid.keys")` — that file is what
+the BT stack reads at runtime. The BLE identity (name + MAC) has no on-disk mirror: it lives in
+`app->ble_hid_cfg`, populated by `bt_remotes_profile_activate` from the profile `.cfg` and passed
+to `bt_profile_start` directly.
 
 ### App-level config — `APP_DATA_PATH("app.cfg")`
 
@@ -340,10 +341,10 @@ Legacy files with the old `disconnect_vibro` bool simply fail the uint32 read an
 2. Resets the blue LED off
 3. Sets the BT keys storage path to `APP_DATA_PATH(".bt_hid.keys")`
 4. Registers `bt_remotes_connection_status_changed_callback`
-5. Loads cfg from `.bt_hid.cfg` into `app->ble_hid_cfg` (`bt_remotes_load_cfg`)
-6. Starts the HID profile with `bt_profile_start(app->bt, ble_profile_hid_ext, &app->ble_hid_cfg)`
-   and `furi_check`s the handle
-7. Starts advertising; sets `app->ble_started = true`
+5. Starts the HID profile with `bt_profile_start(app->bt, ble_profile_hid_ext, &app->ble_hid_cfg)`
+   and `furi_check`s the handle — `ble_hid_cfg` (name + MAC) was populated by
+   `bt_remotes_profile_activate`; it is all-zero (profile defaults) when no profile is active
+6. Starts advertising; sets `app->ble_started = true`
 
 **Registers the status callback every time it is called** — the callback would otherwise be lost
 after any stop/start cycle. Note it **asserts** `!ble_started` (it does not guard); callers must
@@ -641,11 +642,11 @@ sub-scenes, each a `VariableItemList`, all persisted in the profile `.cfg`:
 | Function | What it does |
 |---|---|
 | `bt_remotes_profile_load_list(app)` | Scans `profiles/` for `*.cfg`, fills `profile_list[]`, then applies `profile_order_str` ordering. |
-| `bt_remotes_profile_create(app)` | New random MAC; writes profile `.cfg` (inherits `default_ble_name`) + active `.bt_hid.cfg`; removes stale active keys. |
-| `bt_remotes_profile_activate(app)` | Copies profile `.cfg` → `.bt_hid.cfg` and profile `.keys` → active keys (or clears keys if none). **Also** loads per-profile `menu_order`/`menu_hidden` + per-remote settings (with V1 migration). Returns `false` if `.cfg` missing. |
+| `bt_remotes_profile_create(app)` | New random MAC; writes profile `.cfg` (inherits `default_ble_name`); removes stale active keys. Callers follow up with `profile_activate` to load the identity into memory. |
+| `bt_remotes_profile_activate(app)` | Loads the profile `.cfg`'s name + MAC into `app->ble_hid_cfg` and copies profile `.keys` → active keys (or clears keys if none). **Also** loads per-profile `menu_order`/`menu_hidden` + per-remote settings (with V1 migration). Returns `false` if `.cfg` missing. |
 | `bt_remotes_profile_save(app)` | Copies active `.bt_hid.keys` → profile `.keys`, then re-snapshots the full profile `.cfg` via `save_profile_menu_cfg`. Returns `false` if no active keys file exists yet. |
 | `bt_remotes_profile_rename(app)` | Renames profile `.cfg`/`.keys`. Old name in `app->pending_name`, new in `app->active_profile`. |
-| `bt_remotes_profile_reset(app)` | New random MAC (name preserved); saves via `bt_hid_save_cfg` + `save_profile_menu_cfg`; deletes profile + active key files. |
+| `bt_remotes_profile_reset(app)` | New random MAC (name preserved) into `ble_hid_cfg`; persists via `save_profile_menu_cfg`; deletes profile + active key files. |
 | `bt_remotes_profile_delete(app)` | Removes profile `.cfg` and `.keys` (tolerates already-absent). |
 | `bt_remotes_profile_clear_pairing(app)` | Deletes both key files (active + profile) without touching BLE stack. Use instead of `bt_hid_remove_pairing` whenever BLE is stopped. |
 | `bt_remotes_save_profile_menu_cfg(app)` | Writes the full profile `.cfg` (name+mac+menu+per-remote settings). No-op if no active profile. |
@@ -668,13 +669,13 @@ active BLE profile. The `unpair` scene `stop_ble`s before it calls into the clea
 **don't call `bt_hid_remove_pairing` from anywhere that may run with BLE stopped**. Use
 `bt_remotes_profile_clear_pairing` instead, which is safe regardless of BLE state.
 
-### `bt_remotes_profile_activate` overwrites `.bt_hid.cfg`
-`profile_activate` copies the profile's `.cfg` → `.bt_hid.cfg`. If you save a change only to
-`.bt_hid.cfg` (e.g. via `bt_hid_save_cfg`, which writes only name+mac) but not to the profile's
-`.cfg`, the next `profile_activate` (e.g. the local cycle in `scene_rename` after a Bluetooth Name
-edit) will silently overwrite it. **Always persist changes to the profile's `.cfg` immediately** —
-the rename scene calls `bt_remotes_save_profile_menu_cfg(app)` after `bt_hid_save_cfg`, which
-rewrites the full profile cfg (name + mac + menu layout + per-remote settings).
+### `bt_remotes_profile_activate` reloads `ble_hid_cfg` from the profile `.cfg`
+`profile_activate` overwrites the in-memory `app->ble_hid_cfg` (and all per-profile settings) with
+whatever the profile `.cfg` on disk says. If you change a per-profile value in memory without
+persisting it via `bt_remotes_save_profile_menu_cfg`, the next `profile_activate` (e.g. the local
+cycle in `scene_rename` after a Bluetooth Name edit, or Back-from-Settings) silently reverts it.
+**Persist to the profile's `.cfg` before any path that may re-activate** — settings scenes do this
+in `on_exit`; rename/reset do it inline before cycling BLE.
 
 ### `on_exit` fires for both forward and backward navigation
 You cannot reliably use `on_exit` to detect whether the user pressed Back vs. selected a menu item.
@@ -690,6 +691,6 @@ the full profile list will render.
 ### The rename scene is context-aware
 `bt_remotes_scene_rename` behaves differently depending on `active_profile`:
 - **No profile** → edits `app->default_ble_name`, saves via `bt_remotes_save_app_cfg`. No BLE.
-- **Profile active** → edits `app->ble_hid_cfg.name`, then `bt_hid_save_cfg` (active `.bt_hid.cfg`)
-  + `bt_remotes_save_profile_menu_cfg` (full profile `.cfg`). BLE is already stopped; restart
+- **Profile active** → edits `app->ble_hid_cfg.name` (the text-input writes into it directly), then
+  `bt_remotes_save_profile_menu_cfg` (full profile `.cfg`). BLE is already stopped; restart
   happens on Back from Settings (which re-activates the profile and loads the new name).

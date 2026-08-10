@@ -46,9 +46,11 @@ Momentum firmware tree at `applications_user/bt_remotes/`.
    `bt_remotes_profile_activate`. See ARCHITECTURE → *Start Menu*.
 
 5. **Persisting profile changes:** per-profile settings (name, menu layout, per-remote settings)
-   live in the profile `.cfg`. `bt_hid_save_cfg` writes only name+mac to the active mirror —
-   always also call `bt_remotes_save_profile_menu_cfg(app)` so a change survives
-   `profile_activate` (which overwrites `.bt_hid.cfg` from the profile `.cfg` on Back-from-Settings).
+   live in the profile `.cfg` — the single on-disk source of truth (there is no active-cfg mirror).
+   Change values in memory (incl. `app->ble_hid_cfg` for name/mac), then persist via
+   `bt_remotes_save_profile_menu_cfg(app)` before anything can call `profile_activate`
+   (e.g. Back-from-Settings), which reloads all per-profile state from the `.cfg`.
+   Settings scenes persist in `on_exit` (see `scene_ducky_settings.c`), not per value tick.
 
 6. **BLE state:** `start_ble` **asserts** `!ble_started` (stop first; it's not a guard). In the
    default (immediate-connect) mode BLE stays up through the whole Settings sub-tree so the host

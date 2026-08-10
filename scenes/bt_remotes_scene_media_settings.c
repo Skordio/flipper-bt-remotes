@@ -1,8 +1,9 @@
 #include "../bt_remotes.h"
 
 // Media per-profile settings, shown as a VariableItemList so each value is
-// adjusted with Left/Right. Help row sits last and opens via the enter callback;
-// each change callback persists immediately.
+// adjusted with Left/Right. Help row sits last and opens via the enter callback.
+// Changes are applied immediately to in-memory state; persisted once on scene
+// exit (like scene_ducky_settings) instead of a full cfg rewrite per tick.
 
 #define MEDIA_SETTINGS_ROW_HELP 2
 
@@ -11,7 +12,6 @@ static void media_mode_changed(VariableItem* item) {
     uint8_t idx = variable_item_get_current_value_index(item);
     app->media_mode = idx;
     variable_item_set_current_value_text(item, (idx == MediaModeImproved) ? "Improved" : "Legacy");
-    bt_remotes_save_profile_menu_cfg(app);
 }
 
 static void media_mouse_switch_changed(VariableItem* item) {
@@ -19,7 +19,6 @@ static void media_mouse_switch_changed(VariableItem* item) {
     uint8_t idx = variable_item_get_current_value_index(item);
     app->media_mouse_switch = idx;
     variable_item_set_current_value_text(item, idx ? "On" : "Off");
-    bt_remotes_save_profile_menu_cfg(app);
 }
 
 static void media_settings_enter_cb(void* context, uint32_t index) {
@@ -66,6 +65,7 @@ bool bt_remotes_scene_media_settings_on_event(void* context, SceneManagerEvent e
 
 void bt_remotes_scene_media_settings_on_exit(void* context) {
     Hid* app = context;
+    bt_remotes_save_profile_menu_cfg(app);
     scene_manager_set_scene_state(
         app->scene_manager,
         BtRemotesSceneMediaSettings,

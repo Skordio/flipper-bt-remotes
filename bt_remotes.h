@@ -62,7 +62,6 @@
 #define BT_REMOTES_MENU_ORDER_LEN_V2  32
 
 #define BT_REMOTES_PROFILES_DIR APP_DATA_PATH("profiles")
-#define BT_REMOTES_CFG_PATH     APP_DATA_PATH(".bt_hid.cfg")
 #define BT_REMOTES_APP_CFG_PATH APP_DATA_PATH("app.cfg")
 #define BT_REMOTES_CFG_EXT      ".cfg"
 #define BT_REMOTES_KEYS_EXT     ".keys"
@@ -407,7 +406,6 @@ void bt_remotes_ducky_browse_enter(Hid* app);
 
 // Config / pairing
 void bt_hid_remove_pairing(Hid* app);
-void bt_hid_save_cfg(Hid* app);
 void bt_remotes_profile_clear_pairing(Hid* app);
 
 // App-level config (default BT name, vibro mode, profile order)

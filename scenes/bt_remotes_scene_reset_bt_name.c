@@ -18,7 +18,6 @@ void bt_remotes_scene_reset_bt_name_on_enter(void* context) {
 
     strlcpy(
         app->ble_hid_cfg.name, app->default_ble_name, sizeof(app->ble_hid_cfg.name));
-    bt_hid_save_cfg(app);
     bt_remotes_save_profile_menu_cfg(app);
 
     // Cycle BLE so the new name advertises right away. Same pattern as

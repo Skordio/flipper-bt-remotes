@@ -1,8 +1,9 @@
 #include "../bt_remotes.h"
 
 // Keynote per-profile settings, shown as a VariableItemList so the back-key choice
-// is adjusted with Left/Right. Help row sits last and opens via the enter callback;
-// the change callback persists immediately.
+// is adjusted with Left/Right. Help row sits last and opens via the enter callback.
+// Changes are applied immediately to in-memory state; persisted once on scene
+// exit (like scene_ducky_settings) instead of a full cfg rewrite per tick.
 
 static const char* const keynote_back_key_labels[KEYNOTE_BACK_KEY_COUNT] = {
     "Delete",
@@ -18,7 +19,6 @@ static void keynote_back_key_changed(VariableItem* item) {
     uint8_t idx = variable_item_get_current_value_index(item);
     app->keynote_back_key = idx;
     variable_item_set_current_value_text(item, keynote_back_key_labels[idx]);
-    bt_remotes_save_profile_menu_cfg(app);
 }
 
 static void keynote_settings_enter_cb(void* context, uint32_t index) {
@@ -59,6 +59,7 @@ bool bt_remotes_scene_keynote_settings_on_event(void* context, SceneManagerEvent
 
 void bt_remotes_scene_keynote_settings_on_exit(void* context) {
     Hid* app = context;
+    bt_remotes_save_profile_menu_cfg(app);
     scene_manager_set_scene_state(
         app->scene_manager,
         BtRemotesSceneKeynoteSettings,

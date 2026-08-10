@@ -3,8 +3,8 @@
 // iOS Phone per-profile settings, modeled on scene_media_settings.c. Cursor
 // speed/ramp + Swipe distance + Double-Tap window are VariableItemList ranges;
 // Cursor Mode and Dbl Tap Swipe are toggles. Help opens via the enter callback.
-// Each change persists immediately through bt_remotes_save_profile_menu_cfg so
-// the value survives profile_activate.
+// Changes are applied immediately to in-memory state; persisted once on scene
+// exit (like scene_ducky_settings) instead of a full cfg rewrite per tick.
 
 #define IOS_PHONE_ROW_CURSOR_MODE 0
 #define IOS_PHONE_ROW_CURSOR_SPD  1
@@ -26,7 +26,6 @@ static void ios_cursor_mode_changed(VariableItem* item) {
     uint8_t idx = variable_item_get_current_value_index(item);
     app->ios_cursor_mode = idx;
     variable_item_set_current_value_text(item, ios_cursor_mode_labels[idx]);
-    bt_remotes_save_profile_menu_cfg(app);
 }
 
 static void ios_cursor_speed_changed(VariableItem* item) {
@@ -37,7 +36,6 @@ static void ios_cursor_speed_changed(VariableItem* item) {
     FuriString* s = furi_string_alloc_printf("%u", val);
     variable_item_set_current_value_text(item, furi_string_get_cstr(s));
     furi_string_free(s);
-    bt_remotes_save_profile_menu_cfg(app);
 }
 
 static void ios_ramp_start_changed(VariableItem* item) {
@@ -48,7 +46,6 @@ static void ios_ramp_start_changed(VariableItem* item) {
     FuriString* s = furi_string_alloc_printf("%u%%", val);
     variable_item_set_current_value_text(item, furi_string_get_cstr(s));
     furi_string_free(s);
-    bt_remotes_save_profile_menu_cfg(app);
 }
 
 static void ios_ramp_time_changed(VariableItem* item) {
@@ -59,7 +56,6 @@ static void ios_ramp_time_changed(VariableItem* item) {
     FuriString* s = furi_string_alloc_printf("%u", val);
     variable_item_set_current_value_text(item, furi_string_get_cstr(s));
     furi_string_free(s);
-    bt_remotes_save_profile_menu_cfg(app);
 }
 
 static void ios_swipe_distance_changed(VariableItem* item) {
@@ -70,7 +66,6 @@ static void ios_swipe_distance_changed(VariableItem* item) {
     FuriString* s = furi_string_alloc_printf("%u", val);
     variable_item_set_current_value_text(item, furi_string_get_cstr(s));
     furi_string_free(s);
-    bt_remotes_save_profile_menu_cfg(app);
 }
 
 static void ios_swipe_speed_changed(VariableItem* item) {
@@ -81,7 +76,6 @@ static void ios_swipe_speed_changed(VariableItem* item) {
     FuriString* s = furi_string_alloc_printf("%u", val);
     variable_item_set_current_value_text(item, furi_string_get_cstr(s));
     furi_string_free(s);
-    bt_remotes_save_profile_menu_cfg(app);
 }
 
 static void ios_dbl_tap_window_changed(VariableItem* item) {
@@ -92,7 +86,6 @@ static void ios_dbl_tap_window_changed(VariableItem* item) {
     FuriString* s = furi_string_alloc_printf("%u", val);
     variable_item_set_current_value_text(item, furi_string_get_cstr(s));
     furi_string_free(s);
-    bt_remotes_save_profile_menu_cfg(app);
 }
 
 static void ios_dbl_tap_swipe_changed(VariableItem* item) {
@@ -100,7 +93,6 @@ static void ios_dbl_tap_swipe_changed(VariableItem* item) {
     uint8_t idx = variable_item_get_current_value_index(item);
     app->ios_dbl_tap_swipe = idx;
     variable_item_set_current_value_text(item, idx ? "On" : "Off");
-    bt_remotes_save_profile_menu_cfg(app);
 }
 
 static void ios_phone_settings_enter_cb(void* context, uint32_t index) {
@@ -254,6 +246,7 @@ bool bt_remotes_scene_ios_phone_settings_on_event(void* context, SceneManagerEve
 
 void bt_remotes_scene_ios_phone_settings_on_exit(void* context) {
     Hid* app = context;
+    bt_remotes_save_profile_menu_cfg(app);
     scene_manager_set_scene_state(
         app->scene_manager,
         BtRemotesSceneIosPhoneSettings,
