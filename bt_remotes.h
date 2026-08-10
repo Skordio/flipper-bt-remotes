@@ -417,7 +417,6 @@ void bt_remotes_stop_ble(Hid* app);
 void bt_remotes_ducky_browse_enter(Hid* app);
 
 // Config / pairing
-void bt_hid_remove_pairing(Hid* app);
 void bt_remotes_profile_clear_pairing(Hid* app);
 
 // App-level config (default BT name, vibro mode, profile order)

@@ -59,7 +59,8 @@ Momentum firmware tree at `applications_user/bt_remotes/`.
    renaming the active profile's BT name (`scene_rename.c`) and Reset Name to Default
    (`scene_reset_bt_name.c`), so the new name advertises
    immediately. Ducky Scripts / Custom Gestures / pinned launches don't stop BLE either. Use
-   `bt_remotes_profile_clear_pairing` (not `bt_hid_remove_pairing`) whenever BLE is stopped. **Per-profile `delay_connect`:** when set, the Start scene owns BLE — `on_event` starts
+   `bt_remotes_profile_clear_pairing` to wipe bonding data — it only touches the key files, so it's
+   safe whether BLE is running or stopped. **Per-profile `delay_connect`:** when set, the Start scene owns BLE — `on_event` starts
    it on the way into any non-Settings destination, `on_enter` stops it on every return to the menu;
    the Settings-Back / `unpair` / `reset_profile` auto-restarts go through
    `bt_remotes_start_ble_if_immediate` (gated by `!delay_connect`). Defaults off; the `profile_new`

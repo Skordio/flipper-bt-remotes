@@ -33,6 +33,7 @@ static const char* bt_remotes_shortcut_target_name(Hid* app, uint8_t target) {
 }
 
 static bool bt_remotes_shortcut_write(Hid* app, uint8_t target) {
+    storage_simply_mkdir(app->storage, BT_REMOTES_LAUNCHER_DIR);
     FuriString* path = furi_string_alloc_printf(
         "%s/%s", BT_REMOTES_LAUNCHER_DIR, app->active_profile);
     if(target != BT_REMOTES_LAUNCHER_REMOTE_NONE) {

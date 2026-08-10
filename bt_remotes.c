@@ -231,13 +231,6 @@ static void bt_remotes_disconnect_and_settle(Hid* app, bool maybe_connected) {
     if(maybe_connected) furi_delay_ms(200);
 }
 
-void bt_hid_remove_pairing(Hid* app) {
-    bt_remotes_disconnect_and_settle(app, app->connected);
-    furi_hal_bt_stop_advertising();
-    bt_forget_bonded_devices(app->bt);
-    furi_hal_bt_start_advertising();
-}
-
 // Clear pairing keys from disk without touching the BLE stack.
 // Safe to call when BLE is stopped (e.g. from inside the Settings scene).
 // After calling this, the next BLE start will advertise without bonding data
@@ -1705,7 +1698,8 @@ int32_t bt_remotes_app(void* p) {
 
     storage_simply_mkdir(app->storage, BT_REMOTES_PROFILES_DIR);
     storage_simply_mkdir(app->storage, BT_REMOTES_COLLECTION_DIR);
-    storage_simply_mkdir(app->storage, BT_REMOTES_LAUNCHER_DIR);
+    // BT_REMOTES_LAUNCHER_DIR is created lazily by the shortcut writer — most
+    // sessions never create a .btremote shortcut.
 
     // Load app-level config (default BT name for new profiles)
     bt_remotes_load_app_cfg(app);

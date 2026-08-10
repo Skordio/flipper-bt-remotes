@@ -90,7 +90,8 @@ bt_remotes/
 │   │   # Per-remote settings:
 │   ├── bt_remotes_scene_remote_type_settings.c   bt_remotes_scene_remote_settings_help.c
 │   ├── bt_remotes_scene_keynote_settings.c   bt_remotes_scene_media_settings.c
-│   ├── bt_remotes_scene_tiktok_settings.c
+│   ├── bt_remotes_scene_tiktok_settings.c   bt_remotes_scene_ios_phone_settings.c
+│   ├── bt_remotes_scene_ducky_settings.c
 │   │   # Ducky Scripts + Collections:
 │   ├── bt_remotes_scene_custom_actions.c   bt_remotes_scene_custom_actions_run.c
 │   ├── bt_remotes_scene_collection_list.c   bt_remotes_scene_collection_view.c
@@ -104,9 +105,11 @@ bt_remotes/
     ├── hid_remote_menu.c/h    # Reorderable/hideable/pinnable Start-menu view (BtRemotesMenuEntry)
     ├── hid_keyboard.c/h   hid_keynote.c/h   hid_numpad.c/h
     ├── hid_media.c/h   hid_music_macos.c/h   hid_movie.c/h   hid_tiktok.c/h
+    ├── hid_ios_phone.c/h
     ├── hid_mouse.c/h   hid_mouse_clicker.c/h
     ├── hid_mouse_jiggler.c/h   hid_mouse_jiggler_stealth.c/h
-    └── hid_ptt.c/h   hid_ptt_menu.c/h
+    ├── hid_ptt.c/h   hid_ptt_menu.c/h
+    └── hid_draw_shared.h    # shared inline arrow glyphs (hid_draw_arrow_dot/_line)
 ```
 
 (Plus `assets/` — PNG icons for the remote views — and `bt_remotes_10px.png`, the app icon.)
@@ -662,7 +665,7 @@ add the `Hid` field, one table row, and the settings-scene UI row.
 | `bt_remotes_profile_rename(app)` | Renames profile `.cfg`/`.keys`. Old name in `app->pending_name`, new in `app->active_profile`. |
 | `bt_remotes_profile_reset(app)` | New random MAC (name preserved) into `ble_hid_cfg`; persists via `save_profile_menu_cfg`; deletes profile + active key files. |
 | `bt_remotes_profile_delete(app)` | Removes profile `.cfg` and `.keys` (tolerates already-absent). |
-| `bt_remotes_profile_clear_pairing(app)` | Deletes both key files (active + profile) without touching BLE stack. Use instead of `bt_hid_remove_pairing` whenever BLE is stopped. |
+| `bt_remotes_profile_clear_pairing(app)` | Deletes both key files (active + profile) without touching the BLE stack — safe whether BLE is running or stopped. |
 | `bt_remotes_save_profile_menu_cfg(app)` | Writes the full profile `.cfg` (name+mac+menu+per-remote settings). No-op if no active profile. |
 | `bt_remotes_load_app_cfg(app)` | Reads `app.cfg` → `default_ble_name`, `vibro_mode`, `back_hold_exit_s`, `profile_order_str`. Sets defaults if file/keys missing. |
 | `bt_remotes_save_app_cfg(app)` | Writes `default_name`, `vibro_mode`, `back_hold_exit_s`, `profile_order` to `app.cfg`. |
@@ -677,11 +680,11 @@ the BLE spec for static random addresses. Always do this when generating a new M
 
 ## Common Gotchas
 
-### `bt_hid_remove_pairing` requires BLE to be active
-This function calls `furi_hal_bt_start_advertising()`, which is undefined behaviour without an
-active BLE profile. The `unpair` scene `stop_ble`s before it calls into the clear-pairing path, so
-**don't call `bt_hid_remove_pairing` from anywhere that may run with BLE stopped**. Use
-`bt_remotes_profile_clear_pairing` instead, which is safe regardless of BLE state.
+### Clearing pairing must not touch the BLE stack while it is stopped
+`furi_hal_bt_start_advertising()` is undefined behaviour without an active BLE profile, so pairing
+is cleared purely on disk via `bt_remotes_profile_clear_pairing` (deletes the key files). It is
+safe regardless of BLE state — the `unpair` scene `stop_ble`s first, then clears. (An earlier
+`bt_hid_remove_pairing` that cycled advertising was removed for this reason.)
 
 ### `bt_remotes_profile_activate` reloads `ble_hid_cfg` from the profile `.cfg`
 `profile_activate` overwrites the in-memory `app->ble_hid_cfg` (and all per-profile settings) with
