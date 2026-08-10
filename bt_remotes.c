@@ -101,6 +101,88 @@ FuriString* bt_remotes_path(const char* dir, const char* name, const char* ext) 
     return furi_string_alloc_printf("%s/%s%s", dir, name, ext);
 }
 
+// ---------------------------------------------------------------------------
+// Per-profile numeric settings descriptor table
+// ---------------------------------------------------------------------------
+// One row per uint32 key in the profile .cfg; drives both the save loop in
+// bt_remotes_save_profile_menu_cfg and the read/validate loop in
+// bt_remotes_profile_activate. To add a setting: add the Hid field, a row
+// here, and the settings-scene UI — no bespoke read/write code.
+//
+// Validation semantics when the stored value is outside [min, max]:
+//   snap_to_default = true  → use def (enum-style fields, where a foreign
+//                             value is meaningless)
+//   snap_to_default = false → clamp to the nearest bound (range fields; also
+//                             gives 0/1 fields the historical "nonzero → 1")
+// A missing key always loads def. step != 0 additionally snaps the value
+// down to a multiple of step (e.g. the Ducky settle delay's tick math).
+
+typedef enum {
+    BtRemotesSettingU8,
+    BtRemotesSettingU16,
+} BtRemotesSettingType;
+
+typedef struct {
+    const char* key;
+    uint16_t offset; // offsetof(Hid, field)
+    uint8_t type; // BtRemotesSettingType — must match the Hid field's width
+    bool snap_to_default; // see above
+    uint32_t min;
+    uint32_t max;
+    uint32_t def;
+    uint32_t step; // 0 = no step snapping
+} BtRemotesProfileSetting;
+
+#define BT_SETTING_ENUM(field, key, count, def) \
+    {key, offsetof(Hid, field), BtRemotesSettingU8, true, 0, (count)-1, def, 0}
+#define BT_SETTING_BOOL(field, key, def) \
+    {key, offsetof(Hid, field), BtRemotesSettingU8, false, 0, 1, def, 0}
+#define BT_SETTING_RANGE(field, key, type, min, max, def) \
+    {key, offsetof(Hid, field), type, false, min, max, def, 0}
+
+static const BtRemotesProfileSetting bt_remotes_profile_settings[] = {
+    BT_SETTING_ENUM(keynote_back_key, "keynote_back_key", KEYNOTE_BACK_KEY_COUNT, KEYNOTE_BACK_KEY_DEFAULT),
+    BT_SETTING_ENUM(media_mode, "media_mode", MEDIA_MODE_COUNT, MEDIA_MODE_DEFAULT),
+    BT_SETTING_BOOL(media_mouse_switch, "media_mouse_switch", MEDIA_MOUSE_SWITCH_DEFAULT),
+    BT_SETTING_ENUM(tiktok_scroll_mode, "tiktok_scroll_mode", TIKTOK_SCROLL_MODE_COUNT, TIKTOK_SCROLL_MODE_DEFAULT),
+    BT_SETTING_RANGE(tiktok_gesture_inset, "tiktok_gesture_inset", BtRemotesSettingU16, TIKTOK_GESTURE_INSET_MIN, TIKTOK_GESTURE_INSET_MAX, TIKTOK_GESTURE_INSET_DEFAULT),
+    BT_SETTING_RANGE(tiktok_gesture_margin, "tiktok_gesture_margin", BtRemotesSettingU16, TIKTOK_GESTURE_MARGIN_MIN, TIKTOK_GESTURE_MARGIN_MAX, TIKTOK_GESTURE_MARGIN_DEFAULT),
+    BT_SETTING_RANGE(tiktok_gesture_swipe, "tiktok_gesture_swipe", BtRemotesSettingU16, TIKTOK_GESTURE_SWIPE_MIN, TIKTOK_GESTURE_SWIPE_MAX, TIKTOK_GESTURE_SWIPE_DEFAULT),
+    BT_SETTING_ENUM(ios_cursor_mode, "ios_cursor_mode", IOS_CURSOR_MODE_COUNT, IOS_CURSOR_MODE_DEFAULT),
+    BT_SETTING_RANGE(ios_cursor_speed_px_s, "ios_cursor_speed_px_s", BtRemotesSettingU16, IOS_CURSOR_SPEED_MIN, IOS_CURSOR_SPEED_MAX, IOS_CURSOR_SPEED_DEFAULT),
+    BT_SETTING_RANGE(ios_ramp_start_pct, "ios_ramp_start_pct", BtRemotesSettingU8, IOS_RAMP_START_PCT_MIN, IOS_RAMP_START_PCT_MAX, IOS_RAMP_START_PCT_DEFAULT),
+    BT_SETTING_RANGE(ios_ramp_time_ms, "ios_ramp_time_ms", BtRemotesSettingU16, IOS_RAMP_TIME_MIN, IOS_RAMP_TIME_MAX, IOS_RAMP_TIME_DEFAULT),
+    BT_SETTING_RANGE(ios_swipe_distance, "ios_swipe_distance", BtRemotesSettingU16, IOS_SWIPE_DISTANCE_MIN, IOS_SWIPE_DISTANCE_MAX, IOS_SWIPE_DISTANCE_DEFAULT),
+    BT_SETTING_RANGE(ios_swipe_speed_px_s, "ios_swipe_speed_px_s", BtRemotesSettingU16, IOS_SWIPE_SPEED_MIN, IOS_SWIPE_SPEED_MAX, IOS_SWIPE_SPEED_DEFAULT),
+    BT_SETTING_RANGE(ios_dbl_tap_window_ms, "ios_dbl_tap_window_ms", BtRemotesSettingU16, IOS_DBL_TAP_WINDOW_MIN, IOS_DBL_TAP_WINDOW_MAX, IOS_DBL_TAP_WINDOW_DEFAULT),
+    BT_SETTING_BOOL(ios_dbl_tap_swipe, "ios_dbl_tap_swipe", IOS_DBL_TAP_SWIPE_DEFAULT),
+    BT_SETTING_BOOL(delay_connect, "delay_connect", DELAY_CONNECT_DEFAULT),
+    BT_SETTING_BOOL(ducky_connect_per_run, "ducky_connect_per_run", DUCKY_CONNECT_PER_RUN_DEFAULT),
+    // Snapped to a whole step so the run-scene tick math is exact.
+    {"ducky_connect_settle_ms",
+     offsetof(Hid, ducky_connect_settle_ms),
+     BtRemotesSettingU16,
+     false,
+     0,
+     DUCKY_CONNECT_SETTLE_MAX,
+     DUCKY_CONNECT_SETTLE_DEFAULT,
+     DUCKY_CONNECT_SETTLE_STEP},
+};
+
+static uint32_t bt_remotes_setting_get(const Hid* app, const BtRemotesProfileSetting* s) {
+    const uint8_t* p = (const uint8_t*)app + s->offset;
+    return (s->type == BtRemotesSettingU8) ? *p : *(const uint16_t*)p;
+}
+
+static void bt_remotes_setting_set(Hid* app, const BtRemotesProfileSetting* s, uint32_t v) {
+    uint8_t* p = (uint8_t*)app + s->offset;
+    if(s->type == BtRemotesSettingU8) {
+        *p = (uint8_t)v;
+    } else {
+        *(uint16_t*)p = (uint16_t)v;
+    }
+}
+
 // Write the complete profile .cfg (name + mac + menu_order + menu_hidden) for the active profile.
 // The profile .cfg is the single on-disk source of truth for the BLE identity; the in-memory
 // app->ble_hid_cfg must already hold the values being persisted (callers update it first).
@@ -120,42 +202,11 @@ void bt_remotes_save_profile_menu_cfg(Hid* app) {
         flipper_format_write_uint32(fff, "menu_order", order_u32, BT_REMOTES_MENU_ORDER_LEN);
         uint32_t hidden_u32 = app->menu_hidden;
         flipper_format_write_uint32(fff, "menu_hidden", &hidden_u32, 1);
-        uint32_t keynote_back_key_u32 = app->keynote_back_key;
-        flipper_format_write_uint32(fff, "keynote_back_key", &keynote_back_key_u32, 1);
-        uint32_t media_mode_u32 = app->media_mode;
-        flipper_format_write_uint32(fff, "media_mode", &media_mode_u32, 1);
-        uint32_t media_mouse_switch_u32 = app->media_mouse_switch;
-        flipper_format_write_uint32(fff, "media_mouse_switch", &media_mouse_switch_u32, 1);
-        uint32_t tiktok_scroll_mode_u32 = app->tiktok_scroll_mode;
-        flipper_format_write_uint32(fff, "tiktok_scroll_mode", &tiktok_scroll_mode_u32, 1);
-        uint32_t tiktok_gesture_inset_u32 = app->tiktok_gesture_inset;
-        flipper_format_write_uint32(fff, "tiktok_gesture_inset", &tiktok_gesture_inset_u32, 1);
-        uint32_t tiktok_gesture_margin_u32 = app->tiktok_gesture_margin;
-        flipper_format_write_uint32(fff, "tiktok_gesture_margin", &tiktok_gesture_margin_u32, 1);
-        uint32_t tiktok_gesture_swipe_u32 = app->tiktok_gesture_swipe;
-        flipper_format_write_uint32(fff, "tiktok_gesture_swipe", &tiktok_gesture_swipe_u32, 1);
-        uint32_t ios_cursor_mode_u32 = app->ios_cursor_mode;
-        flipper_format_write_uint32(fff, "ios_cursor_mode", &ios_cursor_mode_u32, 1);
-        uint32_t ios_cursor_speed_u32 = app->ios_cursor_speed_px_s;
-        flipper_format_write_uint32(fff, "ios_cursor_speed_px_s", &ios_cursor_speed_u32, 1);
-        uint32_t ios_ramp_start_pct_u32 = app->ios_ramp_start_pct;
-        flipper_format_write_uint32(fff, "ios_ramp_start_pct", &ios_ramp_start_pct_u32, 1);
-        uint32_t ios_ramp_time_ms_u32 = app->ios_ramp_time_ms;
-        flipper_format_write_uint32(fff, "ios_ramp_time_ms", &ios_ramp_time_ms_u32, 1);
-        uint32_t ios_swipe_distance_u32 = app->ios_swipe_distance;
-        flipper_format_write_uint32(fff, "ios_swipe_distance", &ios_swipe_distance_u32, 1);
-        uint32_t ios_swipe_speed_u32 = app->ios_swipe_speed_px_s;
-        flipper_format_write_uint32(fff, "ios_swipe_speed_px_s", &ios_swipe_speed_u32, 1);
-        uint32_t ios_dbl_tap_window_ms_u32 = app->ios_dbl_tap_window_ms;
-        flipper_format_write_uint32(fff, "ios_dbl_tap_window_ms", &ios_dbl_tap_window_ms_u32, 1);
-        uint32_t ios_dbl_tap_swipe_u32 = app->ios_dbl_tap_swipe;
-        flipper_format_write_uint32(fff, "ios_dbl_tap_swipe", &ios_dbl_tap_swipe_u32, 1);
-        uint32_t delay_connect_u32 = app->delay_connect;
-        flipper_format_write_uint32(fff, "delay_connect", &delay_connect_u32, 1);
-        uint32_t ducky_connect_per_run_u32 = app->ducky_connect_per_run;
-        flipper_format_write_uint32(fff, "ducky_connect_per_run", &ducky_connect_per_run_u32, 1);
-        uint32_t ducky_connect_settle_ms_u32 = app->ducky_connect_settle_ms;
-        flipper_format_write_uint32(fff, "ducky_connect_settle_ms", &ducky_connect_settle_ms_u32, 1);
+        for(size_t i = 0; i < COUNT_OF(bt_remotes_profile_settings); i++) {
+            const BtRemotesProfileSetting* s = &bt_remotes_profile_settings[i];
+            uint32_t v = bt_remotes_setting_get(app, s);
+            flipper_format_write_uint32(fff, s->key, &v, 1);
+        }
         flipper_format_file_close(fff);
     }
     flipper_format_free(fff);
@@ -507,190 +558,18 @@ bool bt_remotes_profile_activate(Hid* app) {
                 // and the only item hide_items keeps out of its toggle list).
                 app->menu_hidden &= ~(uint32_t)(1u << BtRemotesStartIndexSettings);
             }
-            flipper_format_rewind(mfff);
-            uint32_t keynote_back_key_u32 = KEYNOTE_BACK_KEY_DEFAULT;
-            if(flipper_format_read_uint32(mfff, "keynote_back_key", &keynote_back_key_u32, 1)) {
-                if(keynote_back_key_u32 >= KEYNOTE_BACK_KEY_COUNT)
-                    keynote_back_key_u32 = KEYNOTE_BACK_KEY_DEFAULT;
-                app->keynote_back_key = (uint8_t)keynote_back_key_u32;
-            } else {
-                app->keynote_back_key = KEYNOTE_BACK_KEY_DEFAULT;
-            }
-            flipper_format_rewind(mfff);
-            uint32_t media_mode_u32 = MEDIA_MODE_DEFAULT;
-            if(flipper_format_read_uint32(mfff, "media_mode", &media_mode_u32, 1)) {
-                if(media_mode_u32 >= MEDIA_MODE_COUNT) media_mode_u32 = MEDIA_MODE_DEFAULT;
-                app->media_mode = (uint8_t)media_mode_u32;
-            } else {
-                app->media_mode = MEDIA_MODE_DEFAULT;
-            }
-            flipper_format_rewind(mfff);
-            uint32_t media_mouse_switch_u32 = MEDIA_MOUSE_SWITCH_DEFAULT;
-            if(flipper_format_read_uint32(mfff, "media_mouse_switch", &media_mouse_switch_u32, 1)) {
-                app->media_mouse_switch = media_mouse_switch_u32 ? 1 : 0;
-            } else {
-                app->media_mouse_switch = MEDIA_MOUSE_SWITCH_DEFAULT;
-            }
-            flipper_format_rewind(mfff);
-            uint32_t tiktok_scroll_mode_u32 = TIKTOK_SCROLL_MODE_DEFAULT;
-            if(flipper_format_read_uint32(mfff, "tiktok_scroll_mode", &tiktok_scroll_mode_u32, 1)) {
-                if(tiktok_scroll_mode_u32 >= TIKTOK_SCROLL_MODE_COUNT)
-                    tiktok_scroll_mode_u32 = TIKTOK_SCROLL_MODE_DEFAULT;
-                app->tiktok_scroll_mode = (uint8_t)tiktok_scroll_mode_u32;
-            } else {
-                app->tiktok_scroll_mode = TIKTOK_SCROLL_MODE_DEFAULT;
-            }
-            flipper_format_rewind(mfff);
-            uint32_t tiktok_gesture_inset_u32 = TIKTOK_GESTURE_INSET_DEFAULT;
-            if(flipper_format_read_uint32(
-                   mfff, "tiktok_gesture_inset", &tiktok_gesture_inset_u32, 1)) {
-                if(tiktok_gesture_inset_u32 < TIKTOK_GESTURE_INSET_MIN)
-                    tiktok_gesture_inset_u32 = TIKTOK_GESTURE_INSET_MIN;
-                if(tiktok_gesture_inset_u32 > TIKTOK_GESTURE_INSET_MAX)
-                    tiktok_gesture_inset_u32 = TIKTOK_GESTURE_INSET_MAX;
-                app->tiktok_gesture_inset = (uint16_t)tiktok_gesture_inset_u32;
-            } else {
-                app->tiktok_gesture_inset = TIKTOK_GESTURE_INSET_DEFAULT;
-            }
-            flipper_format_rewind(mfff);
-            uint32_t tiktok_gesture_margin_u32 = TIKTOK_GESTURE_MARGIN_DEFAULT;
-            if(flipper_format_read_uint32(
-                   mfff, "tiktok_gesture_margin", &tiktok_gesture_margin_u32, 1)) {
-                if(tiktok_gesture_margin_u32 < TIKTOK_GESTURE_MARGIN_MIN)
-                    tiktok_gesture_margin_u32 = TIKTOK_GESTURE_MARGIN_MIN;
-                if(tiktok_gesture_margin_u32 > TIKTOK_GESTURE_MARGIN_MAX)
-                    tiktok_gesture_margin_u32 = TIKTOK_GESTURE_MARGIN_MAX;
-                app->tiktok_gesture_margin = (uint16_t)tiktok_gesture_margin_u32;
-            } else {
-                app->tiktok_gesture_margin = TIKTOK_GESTURE_MARGIN_DEFAULT;
-            }
-            flipper_format_rewind(mfff);
-            uint32_t tiktok_gesture_swipe_u32 = TIKTOK_GESTURE_SWIPE_DEFAULT;
-            if(flipper_format_read_uint32(
-                   mfff, "tiktok_gesture_swipe", &tiktok_gesture_swipe_u32, 1)) {
-                if(tiktok_gesture_swipe_u32 < TIKTOK_GESTURE_SWIPE_MIN)
-                    tiktok_gesture_swipe_u32 = TIKTOK_GESTURE_SWIPE_MIN;
-                if(tiktok_gesture_swipe_u32 > TIKTOK_GESTURE_SWIPE_MAX)
-                    tiktok_gesture_swipe_u32 = TIKTOK_GESTURE_SWIPE_MAX;
-                app->tiktok_gesture_swipe = (uint16_t)tiktok_gesture_swipe_u32;
-            } else {
-                app->tiktok_gesture_swipe = TIKTOK_GESTURE_SWIPE_DEFAULT;
-            }
-            flipper_format_rewind(mfff);
-            uint32_t ios_cursor_mode_u32 = IOS_CURSOR_MODE_DEFAULT;
-            if(flipper_format_read_uint32(mfff, "ios_cursor_mode", &ios_cursor_mode_u32, 1)) {
-                if(ios_cursor_mode_u32 >= IOS_CURSOR_MODE_COUNT)
-                    ios_cursor_mode_u32 = IOS_CURSOR_MODE_DEFAULT;
-                app->ios_cursor_mode = (uint8_t)ios_cursor_mode_u32;
-            } else {
-                app->ios_cursor_mode = IOS_CURSOR_MODE_DEFAULT;
-            }
-            flipper_format_rewind(mfff);
-            uint32_t ios_cursor_speed_u32 = IOS_CURSOR_SPEED_DEFAULT;
-            if(flipper_format_read_uint32(
-                   mfff, "ios_cursor_speed_px_s", &ios_cursor_speed_u32, 1)) {
-                if(ios_cursor_speed_u32 < IOS_CURSOR_SPEED_MIN)
-                    ios_cursor_speed_u32 = IOS_CURSOR_SPEED_MIN;
-                if(ios_cursor_speed_u32 > IOS_CURSOR_SPEED_MAX)
-                    ios_cursor_speed_u32 = IOS_CURSOR_SPEED_MAX;
-                app->ios_cursor_speed_px_s = (uint16_t)ios_cursor_speed_u32;
-            } else {
-                app->ios_cursor_speed_px_s = IOS_CURSOR_SPEED_DEFAULT;
-            }
-            flipper_format_rewind(mfff);
-            uint32_t ios_ramp_start_pct_u32 = IOS_RAMP_START_PCT_DEFAULT;
-            if(flipper_format_read_uint32(
-                   mfff, "ios_ramp_start_pct", &ios_ramp_start_pct_u32, 1)) {
-                if(ios_ramp_start_pct_u32 < IOS_RAMP_START_PCT_MIN)
-                    ios_ramp_start_pct_u32 = IOS_RAMP_START_PCT_MIN;
-                if(ios_ramp_start_pct_u32 > IOS_RAMP_START_PCT_MAX)
-                    ios_ramp_start_pct_u32 = IOS_RAMP_START_PCT_MAX;
-                app->ios_ramp_start_pct = (uint8_t)ios_ramp_start_pct_u32;
-            } else {
-                app->ios_ramp_start_pct = IOS_RAMP_START_PCT_DEFAULT;
-            }
-            flipper_format_rewind(mfff);
-            uint32_t ios_ramp_time_ms_u32 = IOS_RAMP_TIME_DEFAULT;
-            if(flipper_format_read_uint32(mfff, "ios_ramp_time_ms", &ios_ramp_time_ms_u32, 1)) {
-                if(ios_ramp_time_ms_u32 < IOS_RAMP_TIME_MIN)
-                    ios_ramp_time_ms_u32 = IOS_RAMP_TIME_MIN;
-                if(ios_ramp_time_ms_u32 > IOS_RAMP_TIME_MAX)
-                    ios_ramp_time_ms_u32 = IOS_RAMP_TIME_MAX;
-                app->ios_ramp_time_ms = (uint16_t)ios_ramp_time_ms_u32;
-            } else {
-                app->ios_ramp_time_ms = IOS_RAMP_TIME_DEFAULT;
-            }
-            flipper_format_rewind(mfff);
-            uint32_t ios_swipe_distance_u32 = IOS_SWIPE_DISTANCE_DEFAULT;
-            if(flipper_format_read_uint32(
-                   mfff, "ios_swipe_distance", &ios_swipe_distance_u32, 1)) {
-                if(ios_swipe_distance_u32 < IOS_SWIPE_DISTANCE_MIN)
-                    ios_swipe_distance_u32 = IOS_SWIPE_DISTANCE_MIN;
-                if(ios_swipe_distance_u32 > IOS_SWIPE_DISTANCE_MAX)
-                    ios_swipe_distance_u32 = IOS_SWIPE_DISTANCE_MAX;
-                app->ios_swipe_distance = (uint16_t)ios_swipe_distance_u32;
-            } else {
-                app->ios_swipe_distance = IOS_SWIPE_DISTANCE_DEFAULT;
-            }
-            flipper_format_rewind(mfff);
-            uint32_t ios_swipe_speed_u32 = IOS_SWIPE_SPEED_DEFAULT;
-            if(flipper_format_read_uint32(
-                   mfff, "ios_swipe_speed_px_s", &ios_swipe_speed_u32, 1)) {
-                if(ios_swipe_speed_u32 < IOS_SWIPE_SPEED_MIN)
-                    ios_swipe_speed_u32 = IOS_SWIPE_SPEED_MIN;
-                if(ios_swipe_speed_u32 > IOS_SWIPE_SPEED_MAX)
-                    ios_swipe_speed_u32 = IOS_SWIPE_SPEED_MAX;
-                app->ios_swipe_speed_px_s = (uint16_t)ios_swipe_speed_u32;
-            } else {
-                app->ios_swipe_speed_px_s = IOS_SWIPE_SPEED_DEFAULT;
-            }
-            flipper_format_rewind(mfff);
-            uint32_t ios_dbl_tap_window_ms_u32 = IOS_DBL_TAP_WINDOW_DEFAULT;
-            if(flipper_format_read_uint32(
-                   mfff, "ios_dbl_tap_window_ms", &ios_dbl_tap_window_ms_u32, 1)) {
-                if(ios_dbl_tap_window_ms_u32 < IOS_DBL_TAP_WINDOW_MIN)
-                    ios_dbl_tap_window_ms_u32 = IOS_DBL_TAP_WINDOW_MIN;
-                if(ios_dbl_tap_window_ms_u32 > IOS_DBL_TAP_WINDOW_MAX)
-                    ios_dbl_tap_window_ms_u32 = IOS_DBL_TAP_WINDOW_MAX;
-                app->ios_dbl_tap_window_ms = (uint16_t)ios_dbl_tap_window_ms_u32;
-            } else {
-                app->ios_dbl_tap_window_ms = IOS_DBL_TAP_WINDOW_DEFAULT;
-            }
-            flipper_format_rewind(mfff);
-            uint32_t ios_dbl_tap_swipe_u32 = IOS_DBL_TAP_SWIPE_DEFAULT;
-            if(flipper_format_read_uint32(mfff, "ios_dbl_tap_swipe", &ios_dbl_tap_swipe_u32, 1)) {
-                app->ios_dbl_tap_swipe = ios_dbl_tap_swipe_u32 ? 1 : 0;
-            } else {
-                app->ios_dbl_tap_swipe = IOS_DBL_TAP_SWIPE_DEFAULT;
-            }
-            // The three fields below appear consecutively at the end of the save
-            // order, so we need only one rewind to reset past the prior reads.
-            flipper_format_rewind(mfff);
-            uint32_t delay_connect_u32 = DELAY_CONNECT_DEFAULT;
-            if(flipper_format_read_uint32(mfff, "delay_connect", &delay_connect_u32, 1)) {
-                app->delay_connect = delay_connect_u32 ? 1 : 0;
-            } else {
-                app->delay_connect = DELAY_CONNECT_DEFAULT;
-            }
-            uint32_t ducky_connect_per_run_u32 = DUCKY_CONNECT_PER_RUN_DEFAULT;
-            if(flipper_format_read_uint32(
-                   mfff, "ducky_connect_per_run", &ducky_connect_per_run_u32, 1)) {
-                app->ducky_connect_per_run = ducky_connect_per_run_u32 ? 1 : 0;
-            } else {
-                app->ducky_connect_per_run = DUCKY_CONNECT_PER_RUN_DEFAULT;
-            }
-            uint32_t ducky_connect_settle_ms_u32 = DUCKY_CONNECT_SETTLE_DEFAULT;
-            if(flipper_format_read_uint32(
-                   mfff, "ducky_connect_settle_ms", &ducky_connect_settle_ms_u32, 1)) {
-                if(ducky_connect_settle_ms_u32 > DUCKY_CONNECT_SETTLE_MAX)
-                    ducky_connect_settle_ms_u32 = DUCKY_CONNECT_SETTLE_MAX;
-                // Snap to a whole step so the run-scene tick math is exact.
-                ducky_connect_settle_ms_u32 =
-                    (ducky_connect_settle_ms_u32 / DUCKY_CONNECT_SETTLE_STEP) *
-                    DUCKY_CONNECT_SETTLE_STEP;
-                app->ducky_connect_settle_ms = (uint16_t)ducky_connect_settle_ms_u32;
-            } else {
-                app->ducky_connect_settle_ms = DUCKY_CONNECT_SETTLE_DEFAULT;
+            // Numeric per-remote settings: driven by the descriptor table.
+            for(size_t i = 0; i < COUNT_OF(bt_remotes_profile_settings); i++) {
+                const BtRemotesProfileSetting* s = &bt_remotes_profile_settings[i];
+                flipper_format_rewind(mfff);
+                uint32_t v = s->def;
+                if(flipper_format_read_uint32(mfff, s->key, &v, 1)) {
+                    if(v < s->min || v > s->max) {
+                        v = s->snap_to_default ? s->def : (v < s->min ? s->min : s->max);
+                    }
+                    if(s->step) v = (v / s->step) * s->step;
+                }
+                bt_remotes_setting_set(app, s, v);
             }
         } while(0);
         furi_string_free(mtmp);

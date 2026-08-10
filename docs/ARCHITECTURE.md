@@ -603,7 +603,7 @@ error). The worker thread uses a 4 KB stack to accommodate the recursion. File f
 
 ## Per-Remote Settings (per profile)
 
-Reached from **Profile Settings → Per-Remote Settings** (`remote_type_settings` hub). Four
+Reached from **Profile Settings → Per-Remote Settings** (`remote_type_settings` hub). Five
 sub-scenes, each a `VariableItemList`, all persisted in the profile `.cfg`:
 
 - `keynote_settings` — `keynote_back_key` (`KeynoteBackKey`: Delete/Left/Escape/None).
@@ -614,12 +614,21 @@ sub-scenes, each a `VariableItemList`, all persisted in the profile `.cfg`:
   The three tunables are only meaningful in Gesture mode and are **hidden** in Wheel mode — the
   Scroll Mode change callback posts a rebuild event back to the scene so the list can safely
   `variable_item_list_reset` outside the callback that's processing the change.
+- `ios_phone_settings` — `ios_cursor_mode` (Constant/Ramp) + cursor/ramp/swipe/double-tap
+  tunables (`ios_cursor_speed_px_s`, `ios_ramp_start_pct`, `ios_ramp_time_ms`,
+  `ios_swipe_distance`, `ios_swipe_speed_px_s`, `ios_dbl_tap_window_ms`, `ios_dbl_tap_swipe`).
 - `ducky_settings` — `ducky_connect_per_run` toggle + `ducky_connect_settle_ms` slider.
 
 `remote_settings_help` is a shared help scene; the launching settings scene stores the
 `RemoteSettingsHelpTopic` as its scene state before pushing it. These values are read back in
 `bt_remotes_profile_activate` and applied when launching the relevant remote view in
 `start_on_event` (e.g. `hid_media_set_mode`, `hid_tiktok_set_mode`).
+
+**Persistence is table-driven**: every numeric per-remote setting is one row in
+`bt_remotes_profile_settings[]` (`bt_remotes.c`) — `{key, offsetof(Hid, field), width,
+validation, min, max, default, step}` — which drives both the save loop in
+`save_profile_menu_cfg` and the read/validate loop in `profile_activate`. To add a setting:
+add the `Hid` field, one table row, and the settings-scene UI row.
 
 ---
 
