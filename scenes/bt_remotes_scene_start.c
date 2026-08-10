@@ -249,12 +249,8 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
 
             switch(event.event) {
             case BtRemotesStartIndexKeynote:
-                view_id = HidViewKeynote;
-                hid_keynote_set_orientation(app->hid_keynote, false);
-                break;
             case BtRemotesStartIndexKeynoteVertical:
                 view_id = HidViewKeynote;
-                hid_keynote_set_orientation(app->hid_keynote, true);
                 break;
             case BtRemotesStartIndexKeyboard:
                 view_id = HidViewKeyboard;
@@ -264,10 +260,6 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
                 break;
             case BtRemotesStartIndexMedia:
                 view_id = HidViewMedia;
-                hid_media_set_mode(
-                    app->hid_media,
-                    app->media_mode == MediaModeImproved,
-                    app->media_mouse_switch);
                 break;
             case BtRemotesStartIndexMusicMacOs:
                 view_id = HidViewMusicMacOs;
@@ -277,14 +269,9 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
                 break;
             case BtRemotesStartIndexTikTok:
                 view_id = BtHidViewTikTok;
-                hid_tiktok_set_mode(
-                    app->hid_tiktok, app->tiktok_scroll_mode == TikTokScrollGesture);
                 break;
             case BtRemotesStartIndexMouse:
                 view_id = HidViewMouse;
-                // Standalone Mouse remote: short Back = right-click (reset the shared
-                // instance in case the Media remote left it in return-to-Media mode)
-                hid_mouse_set_back_to_view(app->hid_mouse, false, 0);
                 break;
             case BtRemotesStartIndexMouseClicker:
                 view_id = HidViewMouseClicker;
@@ -303,6 +290,36 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
                 break;
             default:
                 furi_crash();
+            }
+
+            // First visit this session: build the target view now — the
+            // per-remote configuration below needs it to exist.
+            bt_remotes_view_ensure(app, view_id);
+
+            switch(event.event) {
+            case BtRemotesStartIndexKeynote:
+                hid_keynote_set_orientation(app->hid_keynote, false);
+                break;
+            case BtRemotesStartIndexKeynoteVertical:
+                hid_keynote_set_orientation(app->hid_keynote, true);
+                break;
+            case BtRemotesStartIndexMedia:
+                hid_media_set_mode(
+                    app->hid_media,
+                    app->media_mode == MediaModeImproved,
+                    app->media_mouse_switch);
+                break;
+            case BtRemotesStartIndexTikTok:
+                hid_tiktok_set_mode(
+                    app->hid_tiktok, app->tiktok_scroll_mode == TikTokScrollGesture);
+                break;
+            case BtRemotesStartIndexMouse:
+                // Standalone Mouse remote: short Back = right-click (reset the shared
+                // instance in case the Media remote left it in return-to-Media mode)
+                hid_mouse_set_back_to_view(app->hid_mouse, false, 0);
+                break;
+            default:
+                break;
             }
 
             scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneMain, view_id);

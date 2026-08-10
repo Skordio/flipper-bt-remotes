@@ -631,10 +631,13 @@ sub-scenes, each a `VariableItemList`, all persisted in the profile `.cfg`:
    `BtRemotesSceneMyScene` and the handler-table entries are generated from this macro.
 3. Wire navigation from an existing scene using `scene_manager_next_scene` or
    `scene_manager_search_and_switch_to_previous_scene`.
-4. If the scene needs a new view, add the view ID to `views.h`, allocate the view in
-   `bt_remotes_alloc`, and free it in `bt_remotes_free`. Many scenes instead reuse the shared
-   modules already allocated (`submenu`, `var_item_list`, `dialog`, `text_input`, `popup`,
-   `help_widget`, `file_browser`).
+4. If the scene needs a new view, add the view ID to `views.h`, add a lazy-alloc case for it in
+   `bt_remotes_view_ensure` (called before first navigation), and a guarded teardown in
+   `bt_remotes_free`. Remote views and the FileBrowser are built on first use, not at startup;
+   only the Start menu (`hid_remote_menu`) and the shared GUI modules (`submenu`,
+   `var_item_list`, `dialog`, `text_input`, `popup`, `help_widget`) are allocated eagerly in
+   `bt_remotes_alloc`. Anything that touches a lazily-built view outside its own scene (e.g. the
+   BT status fanout) must NULL-check the pointer.
 
 ---
 

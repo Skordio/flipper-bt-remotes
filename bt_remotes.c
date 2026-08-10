@@ -1301,19 +1301,25 @@ static void bt_remotes_connection_status_changed_callback(BtStatus status, void*
         view_dispatcher_send_custom_event(hid->view_dispatcher, BT_REMOTES_EVENT_CONNECT_TICK);
     }
 
-    hid_keynote_set_connected_status(hid->hid_keynote, connected);
-    hid_keyboard_set_connected_status(hid->hid_keyboard, connected);
-    hid_numpad_set_connected_status(hid->hid_numpad, connected);
-    hid_media_set_connected_status(hid->hid_media, connected);
-    hid_music_macos_set_connected_status(hid->hid_music_macos, connected);
-    hid_movie_set_connected_status(hid->hid_movie, connected);
-    hid_mouse_set_connected_status(hid->hid_mouse, connected);
-    hid_mouse_clicker_set_connected_status(hid->hid_mouse_clicker, connected);
-    hid_mouse_jiggler_set_connected_status(hid->hid_mouse_jiggler, connected);
-    hid_mouse_jiggler_stealth_set_connected_status(hid->hid_mouse_jiggler_stealth, connected);
-    hid_ptt_set_connected_status(hid->hid_ptt, connected);
-    hid_tiktok_set_connected_status(hid->hid_tiktok, connected);
-    hid_ios_phone_set_connected_status(hid->hid_ios_phone, connected);
+    // Views are lazily allocated (bt_remotes_view_ensure) — skip the ones that
+    // haven't been built yet. Built views are never freed while BLE can run, so
+    // a non-NULL pointer here is always valid.
+    if(hid->hid_keynote) hid_keynote_set_connected_status(hid->hid_keynote, connected);
+    if(hid->hid_keyboard) hid_keyboard_set_connected_status(hid->hid_keyboard, connected);
+    if(hid->hid_numpad) hid_numpad_set_connected_status(hid->hid_numpad, connected);
+    if(hid->hid_media) hid_media_set_connected_status(hid->hid_media, connected);
+    if(hid->hid_music_macos) hid_music_macos_set_connected_status(hid->hid_music_macos, connected);
+    if(hid->hid_movie) hid_movie_set_connected_status(hid->hid_movie, connected);
+    if(hid->hid_mouse) hid_mouse_set_connected_status(hid->hid_mouse, connected);
+    if(hid->hid_mouse_clicker)
+        hid_mouse_clicker_set_connected_status(hid->hid_mouse_clicker, connected);
+    if(hid->hid_mouse_jiggler)
+        hid_mouse_jiggler_set_connected_status(hid->hid_mouse_jiggler, connected);
+    if(hid->hid_mouse_jiggler_stealth)
+        hid_mouse_jiggler_stealth_set_connected_status(hid->hid_mouse_jiggler_stealth, connected);
+    if(hid->hid_ptt) hid_ptt_set_connected_status(hid->hid_ptt, connected);
+    if(hid->hid_tiktok) hid_tiktok_set_connected_status(hid->hid_tiktok, connected);
+    if(hid->hid_ios_phone) hid_ios_phone_set_connected_status(hid->hid_ios_phone, connected);
 }
 
 // ---------------------------------------------------------------------------
@@ -1362,6 +1368,144 @@ static bool bt_remotes_back_event_callback(void* context) {
 static uint32_t hid_ptt_menu_view(void* context) {
     UNUSED(context);
     return HidViewPushToTalkMenu;
+}
+
+// Lazily build a remote view (plus the FileBrowser) the first time it is
+// navigated to, instead of allocating all of them up front in bt_remotes_alloc.
+// A typical session visits one or two remotes, so this keeps most view models,
+// icons and menu strings off the heap entirely. Views live until app teardown
+// once built (freeing mid-run would race the BT status fanout, which reads the
+// pointers from the BT service thread). Idempotent; unknown/always-allocated
+// view ids are a no-op.
+void bt_remotes_view_ensure(Hid* app, uint32_t view_id) {
+    switch(view_id) {
+    case HidViewKeynote:
+        if(!app->hid_keynote) {
+            app->hid_keynote = hid_keynote_alloc(app);
+            view_dispatcher_add_view(
+                app->view_dispatcher, HidViewKeynote, hid_keynote_get_view(app->hid_keynote));
+        }
+        break;
+    case HidViewKeyboard:
+        if(!app->hid_keyboard) {
+            app->hid_keyboard = hid_keyboard_alloc(app);
+            view_dispatcher_add_view(
+                app->view_dispatcher, HidViewKeyboard, hid_keyboard_get_view(app->hid_keyboard));
+        }
+        break;
+    case HidViewNumpad:
+        if(!app->hid_numpad) {
+            app->hid_numpad = hid_numpad_alloc(app);
+            view_dispatcher_add_view(
+                app->view_dispatcher, HidViewNumpad, hid_numpad_get_view(app->hid_numpad));
+        }
+        break;
+    case HidViewMedia:
+        if(!app->hid_media) {
+            app->hid_media = hid_media_alloc(app);
+            view_dispatcher_add_view(
+                app->view_dispatcher, HidViewMedia, hid_media_get_view(app->hid_media));
+        }
+        // The Media remote's mouse-switcher jumps straight into the Mouse view
+        // from its own input callback, bypassing the Start-scene routing.
+        bt_remotes_view_ensure(app, HidViewMouse);
+        break;
+    case HidViewMusicMacOs:
+        if(!app->hid_music_macos) {
+            app->hid_music_macos = hid_music_macos_alloc(app);
+            view_dispatcher_add_view(
+                app->view_dispatcher,
+                HidViewMusicMacOs,
+                hid_music_macos_get_view(app->hid_music_macos));
+        }
+        break;
+    case HidViewMovie:
+        if(!app->hid_movie) {
+            app->hid_movie = hid_movie_alloc(app);
+            view_dispatcher_add_view(
+                app->view_dispatcher, HidViewMovie, hid_movie_get_view(app->hid_movie));
+        }
+        break;
+    case BtHidViewTikTok:
+        if(!app->hid_tiktok) {
+            app->hid_tiktok = hid_tiktok_alloc(app);
+            view_dispatcher_add_view(
+                app->view_dispatcher, BtHidViewTikTok, hid_tiktok_get_view(app->hid_tiktok));
+        }
+        break;
+    case HidViewIosPhone:
+        if(!app->hid_ios_phone) {
+            app->hid_ios_phone = hid_ios_phone_alloc(app);
+            view_dispatcher_add_view(
+                app->view_dispatcher,
+                HidViewIosPhone,
+                hid_ios_phone_get_view(app->hid_ios_phone));
+        }
+        break;
+    case HidViewMouse:
+        if(!app->hid_mouse) {
+            app->hid_mouse = hid_mouse_alloc(app);
+            view_dispatcher_add_view(
+                app->view_dispatcher, HidViewMouse, hid_mouse_get_view(app->hid_mouse));
+        }
+        break;
+    case HidViewMouseClicker:
+        if(!app->hid_mouse_clicker) {
+            app->hid_mouse_clicker = hid_mouse_clicker_alloc(app);
+            view_dispatcher_add_view(
+                app->view_dispatcher,
+                HidViewMouseClicker,
+                hid_mouse_clicker_get_view(app->hid_mouse_clicker));
+        }
+        break;
+    case HidViewMouseJiggler:
+        if(!app->hid_mouse_jiggler) {
+            app->hid_mouse_jiggler = hid_mouse_jiggler_alloc(app);
+            view_dispatcher_add_view(
+                app->view_dispatcher,
+                HidViewMouseJiggler,
+                hid_mouse_jiggler_get_view(app->hid_mouse_jiggler));
+        }
+        break;
+    case HidViewMouseJigglerStealth:
+        if(!app->hid_mouse_jiggler_stealth) {
+            app->hid_mouse_jiggler_stealth = hid_mouse_jiggler_stealth_alloc(app);
+            view_dispatcher_add_view(
+                app->view_dispatcher,
+                HidViewMouseJigglerStealth,
+                hid_mouse_jiggler_stealth_get_view(app->hid_mouse_jiggler_stealth));
+        }
+        break;
+    case HidViewPushToTalkMenu:
+    case HidViewPushToTalk:
+        // The PTT pair is built together: hid_ptt_alloc registers its OS/app
+        // entries into the menu, and the menu's callbacks call back into hid_ptt.
+        if(!app->hid_ptt_menu) {
+            app->hid_ptt_menu = hid_ptt_menu_alloc(app);
+            view_dispatcher_add_view(
+                app->view_dispatcher,
+                HidViewPushToTalkMenu,
+                hid_ptt_menu_get_view(app->hid_ptt_menu));
+        }
+        if(!app->hid_ptt) {
+            app->hid_ptt = hid_ptt_alloc(app);
+            view_set_previous_callback(hid_ptt_get_view(app->hid_ptt), hid_ptt_menu_view);
+            view_dispatcher_add_view(
+                app->view_dispatcher, HidViewPushToTalk, hid_ptt_get_view(app->hid_ptt));
+        }
+        break;
+    case HidViewFileBrowser:
+        if(!app->file_browser) {
+            app->file_browser = file_browser_alloc(app->file_browser_result);
+            view_dispatcher_add_view(
+                app->view_dispatcher,
+                HidViewFileBrowser,
+                file_browser_get_view(app->file_browser));
+        }
+        break;
+    default:
+        break;
+    }
 }
 
 static Hid* bt_remotes_alloc(void) {
@@ -1413,84 +1557,18 @@ static Hid* bt_remotes_alloc(void) {
     view_dispatcher_add_view(
         app->view_dispatcher, HidViewHelp, widget_get_view(app->help_widget));
 
-    app->hid_keynote = hid_keynote_alloc(app);
-    view_dispatcher_add_view(
-        app->view_dispatcher, HidViewKeynote, hid_keynote_get_view(app->hid_keynote));
-
-    app->hid_keyboard = hid_keyboard_alloc(app);
-    view_dispatcher_add_view(
-        app->view_dispatcher, HidViewKeyboard, hid_keyboard_get_view(app->hid_keyboard));
-
-    app->hid_numpad = hid_numpad_alloc(app);
-    view_dispatcher_add_view(
-        app->view_dispatcher, HidViewNumpad, hid_numpad_get_view(app->hid_numpad));
-
-    app->hid_media = hid_media_alloc(app);
-    view_dispatcher_add_view(
-        app->view_dispatcher, HidViewMedia, hid_media_get_view(app->hid_media));
-
-    app->hid_music_macos = hid_music_macos_alloc(app);
-    view_dispatcher_add_view(
-        app->view_dispatcher,
-        HidViewMusicMacOs,
-        hid_music_macos_get_view(app->hid_music_macos));
-
-    app->hid_movie = hid_movie_alloc(app);
-    view_dispatcher_add_view(
-        app->view_dispatcher, HidViewMovie, hid_movie_get_view(app->hid_movie));
-
-    app->hid_tiktok = hid_tiktok_alloc(app);
-    view_dispatcher_add_view(
-        app->view_dispatcher, BtHidViewTikTok, hid_tiktok_get_view(app->hid_tiktok));
-
-    app->hid_ios_phone = hid_ios_phone_alloc(app);
-    view_dispatcher_add_view(
-        app->view_dispatcher, HidViewIosPhone, hid_ios_phone_get_view(app->hid_ios_phone));
-
-    app->hid_mouse = hid_mouse_alloc(app);
-    view_dispatcher_add_view(
-        app->view_dispatcher, HidViewMouse, hid_mouse_get_view(app->hid_mouse));
-
-    app->hid_mouse_clicker = hid_mouse_clicker_alloc(app);
-    view_dispatcher_add_view(
-        app->view_dispatcher,
-        HidViewMouseClicker,
-        hid_mouse_clicker_get_view(app->hid_mouse_clicker));
-
-    app->hid_mouse_jiggler = hid_mouse_jiggler_alloc(app);
-    view_dispatcher_add_view(
-        app->view_dispatcher,
-        HidViewMouseJiggler,
-        hid_mouse_jiggler_get_view(app->hid_mouse_jiggler));
-
-    app->hid_mouse_jiggler_stealth = hid_mouse_jiggler_stealth_alloc(app);
-    view_dispatcher_add_view(
-        app->view_dispatcher,
-        HidViewMouseJigglerStealth,
-        hid_mouse_jiggler_stealth_get_view(app->hid_mouse_jiggler_stealth));
-
-    app->hid_ptt_menu = hid_ptt_menu_alloc(app);
-    view_dispatcher_add_view(
-        app->view_dispatcher,
-        HidViewPushToTalkMenu,
-        hid_ptt_menu_get_view(app->hid_ptt_menu));
-    app->hid_ptt = hid_ptt_alloc(app);
-    view_set_previous_callback(hid_ptt_get_view(app->hid_ptt), hid_ptt_menu_view);
-    view_dispatcher_add_view(
-        app->view_dispatcher, HidViewPushToTalk, hid_ptt_get_view(app->hid_ptt));
-
+    // The Start-menu view is the first thing shown and always needed.
+    // The remote views + FileBrowser are built lazily by bt_remotes_view_ensure
+    // on first navigation; their Hid pointers stay NULL until then.
     app->hid_remote_menu = hid_remote_menu_alloc();
     view_dispatcher_add_view(
         app->view_dispatcher,
         HidViewRemoteMenu,
         hid_remote_menu_get_view(app->hid_remote_menu));
 
+    // Kept eagerly allocated: scenes read the result string after the browser
+    // closes, independent of whether the browser view was ever built.
     app->file_browser_result = furi_string_alloc();
-    app->file_browser        = file_browser_alloc(app->file_browser_result);
-    view_dispatcher_add_view(
-        app->view_dispatcher,
-        HidViewFileBrowser,
-        file_browser_get_view(app->file_browser));
 
     app->ducky_runner = ducky_runner_alloc();
     app->gesture_runner = gesture_runner_alloc();
@@ -1538,38 +1616,70 @@ static void bt_remotes_free(Hid* app) {
     popup_free(app->popup);
     view_dispatcher_remove_view(app->view_dispatcher, HidViewHelp);
     widget_free(app->help_widget);
-    view_dispatcher_remove_view(app->view_dispatcher, HidViewKeynote);
-    hid_keynote_free(app->hid_keynote);
-    view_dispatcher_remove_view(app->view_dispatcher, HidViewKeyboard);
-    hid_keyboard_free(app->hid_keyboard);
-    view_dispatcher_remove_view(app->view_dispatcher, HidViewNumpad);
-    hid_numpad_free(app->hid_numpad);
-    view_dispatcher_remove_view(app->view_dispatcher, HidViewMedia);
-    hid_media_free(app->hid_media);
-    view_dispatcher_remove_view(app->view_dispatcher, HidViewMusicMacOs);
-    hid_music_macos_free(app->hid_music_macos);
-    view_dispatcher_remove_view(app->view_dispatcher, HidViewMovie);
-    hid_movie_free(app->hid_movie);
-    view_dispatcher_remove_view(app->view_dispatcher, HidViewMouse);
-    hid_mouse_free(app->hid_mouse);
-    view_dispatcher_remove_view(app->view_dispatcher, HidViewMouseClicker);
-    hid_mouse_clicker_free(app->hid_mouse_clicker);
-    view_dispatcher_remove_view(app->view_dispatcher, HidViewMouseJiggler);
-    hid_mouse_jiggler_free(app->hid_mouse_jiggler);
-    view_dispatcher_remove_view(app->view_dispatcher, HidViewMouseJigglerStealth);
-    hid_mouse_jiggler_stealth_free(app->hid_mouse_jiggler_stealth);
-    view_dispatcher_remove_view(app->view_dispatcher, HidViewPushToTalkMenu);
-    hid_ptt_menu_free(app->hid_ptt_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, HidViewPushToTalk);
-    hid_ptt_free(app->hid_ptt);
+    // Lazily-built views (bt_remotes_view_ensure) — only tear down the ones
+    // that were actually navigated to this session.
+    if(app->hid_keynote) {
+        view_dispatcher_remove_view(app->view_dispatcher, HidViewKeynote);
+        hid_keynote_free(app->hid_keynote);
+    }
+    if(app->hid_keyboard) {
+        view_dispatcher_remove_view(app->view_dispatcher, HidViewKeyboard);
+        hid_keyboard_free(app->hid_keyboard);
+    }
+    if(app->hid_numpad) {
+        view_dispatcher_remove_view(app->view_dispatcher, HidViewNumpad);
+        hid_numpad_free(app->hid_numpad);
+    }
+    if(app->hid_media) {
+        view_dispatcher_remove_view(app->view_dispatcher, HidViewMedia);
+        hid_media_free(app->hid_media);
+    }
+    if(app->hid_music_macos) {
+        view_dispatcher_remove_view(app->view_dispatcher, HidViewMusicMacOs);
+        hid_music_macos_free(app->hid_music_macos);
+    }
+    if(app->hid_movie) {
+        view_dispatcher_remove_view(app->view_dispatcher, HidViewMovie);
+        hid_movie_free(app->hid_movie);
+    }
+    if(app->hid_mouse) {
+        view_dispatcher_remove_view(app->view_dispatcher, HidViewMouse);
+        hid_mouse_free(app->hid_mouse);
+    }
+    if(app->hid_mouse_clicker) {
+        view_dispatcher_remove_view(app->view_dispatcher, HidViewMouseClicker);
+        hid_mouse_clicker_free(app->hid_mouse_clicker);
+    }
+    if(app->hid_mouse_jiggler) {
+        view_dispatcher_remove_view(app->view_dispatcher, HidViewMouseJiggler);
+        hid_mouse_jiggler_free(app->hid_mouse_jiggler);
+    }
+    if(app->hid_mouse_jiggler_stealth) {
+        view_dispatcher_remove_view(app->view_dispatcher, HidViewMouseJigglerStealth);
+        hid_mouse_jiggler_stealth_free(app->hid_mouse_jiggler_stealth);
+    }
+    if(app->hid_ptt_menu) {
+        view_dispatcher_remove_view(app->view_dispatcher, HidViewPushToTalkMenu);
+        hid_ptt_menu_free(app->hid_ptt_menu);
+    }
+    if(app->hid_ptt) {
+        view_dispatcher_remove_view(app->view_dispatcher, HidViewPushToTalk);
+        hid_ptt_free(app->hid_ptt);
+    }
     view_dispatcher_remove_view(app->view_dispatcher, HidViewRemoteMenu);
     hid_remote_menu_free(app->hid_remote_menu);
-    view_dispatcher_remove_view(app->view_dispatcher, BtHidViewTikTok);
-    hid_tiktok_free(app->hid_tiktok);
-    view_dispatcher_remove_view(app->view_dispatcher, HidViewIosPhone);
-    hid_ios_phone_free(app->hid_ios_phone);
-    view_dispatcher_remove_view(app->view_dispatcher, HidViewFileBrowser);
-    file_browser_free(app->file_browser);
+    if(app->hid_tiktok) {
+        view_dispatcher_remove_view(app->view_dispatcher, BtHidViewTikTok);
+        hid_tiktok_free(app->hid_tiktok);
+    }
+    if(app->hid_ios_phone) {
+        view_dispatcher_remove_view(app->view_dispatcher, HidViewIosPhone);
+        hid_ios_phone_free(app->hid_ios_phone);
+    }
+    if(app->file_browser) {
+        view_dispatcher_remove_view(app->view_dispatcher, HidViewFileBrowser);
+        file_browser_free(app->file_browser);
+    }
     furi_string_free(app->file_browser_result);
     ducky_runner_free(app->ducky_runner);
     gesture_runner_free(app->gesture_runner);

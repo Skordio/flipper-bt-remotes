@@ -164,6 +164,7 @@ bool bt_remotes_scene_collection_edit_on_event(void* context, SceneManagerEvent 
         if(event.event == CE_IDX_ADD) {
             scene_manager_set_scene_state(
                 app->scene_manager, BtRemotesSceneCollectionEdit, CE_STATE_BROWSER);
+            bt_remotes_view_ensure(app, HidViewFileBrowser);
             file_browser_configure(
                 app->file_browser, ".txt", DUCKY_SCRIPT_DIR, true, true, NULL, true);
             file_browser_set_callback(app->file_browser, collection_edit_browser_cb, app);

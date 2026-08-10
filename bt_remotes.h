@@ -401,6 +401,11 @@ bool bt_remotes_validate_name(const char* text, FuriString* error);
 const char* bt_remotes_path_basename(const char* path);
 void        bt_remotes_show_running_popup(Hid* app);
 
+// Lazily build a remote view (or the FileBrowser) before first navigation to
+// it. Idempotent; always-allocated view ids are a no-op. Built views live
+// until app teardown.
+void bt_remotes_view_ensure(Hid* app, uint32_t view_id);
+
 // BLE lifecycle
 void bt_remotes_start_ble(Hid* app);
 void bt_remotes_start_ble_if_immediate(Hid* app); // start_ble unless delay_connect is set

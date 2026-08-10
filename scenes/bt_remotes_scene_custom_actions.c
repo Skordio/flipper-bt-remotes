@@ -107,6 +107,7 @@ bool bt_remotes_scene_custom_actions_on_event(void* context, SceneManagerEvent e
                 app->scene_manager,
                 BtRemotesSceneCustomActions,
                 CA_PACK(CA_STATE_BROWSER, live_cursor));
+            bt_remotes_view_ensure(app, HidViewFileBrowser);
             file_browser_configure(
                 app->file_browser, ".txt", DUCKY_SCRIPT_DIR, true, true, NULL, true);
             file_browser_set_callback(app->file_browser, bt_remotes_file_browser_cb, app);
