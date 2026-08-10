@@ -1173,7 +1173,7 @@ bool bt_remotes_validate_name(const char* text, FuriString* error) {
 // Post-pairing auto-save timer
 // ---------------------------------------------------------------------------
 
-// Runs on the FuriTimer thread every PAIR_SAVE_POLL_MS after a first-time BLE connect.
+// Runs on the FuriTimer thread every PAIR_SAVE_POLL_MS after a BLE connect.
 // The actual poll-and-save does blocking SD I/O (keys copy + full cfg rewrite), which
 // must not run on the shared timer service thread — it would stall every other system
 // timer for the duration of the write. Post to the view dispatcher instead; the save
@@ -1305,25 +1305,16 @@ static void bt_remotes_connection_status_changed_callback(BtStatus status, void*
 
     if(hid->active_profile[0] != '\0') {
         if(connected) {
-            // Check whether this profile already has saved keys on disk.
-            // If yes → reconnect: keys are already correct, save immediately to capture
-            //   any key material refreshed by the stack during re-bonding.
-            // If no  → first-time pairing: the BLE link layer connected before SMP bonding
-            //   finished, so .bt_hid.keys doesn't exist yet.  Start the polling timer;
-            //   it will save as soon as the BT stack writes the keys file.
-            FuriString* prof_keys = furi_string_alloc_printf(
-                "%s/%s%s", BT_REMOTES_PROFILES_DIR, hid->active_profile, BT_REMOTES_KEYS_EXT);
-            bool already_saved =
-                storage_file_exists(hid->storage, furi_string_get_cstr(prof_keys));
-            furi_string_free(prof_keys);
-
-            if(already_saved) {
-                bt_remotes_profile_save(hid);
-            } else {
-                hid->pair_save_attempts = 0;
-                furi_timer_start(hid->pair_save_timer, PAIR_SAVE_POLL_MS);
-                FURI_LOG_I(TAG, "First-time pairing — polling for keys");
-            }
+            // Save the profile via the pair-save poll in both cases — this callback
+            // runs on the BT service thread and must not do SD I/O (not even an
+            // exists-check). The poll's tick handler runs on the dispatcher thread:
+            // - Reconnect: .bt_hid.keys already exists, so the first tick saves,
+            //   capturing any key material refreshed by the stack during re-bonding.
+            // - First-time pairing: the BLE link layer connected before SMP bonding
+            //   finished, so the keys file doesn't exist yet; the poll saves as soon
+            //   as the BT stack writes it.
+            hid->pair_save_attempts = 0;
+            furi_timer_start(hid->pair_save_timer, PAIR_SAVE_POLL_MS);
         } else {
             // Disconnected: cancel any in-progress pairing poll
             furi_timer_stop(hid->pair_save_timer);

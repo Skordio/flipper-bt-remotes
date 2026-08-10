@@ -29,6 +29,7 @@ typedef struct {
     bool connected;
     FuriString* os;
     FuriString* app;
+    FuriString* scratch; // draw-callback scratch: reused every frame instead of per-frame allocs
     size_t osIndex;
     size_t appIndex;
     size_t window_position;
@@ -663,14 +664,13 @@ static void hid_ptt_draw_camera(Canvas* canvas, uint8_t x, uint8_t y) {
     canvas_draw_box(canvas, x, y, 7, 7);
 }
 
-static void hid_ptt_draw_text_centered(Canvas* canvas, uint8_t y, FuriString* str) {
-    FuriString* disp_str;
-    disp_str = furi_string_alloc_set(str);
-    elements_string_fit_width(canvas, disp_str, canvas_width(canvas));
+static void
+    hid_ptt_draw_text_centered(Canvas* canvas, uint8_t y, FuriString* scratch, FuriString* str) {
+    furi_string_set(scratch, str);
+    elements_string_fit_width(canvas, scratch, canvas_width(canvas));
     uint8_t x_pos =
-        (canvas_width(canvas) - canvas_string_width(canvas, furi_string_get_cstr(disp_str))) / 2;
-    canvas_draw_str(canvas, x_pos, y, furi_string_get_cstr(disp_str));
-    furi_string_free(disp_str);
+        (canvas_width(canvas) - canvas_string_width(canvas, furi_string_get_cstr(scratch))) / 2;
+    canvas_draw_str(canvas, x_pos, y, furi_string_get_cstr(scratch));
 }
 
 static void hid_ptt_draw_callback(Canvas* canvas, void* context) {
@@ -689,8 +689,8 @@ static void hid_ptt_draw_callback(Canvas* canvas, void* context) {
 
     // OS and App labels
     canvas_set_font(canvas, FontSecondary);
-    hid_ptt_draw_text_centered(canvas, 73, model->app);
-    hid_ptt_draw_text_centered(canvas, 84, model->os);
+    hid_ptt_draw_text_centered(canvas, 73, model->scratch, model->app);
+    hid_ptt_draw_text_centered(canvas, 84, model->scratch, model->os);
 
     // Help label
     canvas_draw_icon(canvas, 0, 88, &I_Help_top_64x17);
@@ -927,6 +927,7 @@ HidPushToTalk* hid_ptt_alloc(Hid* hid) {
             model->muted = true; // assume we're muted
             model->os = furi_string_alloc();
             model->app = furi_string_alloc();
+            model->scratch = furi_string_alloc();
         },
         true);
 
@@ -1153,6 +1154,7 @@ void hid_ptt_free(HidPushToTalk* hid_ptt) {
         {
             furi_string_free(model->os);
             furi_string_free(model->app);
+            furi_string_free(model->scratch);
         },
         true);
     view_dispatcher_remove_view(hid_ptt->hid->view_dispatcher, HidViewPushToTalkHelp);

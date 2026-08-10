@@ -42,16 +42,13 @@ static void hid_mouse_jiggler_stealth_draw_callback(Canvas* canvas, void* contex
 
     // Display the current min interval in minutes
     canvas_set_font(canvas, FontSecondary); // Assuming there's a smaller font available
-    FuriString* min_interval_str = furi_string_alloc_printf("Min: %d min", model->min_interval);
-    elements_multiline_text_aligned(
-        canvas, 0, 16, AlignLeft, AlignTop, furi_string_get_cstr(min_interval_str));
-    furi_string_free(min_interval_str);
+    char interval_str[20];
+    snprintf(interval_str, sizeof(interval_str), "Min: %d min", model->min_interval);
+    elements_multiline_text_aligned(canvas, 0, 16, AlignLeft, AlignTop, interval_str);
 
     // Display the current max interval in minutes
-    FuriString* max_interval_str = furi_string_alloc_printf("Max: %d min", model->max_interval);
-    elements_multiline_text_aligned(
-        canvas, 0, 28, AlignLeft, AlignTop, furi_string_get_cstr(max_interval_str));
-    furi_string_free(max_interval_str);
+    snprintf(interval_str, sizeof(interval_str), "Max: %d min", model->max_interval);
+    elements_multiline_text_aligned(canvas, 0, 28, AlignLeft, AlignTop, interval_str);
 
     // "Press Start to jiggle"
     canvas_set_font(canvas, FontPrimary);

@@ -244,6 +244,8 @@ static bool hid_tiktok_input_callback(InputEvent* event, void* context) {
     // starved for the entire duration.
     bool do_cursor_reset = false;
     int  do_swipe        = 0; // -1 = up (next), +1 = down (prev), 0 = none
+    bool do_tap          = false; // Short-OK: double-click like a finger tap (125 ms of delays)
+    bool do_pause        = false; // Short-Back: single click (50 ms delay)
 
     with_view_model(
         hid_tiktok->view,
@@ -261,14 +263,7 @@ static bool hid_tiktok_input_callback(InputEvent* event, void* context) {
                 consumed = true;
             } else if(event->type == InputTypeShort) {
                 if(event->key == InputKeyOk) {
-                    // delays adjusted for emulation of a finger tap
-                    hid_hal_mouse_press(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
-                    furi_delay_ms(25);
-                    hid_hal_mouse_release(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
-                    furi_delay_ms(75);
-                    hid_hal_mouse_press(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
-                    furi_delay_ms(25);
-                    hid_hal_mouse_release(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
+                    do_tap = true; // execute after lock is released
                     consumed = true;
                 } else if(event->key == InputKeyUp) {
                     if(hid_tiktok->hid->tiktok_scroll_mode == TikTokScrollGesture) {
@@ -295,10 +290,7 @@ static bool hid_tiktok_input_callback(InputEvent* event, void* context) {
                     }
                     consumed = true;
                 } else if(event->key == InputKeyBack) {
-                    // Pause
-                    hid_hal_mouse_press(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
-                    furi_delay_ms(50);
-                    hid_hal_mouse_release(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
+                    do_pause = true; // execute after lock is released
                     consumed = true;
                 }
             } else if(event->type == InputTypeLong) {
@@ -315,6 +307,21 @@ static bool hid_tiktok_input_callback(InputEvent* event, void* context) {
     // draw callback isn't blocked for hundreds of milliseconds.
     if(do_cursor_reset) hid_tiktok_reset_cursor(hid_tiktok);
     if(do_swipe != 0)   hid_tiktok_gesture_swipe(hid_tiktok, do_swipe);
+    if(do_tap) {
+        // delays adjusted for emulation of a finger tap
+        hid_hal_mouse_press(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
+        furi_delay_ms(25);
+        hid_hal_mouse_release(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
+        furi_delay_ms(75);
+        hid_hal_mouse_press(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
+        furi_delay_ms(25);
+        hid_hal_mouse_release(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
+    }
+    if(do_pause) {
+        hid_hal_mouse_press(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
+        furi_delay_ms(50);
+        hid_hal_mouse_release(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
+    }
 
     return consumed;
 }

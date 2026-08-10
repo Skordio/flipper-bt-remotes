@@ -62,6 +62,7 @@ typedef struct {
     PushToTalkMenuList* lists;
     int lists_count;
     bool repeat_scrolled; // a Repeat event moved the cursor during the current hold
+    FuriString* scratch; // draw-callback scratch: reused every frame instead of per-frame allocs
 } HidPushToTalkMenuModel;
 
 static void
@@ -94,17 +95,14 @@ static void
                 canvas_set_color(canvas, ColorBlack);
             }
 
-            FuriString* disp_str;
-            disp_str = furi_string_alloc_set(PushToTalkMenuItemArray_cref(it)->label);
-            elements_string_fit_width(canvas, disp_str, item_width - (6 * 2));
+            furi_string_set(model->scratch, PushToTalkMenuItemArray_cref(it)->label);
+            elements_string_fit_width(canvas, model->scratch, item_width - (6 * 2));
 
             canvas_draw_str(
                 canvas,
                 6,
                 y_offset + (item_position * item_height) + item_height - 4,
-                furi_string_get_cstr(disp_str));
-
-            furi_string_free(disp_str);
+                furi_string_get_cstr(model->scratch));
         }
 
         position++;
@@ -139,13 +137,13 @@ static void hid_ptt_menu_draw_callback(Canvas* canvas, void* context) {
     canvas_draw_str(canvas, 121, 11, ">");
 
     PushToTalkMenuList* list = &model->lists[model->list_position];
-    FuriString* disp_str;
-    disp_str = furi_string_alloc_set(list->label);
-    elements_string_fit_width(canvas, disp_str, item_width - (6 * 2));
+    furi_string_set(model->scratch, list->label);
+    elements_string_fit_width(canvas, model->scratch, item_width - (6 * 2));
     uint8_t x_pos =
-        (canvas_width(canvas) - canvas_string_width(canvas, furi_string_get_cstr(disp_str))) / 2;
-    canvas_draw_str(canvas, x_pos, 11, furi_string_get_cstr(disp_str));
-    furi_string_free(disp_str);
+        (canvas_width(canvas) -
+         canvas_string_width(canvas, furi_string_get_cstr(model->scratch))) /
+        2;
+    canvas_draw_str(canvas, x_pos, 11, furi_string_get_cstr(model->scratch));
     canvas_set_font(canvas, FontSecondary);
     hid_ptt_menu_draw_list(canvas, context, list->items);
 }
@@ -423,6 +421,7 @@ HidPushToTalkMenu* hid_ptt_menu_alloc(Hid* hid) {
             model->position = 0;
             model->window_position = 0;
             model->repeat_scrolled = false;
+            model->scratch = furi_string_alloc();
         },
         true);
     return hid_ptt_menu;
@@ -439,6 +438,7 @@ void hid_ptt_menu_free(HidPushToTalkMenu* hid_ptt_menu) {
                 furi_string_free(model->lists[i].label);
             }
             free(model->lists);
+            furi_string_free(model->scratch);
         },
         true);
     view_free(hid_ptt_menu->view);
