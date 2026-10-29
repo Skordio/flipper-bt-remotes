@@ -26,7 +26,8 @@
 // On-disk format (plain text, computer-editable): one command per line, blank
 // lines and '#' comments allowed. No header required. A legacy
 // "Filetype:"/"Version:" header is still tolerated (skipped) on older files.
-// Shared by the runner (reads) and the library save/load in bt_remotes.c.
+// Read by the runner; bt_remotes.c only lists the library (gestures are authored
+// on a PC and copied to the SD card).
 // GESTURE_FILE_TYPE/_VERSION below name the legacy header (no longer written).
 #define GESTURE_FILE_TYPE    "Flipper BT Custom Gesture"
 #define GESTURE_FILE_VERSION (1)
@@ -41,7 +42,7 @@ typedef enum {
 
 typedef struct GestureRunner GestureRunner;
 
-// Called from the worker thread when state changes (done / error). Use
+// Called from the worker thread when state changes (running / done / error). Use
 // view_dispatcher_send_custom_event inside the callback to forward to main thread.
 typedef void (*GestureRunnerCallback)(void* context);
 

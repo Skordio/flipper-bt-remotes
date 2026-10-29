@@ -32,7 +32,7 @@ static void hid_mouse_jiggler_stealth_draw_callback(Canvas* canvas, void* contex
     }
 #endif
 
-    // Title "Mouse Jiggler"
+    // Title "Mouse Jiggler Stealth"
     canvas_set_font(canvas, FontPrimary);
 #ifdef HID_TRANSPORT_BLE
     elements_multiline_text_aligned(canvas, 17, 4, AlignLeft, AlignTop, "Mouse Jiggler Stealth");

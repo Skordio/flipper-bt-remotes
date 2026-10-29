@@ -39,7 +39,7 @@ typedef struct {
     int8_t x;
     int8_t y;
 } HidKeyboardPoint;
-// 4 BY 12
+// 7 BY 12 (rows by columns)
 #define MARGIN_TOP   0
 #define MARGIN_LEFT  3
 #define KEY_WIDTH    11

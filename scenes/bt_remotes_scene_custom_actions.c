@@ -51,7 +51,7 @@ void bt_remotes_scene_custom_actions_on_enter(void* context) {
 
     // "Connect per run": stay disconnected while browsing scripts; the run scene
     // brings BLE up only for a script's execution. Idempotent; also re-runs when
-    // returning here from the file browser / a finished run.
+    // returning here from a finished run or the Collections list.
     bt_remotes_ducky_browse_enter(app);
 
     // Preserve the saved cursor while resetting state to SUBMENU (we always

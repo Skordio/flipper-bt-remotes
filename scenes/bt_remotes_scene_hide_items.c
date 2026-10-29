@@ -40,7 +40,7 @@ static void build_submenu(Hid* app) {
     for(uint8_t i = 0; i < BT_REMOTES_MENU_ORDER_LEN; i++) {
         uint8_t idx = app->menu_order[i];
         if(idx == 0xFF) continue;                        // empty sentinel
-        if(idx >= BT_REMOTES_MENU_ITEM_COUNT) continue; // custom-remote slot — not hideable
+        if(idx >= BT_REMOTES_MENU_ITEM_COUNT) continue; // pinned slot — not hideable
         if(idx == HIDE_ITEMS_SETTINGS_IDX) continue;    // Settings is always shown
         bool hidden = (app->menu_hidden >> idx) & 1;
         // bt_remotes_menu_default[idx] is valid because index == enum value == array position

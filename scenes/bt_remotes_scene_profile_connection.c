@@ -1,7 +1,8 @@
 #include "../bt_remotes.h"
 
 // Connection sub-scene under Profile Settings. Bluetooth name (per-profile, not
-// the global default), Delay Connect toggle, and Bluetooth Unpairing.
+// the global default), Reset Name to Default, Delay Connect toggle, Save BT Keys,
+// Bluetooth Unpairing, and Help.
 
 // submenu_add_item stores the pointer, not a copy — keep the toggle label buffer
 // file-scope so it outlives the submenu.

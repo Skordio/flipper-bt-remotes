@@ -17,7 +17,7 @@
 #define BT_REMOTES_MAC_SIZE          (6)
 
 // ---------------------------------------------------------------------------
-// App-level config (default BT name)
+// App-level config (default BT name, vibro mode, Hold-Back-to-Quit seconds, profile order)
 // ---------------------------------------------------------------------------
 
 void bt_remotes_load_app_cfg(Hid* app) {
@@ -27,7 +27,7 @@ void bt_remotes_load_app_cfg(Hid* app) {
     // Initialise to safe defaults here so the struct is never uninitialised.
     for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) app->menu_order[i] = i;
     for(uint8_t i = BT_REMOTES_MENU_ITEM_COUNT; i < BT_REMOTES_MENU_ORDER_LEN; i++)
-        app->menu_order[i] = 0xFF; // sentinel: custom-remote slot not yet placed
+        app->menu_order[i] = 0xFF; // sentinel: pinned slot not yet placed
     app->menu_hidden = 0;
     app->profile_order_str[0] = '\0'; // empty = no saved profile order
 
@@ -183,7 +183,8 @@ static void bt_remotes_setting_set(Hid* app, const BtRemotesProfileSetting* s, u
     }
 }
 
-// Write the complete profile .cfg (name + mac + menu_order + menu_hidden) for the active profile.
+// Write the complete profile .cfg for the active profile: name + mac + menu_order +
+// menu_item_count + menu_hidden + every numeric setting in the descriptor table above.
 // The profile .cfg is the single on-disk source of truth for the BLE identity; the in-memory
 // app->ble_hid_cfg must already hold the values being persisted (callers update it first).
 // No-op when no profile is active.
@@ -398,8 +399,8 @@ bool bt_remotes_profile_save(Hid* app) {
         return false;
     }
 
-    // Snapshot the full profile cfg (name + mac + menu_order + menu_hidden) so that
-    // activating the profile later restores all settings, not just the BLE identity.
+    // Snapshot the full profile cfg (name + mac + menu layout + per-remote settings) so
+    // that activating the profile later restores all settings, not just the BLE identity.
     bt_remotes_save_profile_menu_cfg(app);
 
     FURI_LOG_I(TAG, "Profile saved: %s", app->active_profile);
@@ -437,7 +438,7 @@ bool bt_remotes_profile_activate(Hid* app) {
     // Load per-profile menu settings (menu_order, menu_hidden).
     // These live in the profile .cfg — missing keys in old-format files get safe defaults.
     {
-        // Safe defaults: fixed items in natural order, custom-remote slots empty.
+        // Safe defaults: fixed items in natural order, pinned-item slots empty.
         for(uint8_t i = 0; i < BT_REMOTES_MENU_ITEM_COUNT; i++) app->menu_order[i] = i;
         for(uint8_t i = BT_REMOTES_MENU_ITEM_COUNT; i < BT_REMOTES_MENU_ORDER_LEN; i++)
             app->menu_order[i] = 0xFF;
@@ -962,7 +963,7 @@ void bt_remotes_pin_remove(Hid* app, uint8_t pidx) {
 }
 
 // ---------------------------------------------------------------------------
-// Custom Gestures — global library (mirrors the collection load/save pattern)
+// Custom Gestures — global library (list + path only; gestures are authored off-device)
 // ---------------------------------------------------------------------------
 
 void bt_remotes_gesture_path(const char* name, char* out, size_t out_size) {
@@ -980,7 +981,6 @@ void bt_remotes_gesture_load_list(Hid* app) {
 }
 
 
-// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // Shared utilities
 // ---------------------------------------------------------------------------
@@ -1016,6 +1016,7 @@ bool bt_remotes_validate_name(const char* text, FuriString* error) {
     return true;
 }
 
+// ---------------------------------------------------------------------------
 // BLE lifecycle
 // ---------------------------------------------------------------------------
 
@@ -1112,8 +1113,10 @@ void bt_remotes_start_ble_if_immediate(Hid* app) {
 
 void bt_remotes_ducky_browse_enter(Hid* app) {
     // Stay disconnected while browsing Ducky scripts/collections in per-run mode.
-    // Call from every Ducky/Collections browsing scene on_enter so new scenes
-    // enforce the policy without knowing its implementation.
+    // Call from each Ducky/Collections scene that can be entered directly (Ducky
+    // Scripts hub, collection viewer incl. pinned launches) so they enforce the
+    // policy without knowing its implementation; scenes only reached from those
+    // (e.g. the Collections list) inherit the disconnected state.
     if(app->ducky_connect_per_run) bt_remotes_stop_ble(app);
 }
 
@@ -1433,7 +1436,8 @@ static Hid* bt_remotes_alloc(void) {
     view_dispatcher_add_view(
         app->view_dispatcher, HidViewHelp, widget_get_view(app->help_widget));
 
-    // The Start-menu view is the first thing shown and always needed.
+    // The remote-menu view (shared by Profile Select and the Start menu) is the
+    // first thing shown and always needed.
     // The remote views + FileBrowser are built lazily by bt_remotes_view_ensure
     // on first navigation; their Hid pointers stay NULL until then.
     app->hid_remote_menu = hid_remote_menu_alloc();
@@ -1677,7 +1681,7 @@ static bool bt_remotes_launcher_try_load(Hid* app, const char* path) {
 // Compatibility for the full analysis and the path to broader compatibility.
 //
 // When invoked with a non-empty argument, `p` is treated as the path to a
-// .btremote launcher file (see docs/ARCHITECTURE.md → Profile Launchers). If
+// .btremote launcher file (see docs/ARCHITECTURE.md → Profile Launcher shortcuts). If
 // the launcher resolves cleanly, the app jumps straight to the Start menu for
 // that profile with Profile Select underneath (so Back still returns there).
 int32_t bt_remotes_app(void* p) {
@@ -1701,7 +1705,8 @@ int32_t bt_remotes_app(void* p) {
     // BT_REMOTES_LAUNCHER_DIR is created lazily by the shortcut writer — most
     // sessions never create a .btremote shortcut.
 
-    // Load app-level config (default BT name for new profiles)
+    // Load app-level config (default BT name for new profiles, vibro mode,
+    // Hold-Back-to-Quit seconds, profile order)
     bt_remotes_load_app_cfg(app);
 
     dolphin_deed(DolphinDeedPluginStart);

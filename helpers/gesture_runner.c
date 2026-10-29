@@ -188,7 +188,7 @@ static void gesture_type_string(GestureRunner* runner, const char* text) {
 }
 
 // ---------------------------------------------------------------------------
-// Line parsing — shared by the runner and the editor validator
+// Line parsing
 // ---------------------------------------------------------------------------
 
 typedef enum {

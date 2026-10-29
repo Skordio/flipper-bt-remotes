@@ -15,12 +15,12 @@
 // Parallel to RemoteSettingsHelpTopic. Word-wraps to 128px and scrolls Up/Down.
 static const char* const remote_settings_help_pages[] = {
     // Keynote
-    "Back Button: choose what a short press of the Flipper Back button sends, to "
+    "Back Key: choose what a short press of the Flipper Back button sends, to "
     "match different slide apps:\n"
     "- Delete\n"
     "- Left Arrow\n"
     "- Escape\n"
-    "- None (no key)\n\n"
+    "- None (no keyboard key)\n\n"
     "Hold Back always exits the remote.",
 
     // Media
@@ -56,7 +56,7 @@ static const char* const remote_settings_help_pages[] = {
 
     // Global Settings
     "Settings that apply to the app as a whole - not to any one profile.\n\n"
-    "Default Bluetooth Name:\n"
+    "Default BT Name:\n"
     "The Bluetooth name applied to newly-created profiles. Existing profiles keep "
     "their own name (change that under Profile Settings > Connection).\n\n"
     "Vibration:\n"
@@ -64,7 +64,7 @@ static const char* const remote_settings_help_pages[] = {
     "- Connect: buzz when a device connects.\n"
     "- Disconnect: buzz when a device disconnects.\n"
     "- Both: buzz on connect AND disconnect.\n\n"
-    "Hold Back to Quit:\n"
+    "Hold Back Quit:\n"
     "Holding Back for this many seconds anywhere in the app quits it "
     "completely. The quick long-press that exits a remote to its menu is "
     "unaffected.",
@@ -73,10 +73,10 @@ static const char* const remote_settings_help_pages[] = {
     "Bluetooth name and connection behavior for the active profile.\n\n"
     "Bluetooth Name:\n"
     "The name your device sees when pairing. Per-profile - this is separate "
-    "from the Default Bluetooth Name in Global Settings, which is the template "
+    "from the Default BT Name in Global Settings, which is the template "
     "applied to NEW profiles.\n\n"
     "Reset Name to Default:\n"
-    "Replaces this profile's Bluetooth Name with the Default Bluetooth Name "
+    "Replaces this profile's Bluetooth Name with the Default BT Name "
     "from Global Settings and re-advertises. Handy after editing the global "
     "default if you want existing profiles to pick it up.\n\n"
     "Delay Connect:\n"
@@ -99,8 +99,9 @@ static const char* const remote_settings_help_pages[] = {
     "Toggle which remote items appear on the Start menu. [x] = shown, [ ] = "
     "hidden. Settings is always visible (cannot be hidden).\n\n"
     "Reset Menu Order:\n"
-    "Restores the default order AND makes every item visible again. Use this "
-    "to undo a HOLD-OK reorder or to bring back hidden items.",
+    "Restores the default order AND makes every item visible again; pinned "
+    "items go back to the end of the list. Use this to undo a HOLD-OK reorder "
+    "or to bring back hidden items.",
 
     // Per-Remote Settings (hub)
     "Per-profile knobs specific to individual remote types. Each has its own "
@@ -116,7 +117,10 @@ static const char* const remote_settings_help_pages[] = {
     "Inward Margin / Edge Margin / Swipe Length tune the swipe for your phone.\n\n"
     "DuckyScript:\n"
     "Connect Per Run (stay disconnected while browsing scripts) and Connect "
-    "Delay (settle time after the link is up).",
+    "Delay (settle time after the link is up).\n\n"
+    "iOS Phone:\n"
+    "Cursor Mode, speeds, and swipe distance/speed for the iPhone mouse "
+    "remote, plus the double-tap swipe toggle.",
 
     // Profile Management
     "Manage the active profile's identity on disk.\n\n"

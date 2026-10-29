@@ -3,12 +3,13 @@
 
 // Two-phase Create Shortcut flow (mirrors profile_new's mid-scene view switch):
 //   Phase 1 (on_enter):  submenu picker — "Profile Only" plus every fixed
-//                        Start-menu item except Settings. The pick index is
-//                        sent as a custom event.
+//                        Start-menu item except Settings, then each pinned
+//                        collection/gesture. The pick index is sent as a
+//                        custom event.
 //   Phase 2 (on_event):  write the .btremote to BT_REMOTES_LAUNCHER_DIR
-//                        (adding a Remote: label line when a remote was
-//                        picked), then show a Saved!/Error popup that pops
-//                        back on timeout.
+//                        (adding a Remote: label line when a fixed remote was
+//                        picked, or a Pin: line for a pinned item), then show
+//                        a Saved!/Error popup that pops back on timeout.
 // The file can be moved anywhere on the SD card afterwards — the firmware
 // archive routes .btremote on extension, not location.
 

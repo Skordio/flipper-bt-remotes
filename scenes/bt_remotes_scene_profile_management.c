@@ -1,7 +1,7 @@
 #include "../bt_remotes.h"
 
-// Profile Management sub-scene under Profile Settings. Rename / Save / Delete the
-// active profile. Each row routes to its existing dedicated scene.
+// Profile Management sub-scene under Profile Settings. Rename / Create Shortcut /
+// Delete the active profile. Each row routes to its existing dedicated scene.
 
 enum BtRemotesProfileManagementIndex {
     BtRemotesProfileManagementIndexRename,

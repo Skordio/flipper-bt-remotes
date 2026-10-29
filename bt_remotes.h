@@ -56,6 +56,9 @@
 // moves and old pinned-slot values must be shifted up to land in the new layout.
 // V1 = pre-Custom-Gestures (15 fixed items).
 // V2 = post-Custom-Gestures, pre-iOS-Phone (16 fixed items).
+// Only files saved before the menu_item_count key existed need these length-keyed
+// layouts; newer files migrate generically from their saved count (see
+// bt_remotes_profile_activate).
 #define BT_REMOTES_MENU_ITEM_COUNT_V1 15
 #define BT_REMOTES_MENU_ORDER_LEN_V1  31
 #define BT_REMOTES_MENU_ITEM_COUNT_V2 16
@@ -86,7 +89,7 @@
 #define BT_REMOTES_COLLECTION_SCRIPT_MAX      16
 #define BT_REMOTES_COLLECTION_SCRIPT_PATH_LEN 256
 
-// Custom Gestures (global library; GESTURE_LINE_MAX/_LEN live in gesture_runner.h)
+// Custom Gestures (global library; GESTURE_LINE_LEN lives in gesture_runner.h)
 #define BT_REMOTES_GESTURE_DIR      APP_DATA_PATH("gestures")
 #define BT_REMOTES_GESTURE_EXT      ".gesture"
 #define BT_REMOTES_GESTURE_NAME_LEN 32
@@ -138,7 +141,7 @@ typedef enum {
 // Hold-Back-to-Quit (app-level): holding Back for this many seconds anywhere in
 // the app quits it entirely. The quick long-press that exits a remote to the
 // Start menu is separate and unaffected.
-// MIN of 1 s is close to the ~0.5 s long-press that exits a remote to the Start
+// MIN of 1 s is close to the ~0.3 s long-press that exits a remote to the Start
 // menu — holding through both fires exit-to-menu first, then quit. Deliberate;
 // that's also why the default stays well above 1.
 #define BT_REMOTES_BACK_HOLD_EXIT_S_MIN     1
@@ -161,7 +164,8 @@ typedef enum {
     (((DUCKY_CONNECT_SETTLE_MAX) - (DUCKY_CONNECT_SETTLE_MIN)) / (DUCKY_CONNECT_SETTLE_STEP) + 1)
 
 // Number of selectable values in a min..max/step settings range — the item
-// count for that range's VariableItemList row. Shared by every settings grid.
+// count for that range's VariableItemList row. Used by the TikTok gesture and
+// iOS Phone settings grids.
 #define BT_REMOTES_VALUE_COUNT(min, max, step) (((max) - (min)) / (step) + 1)
 
 // TikTok / YT Shorts scroll behavior (per-profile)
@@ -176,7 +180,7 @@ typedef enum {
 // TikTok gesture-swipe tunable motion values (per-profile, px). Each is a
 // Left/Right-adjustable setting; min..max in steps. Defaults equal the original
 // hardcoded swipe constants, so existing profiles behave identically.
-//   Inward Margin: horizontal inset before the vertical swipe (single int8 move)
+//   Inward Margin: horizontal inset before the vertical swipe (emitted in <=90 px chunks)
 #define TIKTOK_GESTURE_INSET_MIN     20
 #define TIKTOK_GESTURE_INSET_MAX     300
 #define TIKTOK_GESTURE_INSET_STEP    10
@@ -258,7 +262,8 @@ typedef enum {
     RemoteSettingsHelpIosPhone       = 9,
 } RemoteSettingsHelpTopic;
 
-// Start-menu item indices — shared by bt_remotes_scene_start.c and bt_remotes_scene_main.c.
+// Start-menu item indices — shared by bt_remotes_scene_start.c, bt_remotes_scene_hide_items.c
+// and views/hid_remote_menu.c.
 typedef enum {
     BtRemotesStartIndexKeynote             = 0,
     BtRemotesStartIndexKeynoteVertical     = 1,
@@ -279,7 +284,8 @@ typedef enum {
     // Settings stays the last fixed item (highest index) — hide_items and the
     // load-time "never hide" guard rely on it being last. New fixed items go in
     // just before it; profiles saved by previous layouts are migrated in
-    // bt_remotes_profile_activate (see the menu_order V1 / V2 arms).
+    // bt_remotes_profile_activate (generically via the saved menu_item_count;
+    // the menu_order V1 / V2 arms only serve files that predate that key).
     BtRemotesStartIndexSettings            = 16,
 } BtRemotesStartIndex;
 
@@ -297,7 +303,7 @@ struct Hid {
     ViewDispatcher* view_dispatcher;
     SceneManager* scene_manager;
     Submenu* submenu;
-    VariableItemList* var_item_list; // adjustable rows for TikTok gesture settings
+    VariableItemList* var_item_list; // adjustable rows shared by the settings scenes
     DialogEx* dialog;
     TextInput* text_input;
     Popup* popup;
@@ -330,15 +336,16 @@ struct Hid {
     // app's whole lifetime.
     char (*editing_collection_scripts)[BT_REMOTES_COLLECTION_SCRIPT_PATH_LEN];
     uint8_t editing_collection_script_count;
-    // Custom Gestures (global library + editing buffer)
+    // Custom Gestures (global library + the gesture currently selected in the list)
     char    gesture_names[BT_REMOTES_GESTURE_MAX][BT_REMOTES_GESTURE_NAME_LEN];
     uint8_t gesture_count;
     char    editing_gesture_name[BT_REMOTES_GESTURE_NAME_LEN];
     // Profile management
     char active_profile[BT_REMOTES_PROFILE_NAME_LEN];
     char pending_name[BT_REMOTES_PROFILE_NAME_LEN]; // old name held during profile rename
-    // Launcher deep-link: BtRemotesStartIndex parsed from a .btremote Remote:
-    // field, fired as a custom event by the Start scene's on_enter then reset
+    // Launcher deep-link: Start-menu event value parsed from a .btremote file
+    // (a BtRemotesStartIndex from Remote:, or MENU_ITEM_COUNT + pin index from
+    // Pin:), fired as a custom event by the Start scene's on_enter then reset
     // to BT_REMOTES_LAUNCHER_REMOTE_NONE. See docs/ARCHITECTURE.md → Profile
     // Launcher shortcuts.
     uint8_t pending_launcher_remote;
@@ -379,8 +386,10 @@ struct Hid {
     FuriString*  file_browser_result; // receives the selected file path
     DuckyRunner* ducky_runner;
     GestureRunner* gesture_runner; // runs Custom Gestures (separate engine)
-    char pending_script_path[256]; // full path to the selected .txt script, copied from result
-    // Post-pairing auto-save: polls for .bt_hid.keys after first-time BLE connect
+    char pending_script_path[256]; // full path of the .txt script (or .gesture file) about to run
+    // Post-pairing auto-save: after every BLE connect, polls for .bt_hid.keys
+    // (present at once on reconnect, written by the BT stack on first pairing)
+    // and saves the profile
     FuriTimer* pair_save_timer;
     uint8_t    pair_save_attempts;
     // Hold-Back-to-Quit: raw-input watchdog armed on Back press, disarmed on release
@@ -412,22 +421,25 @@ void bt_remotes_view_ensure(Hid* app, uint32_t view_id);
 void bt_remotes_start_ble(Hid* app);
 void bt_remotes_start_ble_if_immediate(Hid* app); // start_ble unless delay_connect is set
 void bt_remotes_stop_ble(Hid* app);
-// Call from any Ducky/Collections browsing scene on_enter to enforce the
-// connect-per-run "stay disconnected while browsing" policy in one place.
+// Call from each Ducky/Collections scene that can be entered directly (custom_actions,
+// collection_view) to enforce the connect-per-run "stay disconnected while browsing"
+// policy in one place; scenes only reached from those (collection_list) inherit it.
 void bt_remotes_ducky_browse_enter(Hid* app);
 
 // Config / pairing
 void bt_remotes_profile_clear_pairing(Hid* app);
 
-// App-level config (default BT name, vibro mode, profile order)
+// App-level config (default BT name, vibro mode, Hold-Back-to-Quit seconds, profile order)
 void bt_remotes_load_app_cfg(Hid* app);
 void bt_remotes_save_app_cfg(Hid* app);
 
-// Write menu_order + menu_hidden into the active profile's .cfg (alongside name + mac).
-// No-op if no profile is active.  Call whenever order or visibility changes.
+// Write the complete active-profile .cfg: name + mac from app->ble_hid_cfg, menu_order +
+// menu_item_count + menu_hidden, and every per-profile numeric setting. No-op if no
+// profile is active.  Call after changing any of those in memory (the per-remote
+// settings scenes do so in on_exit).
 void bt_remotes_save_profile_menu_cfg(Hid* app);
 
-// Reorder profile_list[] to match profile_order_str (call after bt_remotes_profile_load_list)
+// Reorder profile_list[] to match profile_order_str (bt_remotes_profile_load_list already calls this)
 void bt_remotes_apply_profile_order(Hid* app);
 
 // Profile operations
@@ -459,13 +471,15 @@ bool bt_remotes_pin_add(Hid* app, const char* name, uint8_t kind);
 // remap, every menu_order slot after the removed pin launches the wrong item.
 void bt_remotes_pin_remove(Hid* app, uint8_t pidx);
 
-// Custom Gesture operations (global library; mirror the collection ops)
+// Custom Gesture operations (global library; list + path only — gestures are
+// authored on a PC and copied to the SD card)
 void bt_remotes_gesture_load_list(Hid* app);
 // Full path to a gesture file by name (caller supplies buffer).
 void bt_remotes_gesture_path(const char* name, char* out, size_t out_size);
 
-// Default Start-menu item table — defined in bt_remotes_scene_start.c, shared with
-// bt_remotes_scene_hide_items.c.  Entry [i].index == i always (table is in enum order).
+// Default Start-menu item table — defined in bt_remotes_scene_start.c, also used by
+// bt_remotes_scene_hide_items.c, bt_remotes_scene_profile_shortcut_create.c and the
+// launcher loader in bt_remotes.c.  Entry [i].index == i always (table is in enum order).
 extern const BtRemotesMenuEntry bt_remotes_menu_default[BT_REMOTES_MENU_ITEM_COUNT];
 
 // HAL

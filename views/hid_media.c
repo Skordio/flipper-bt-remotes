@@ -137,7 +137,8 @@ static void hid_media_process_press(HidMedia* hid_media, InputEvent* event) {
                 hid_hal_consumer_key_press(hid_media->hid, HID_CONSUMER_VOLUME_DECREMENT);
             } else if(event->key == InputKeyLeft) {
                 model->left_pressed = true;
-                // Improved mode classifies tap (Short=seek) vs hold (Long=prev track) on release
+                // Improved mode sends tap (Short=seek) / hold (Long=prev track) from
+                // the Short/Long events in the input callback instead
                 if(hid_media->hid->media_mode == MediaModeLegacy)
                     hid_hal_consumer_key_press(hid_media->hid, HID_CONSUMER_SCAN_PREVIOUS_TRACK);
             } else if(event->key == InputKeyRight) {

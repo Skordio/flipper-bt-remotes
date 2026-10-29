@@ -1,9 +1,12 @@
 Filetype: Flipper BT Custom Gesture
 Version: 1
+# start from the Home screen
 run home
 wait 1000
+# re-anchor top-left for repeatable Settings navigation
 anchor tl
 move 200 250
+# pull down to reveal search
 drag 0 300
 wait 800
 type settings

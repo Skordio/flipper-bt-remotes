@@ -141,7 +141,8 @@ void bt_remotes_scene_profile_select_on_enter(void* context) {
     Hid* app = context;
 
     // BLE already running means we arrived here after a profile was just created
-    // (profile_new popped back). Skip straight to Start.
+    // (profile_new popped back) or via a .btremote launcher for an immediate-connect
+    // profile (bt_remotes_app started BLE first). Skip straight to Start.
     if(app->ble_started) {
         view_dispatcher_send_custom_event(
             app->view_dispatcher, BtRemotesProfileSelectEventAutoAdvance);

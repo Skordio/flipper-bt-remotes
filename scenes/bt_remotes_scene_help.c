@@ -52,8 +52,9 @@ static const char* const help_pages[] = {
     "- HOLD OK to reorder; OK/Back to drop.\n"
     "- Hide / Reset Order: Profile Settings > Start Menu Layout.\n\n"
     "CONNECTION\n"
-    "Bluetooth Name, Delay Connect, Save BT Keys, Bluetooth Unpairing live under "
-    "Profile Settings > Connection. Open its Help page for details.",
+    "Bluetooth Name, Reset Name to Default, Delay Connect, Save BT Keys, Bluetooth "
+    "Unpairing live under Profile Settings > Connection. Open its Help page for "
+    "details.",
 
     // 2: Per-Remote Tweaks
     "PER-REMOTE TWEAKS\n"
@@ -62,7 +63,8 @@ static const char* const help_pages[] = {
     "- Keynote\n"
     "- Media\n"
     "- TikTok / YT Shorts\n"
-    "- DuckyScript\n\n"
+    "- DuckyScript\n"
+    "- iOS Phone\n\n"
     "Each has its own Help page with the details.",
 
     // 3: Ducky Scripts & Collections

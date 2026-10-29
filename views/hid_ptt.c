@@ -163,11 +163,11 @@ static void hid_ptt_trigger_mute_linux_hangouts(HidPushToTalk* hid_ptt) {
     hid_hal_keyboard_press(hid_ptt->hid, KEY_MOD_LEFT_CTRL | HID_KEYBOARD_D);
     hid_hal_keyboard_release(hid_ptt->hid, KEY_MOD_LEFT_CTRL | HID_KEYBOARD_D);
 }
-static void hid_ptt_trigger_camera_macos_hangouts(HidPushToTalk* hid_ptt) { // and hand in teams
+static void hid_ptt_trigger_camera_macos_hangouts(HidPushToTalk* hid_ptt) {
     hid_hal_keyboard_press(hid_ptt->hid, KEY_MOD_LEFT_GUI | HID_KEYBOARD_E);
     hid_hal_keyboard_release(hid_ptt->hid, KEY_MOD_LEFT_GUI | HID_KEYBOARD_E);
 }
-static void hid_ptt_trigger_camera_linux_hangouts(HidPushToTalk* hid_ptt) { // and hand in teams
+static void hid_ptt_trigger_camera_linux_hangouts(HidPushToTalk* hid_ptt) {
     hid_hal_keyboard_press(hid_ptt->hid, KEY_MOD_LEFT_CTRL | HID_KEYBOARD_E);
     hid_hal_keyboard_release(hid_ptt->hid, KEY_MOD_LEFT_CTRL | HID_KEYBOARD_E);
 }
@@ -232,13 +232,13 @@ static void hid_ptt_trigger_mute_macos_discord(HidPushToTalk* hid_ptt) {
         KEY_MOD_LEFT_GUI | KEY_MOD_RIGHT_GUI | KEY_MOD_RIGHT_ALT | KEY_MOD_LEFT_SHIFT |
             HID_KEYBOARD_M);
 }
-static void hid_ptt_start_ptt_macos_discord(HidPushToTalk* hid_ptt) { // and TeamSpeak
+static void hid_ptt_start_ptt_macos_discord(HidPushToTalk* hid_ptt) {
     hid_hal_keyboard_press(
         hid_ptt->hid,
         KEY_MOD_LEFT_GUI | KEY_MOD_RIGHT_GUI | KEY_MOD_RIGHT_ALT | KEY_MOD_LEFT_SHIFT |
             HID_KEYBOARD_P);
 }
-static void hid_ptt_stop_ptt_macos_discord(HidPushToTalk* hid_ptt) { // and TeamSpeak
+static void hid_ptt_stop_ptt_macos_discord(HidPushToTalk* hid_ptt) {
     hid_hal_keyboard_release(
         hid_ptt->hid,
         KEY_MOD_LEFT_GUI | KEY_MOD_RIGHT_GUI | KEY_MOD_RIGHT_ALT | KEY_MOD_LEFT_SHIFT |
@@ -254,13 +254,13 @@ static void hid_ptt_trigger_mute_linux_discord(HidPushToTalk* hid_ptt) {
         KEY_MOD_LEFT_CTRL | KEY_MOD_RIGHT_CTRL | KEY_MOD_RIGHT_ALT | KEY_MOD_LEFT_SHIFT |
             HID_KEYBOARD_M);
 }
-static void hid_ptt_start_ptt_linux_discord(HidPushToTalk* hid_ptt) { // and TeamSpeak
+static void hid_ptt_start_ptt_linux_discord(HidPushToTalk* hid_ptt) {
     hid_hal_keyboard_press(
         hid_ptt->hid,
         KEY_MOD_LEFT_CTRL | KEY_MOD_RIGHT_CTRL | KEY_MOD_RIGHT_ALT | KEY_MOD_LEFT_SHIFT |
             HID_KEYBOARD_P);
 }
-static void hid_ptt_stop_ptt_linux_discord(HidPushToTalk* hid_ptt) { // and TeamSpeak
+static void hid_ptt_stop_ptt_linux_discord(HidPushToTalk* hid_ptt) {
     hid_hal_keyboard_release(
         hid_ptt->hid,
         KEY_MOD_LEFT_CTRL | KEY_MOD_RIGHT_CTRL | KEY_MOD_RIGHT_ALT | KEY_MOD_LEFT_SHIFT |

@@ -2,7 +2,7 @@
 
 Developer reference for the `bt_remotes` Flipper Zero app. For a user-facing overview see
 [`../README.md`](../README.md); for the short list of rules/invariants an agent must follow see
-[`../CLAUDE.md`](../CLAUDE.md). This document is the detailed technical source of truth.
+[`../AGENTS.md`](../AGENTS.md). This document is the detailed technical source of truth.
 
 `bt_remotes` is a BLE HID remote-control app: the Flipper acts as a Bluetooth HID peripheral
 (keyboard, mouse, media, etc.) with multiple named profiles, each with its own BLE MAC address
@@ -27,9 +27,16 @@ firmware's `targets/f7/api_symbols.csv` (`+` = exported to apps) found these blo
 | 16 built-in icons (`I_Ble_connected_15x15`, `I_ButtonUp_7x4`, `I_DolphinDone_80x58`, …) | ❌ | ❌ | ❌ | ✅ |
 | `variable_item_list_set_header` | ❌ | ❌ | ✅ | ✅ |
 | `strtok` (libc) | ❌ (`-`, not app-exported) | ✅ | ✅ | ✅ |
+| `momentum_settings` (read as `momentum_settings.wrap_on_hold` for List Wraparound) | ❌ | ❌ | ❌ | ✅ |
 
-Any one missing import makes the loader refuse the FAP. The **16 built-in icons are the universal
-blocker** across all three other firmwares.
+Any one missing import makes the loader refuse the FAP. The **16 built-in icons and
+`momentum_settings` are the universal blockers** across all three other firmwares.
+
+`wrap_on_hold` itself exists only in this fork's Momentum (firmware commit `d18c70976` appends it at
+the **end** of `MomentumSettings`, `lib/momentum/settings.h`). On upstream Momentum the app still
+loads, but the `views/hid_remote_menu.c` / `views/hid_ptt_menu.c` read lands past the end of
+upstream's struct, so List Wraparound behavior there is undefined; building against upstream
+headers fails to compile.
 
 **It is NOT a Bluetooth/`GapConfig` problem.** An earlier version of this doc claimed the app was
 Momentum-only because `GapConfig.mac_address` (the per-profile custom BLE address) existed only in
@@ -46,6 +53,8 @@ fixable:
   bundled icons.
 - Replace **`strtok`** (used in profile-order parsing) with a small inline tokenizer.
 - Avoid **`variable_item_list_set_header`** (drop the header or set it another way).
+- Drop the **`momentum_settings.wrap_on_hold`** reads in `views/hid_remote_menu.c` and
+  `views/hid_ptt_menu.c` (always wrap on a fresh press, or gate the read on a firmware that has it).
 
 After those changes the app would likely load and run on stock / Unleashed / RogueMaster too (the
 BLE ABI already matches), at which point the "Momentum-only" framing could be dropped. Until then,
@@ -86,6 +95,7 @@ bt_remotes/
 │   ├── bt_remotes_scene_global_settings.c   bt_remotes_scene_profile_settings.c
 │   ├── bt_remotes_scene_profile_connection.c   bt_remotes_scene_profile_menu_layout.c
 │   ├── bt_remotes_scene_profile_management.c   bt_remotes_scene_help.c
+│   ├── bt_remotes_scene_profile_shortcut_create.c   bt_remotes_scene_reset_bt_name.c
 │   ├── bt_remotes_scene_hide_items.c   bt_remotes_scene_reset_menu.c
 │   │   # Per-remote settings:
 │   ├── bt_remotes_scene_remote_type_settings.c   bt_remotes_scene_remote_settings_help.c
@@ -98,8 +108,7 @@ bt_remotes/
 │   ├── bt_remotes_scene_collection_create.c   bt_remotes_scene_collection_edit.c
 │   ├── bt_remotes_scene_collection_delete.c   bt_remotes_scene_collection_pin.c
 │   │   # Custom Gestures:
-│   ├── bt_remotes_scene_gesture_list.c   bt_remotes_scene_gesture_create.c
-│   ├── bt_remotes_scene_gesture_edit.c   bt_remotes_scene_gesture_run.c
+│   ├── bt_remotes_scene_gesture_list.c   bt_remotes_scene_gesture_run.c
 │   └── bt_remotes_scene_gesture_pin.c
 └── views/
     ├── hid_remote_menu.c/h    # Reorderable/hideable/pinnable Start-menu view (BtRemotesMenuEntry)
@@ -112,11 +121,13 @@ bt_remotes/
     └── hid_draw_shared.h    # shared inline arrow glyphs (hid_draw_arrow_dot/_line)
 ```
 
-(Plus `assets/` — PNG icons for the remote views — and `bt_remotes_10px.png`, the app icon.)
+(Plus `assets/` — PNG icons for the remote views — `bt_remotes_10px.png`, the app icon, `README.md`,
+`docs/` — this file, `WRITING_GESTURES.md`, and `agents/` (config for the agent engineering skills) — and `examples/`, sample `.gesture` files.)
 
-The two custom list views (`hid_remote_menu`, the PTT menu's Up/Down list) honor Momentum's
-global "List Wraparound" setting (`momentum_settings.wrap_on_hold`) at the list extremes, same
-as the firmware's submenu/variable_item_list. PTT Left/Right tab cycling is unaffected.
+The two custom list views (`hid_remote_menu` — also Profile Select — and the PTT menu's Up/Down
+list) honor Momentum's global "List Wraparound" setting (`momentum_settings.wrap_on_hold`, see
+**Firmware Compatibility**) at the list extremes, same as the firmware's
+submenu/variable_item_list. PTT Left/Right tab cycling is unaffected.
 
 ---
 
@@ -125,22 +136,24 @@ as the firmware's submenu/variable_item_list. PTT Left/Right tab cycling is unaf
 | Constant | Value | Purpose |
 |---|---|---|
 | `BT_REMOTES_PROFILES_DIR` | `APP_DATA_PATH("profiles")` | Profile + `.pins` storage directory |
-| `BT_REMOTES_APP_CFG_PATH` | `APP_DATA_PATH("app.cfg")` | App-level config (default name, vibro, profile order) |
+| `BT_REMOTES_APP_CFG_PATH` | `APP_DATA_PATH("app.cfg")` | App-level config (default name, vibro, Back-hold, profile order) |
 | `BT_REMOTES_CFG_EXT` / `_KEYS_EXT` | `.cfg` / `.keys` | Per-profile config / bonding-keys extensions |
 | `BT_REMOTES_PROFILE_NAME_LEN` | `32` | Max profile name length (including NUL) |
 | `BT_REMOTES_PROFILE_MAX_COUNT` | `16` | Max number of profiles |
 | `BT_REMOTES_MENU_ITEM_COUNT` | `17` | Number of fixed Start-menu items (enum `BtRemotesStartIndex*`) |
 | `BT_REMOTES_PINNED_MAX` | `16` | Max pinned collections/gestures on the Start menu |
 | `BT_REMOTES_MENU_ORDER_LEN` | `33` | `MENU_ITEM_COUNT + PINNED_MAX` — length of `menu_order[]` |
-| `BT_REMOTES_MENU_ITEM_COUNT_V1` / `_ORDER_LEN_V1` | `15` / `31` | Pre-Custom-Gestures layout, for migrating saved `menu_order` |
-| `BT_REMOTES_MENU_ITEM_COUNT_V2` / `_ORDER_LEN_V2` | `16` / `32` | Post-Custom-Gestures, pre-iOS-Phone layout, for migrating saved `menu_order` |
+| `BT_REMOTES_MENU_ITEM_COUNT_V1` / `_ORDER_LEN_V1` | `15` / `31` | Pre-Custom-Gestures layout, for migrating saved `menu_order` in legacy cfgs (no `menu_item_count` key) |
+| `BT_REMOTES_MENU_ITEM_COUNT_V2` / `_ORDER_LEN_V2` | `16` / `32` | Post-Custom-Gestures, pre-iOS-Phone layout, same legacy-only migration |
 | `BT_REMOTES_COLLECTION_DIR` | `APP_DATA_PATH("collections")` | Ducky Script Collections directory |
 | `BT_REMOTES_COLLECTION_EXT` | `.collection` | Collection file extension |
-| `BT_REMOTES_COLLECTION_MAX` / `_SCRIPT_MAX` | `16` / `32` | Max collections / scripts-per-collection |
+| `BT_REMOTES_COLLECTION_MAX` / `_SCRIPT_MAX` | `16` / `16` | Max collections / scripts-per-collection |
+| `BT_REMOTES_LAUNCHER_DIR` / `_EXT` | `APP_DATA_PATH("launchers")` / `.btremote` | Profile-launcher shortcut directory / extension |
 | `BT_REMOTES_GESTURE_DIR` | `APP_DATA_PATH("gestures")` | Custom Gestures library directory (global) |
 | `BT_REMOTES_GESTURE_EXT` | `.gesture` | Gesture file extension |
 | `BT_REMOTES_GESTURE_MAX` / `_NAME_LEN` | `32` / `32` | Max gestures / gesture-name length |
-| `GESTURE_LINE_MAX` / `GESTURE_LINE_LEN` | `64` / `64` | Max lines per gesture / chars per line (in `gesture_runner.h`) |
+| `GESTURE_LINE_LEN` | `64` | Max chars per gesture line, incl. NUL (in `gesture_runner.h`); no max line count — the runner streams the file |
+| `BT_REMOTES_BACK_HOLD_EXIT_S_MIN` / `_MAX` / `_DEFAULT` | `1` / `10` / `6` | Hold-Back-to-Quit seconds range / default |
 | `HID_BT_KEYS_STORAGE_NAME` | `.bt_hid.keys` | Active bonding keys filename |
 | `FURI_HAL_BT_ADV_NAME_LENGTH` | `20` | Max BLE device name length (from furi_hal_version.h) |
 
@@ -156,6 +169,7 @@ struct Hid {
     FuriHalBleProfileBase* ble_hid_profile;   // live profile handle (NULL when stopped)
     BleProfileHidExtParams ble_hid_cfg;       // .name[20], .mac[6] — loaded by profile_activate
     bool ble_started;                          // true while HID profile is running
+    bool connected;                            // live link state (status callback; cleared by stop_ble)
     Bt* bt; Gui* gui; NotificationApp* notifications; Storage* storage;
 
     // GUI infra + view modules
@@ -163,6 +177,8 @@ struct Hid {
     Submenu* submenu; VariableItemList* var_item_list; DialogEx* dialog;
     TextInput* text_input; Popup* popup; Widget* help_widget;
     HidRemoteMenu* hid_remote_menu;            // the Start menu
+    // Remote views are lazy: NULL until first navigation (bt_remotes_view_ensure);
+    // so are file_browser and hid_ptt/hid_ptt_menu. Only hid_remote_menu is eager.
     HidKeynote* hid_keynote; HidKeyboard* hid_keyboard; /* ...all remote views... */
 
     // Collections + pins (Ducky Scripts)
@@ -184,10 +200,12 @@ struct Hid {
     char pending_name[32];     // old profile name held during a rename operation
     char default_ble_name[20]; // default BT name applied when creating new profiles
     char profile_list[16][32]; uint8_t profile_count;
+    uint8_t pending_launcher_remote;  // .btremote deep-link target; BT_REMOTES_LAUNCHER_REMOTE_NONE (0xFF) = none
 
-    // Per-profile remote-type settings
+    // Per-profile settings (each one row in bt_remotes_profile_settings[])
     uint8_t keynote_back_key, media_mode, media_mouse_switch, tiktok_scroll_mode;
     uint16_t tiktok_gesture_inset, tiktok_gesture_margin, tiktok_gesture_swipe;
+    /* also ios_* (7 fields), delay_connect, ducky_connect_per_run, ducky_connect_settle_ms */
 
     // App-level + menu layout
     uint8_t  vibro_mode;                          // 0=Neither 1=Disconnect 2=Connect 3=Both
@@ -203,6 +221,11 @@ struct Hid {
 
     // Post-pairing auto-save timer
     FuriTimer* pair_save_timer; uint8_t pair_save_attempts;
+
+    // Hold-Back-to-Quit watchdog + Ducky connect-per-run wait
+    FuriTimer* back_hold_timer; FuriPubSub* input_events; FuriPubSubSubscription* input_subscription;
+    FuriTimer* connect_wait_timer; uint8_t connect_wait_attempts, connect_settle_ticks;
+    bool connect_wait_active;
 };
 ```
 
@@ -245,18 +268,26 @@ All config files are FlipperFormat text. Constants/file-types live in `bt_remote
   `bt_remotes_save_profile_menu_cfg` writes the **full** set above and is the only writer of the
   profile `.cfg` — the single on-disk source of truth for the BLE identity. Callers that change
   `name`/`mac` update `app->ble_hid_cfg` in memory first, then call `save_profile_menu_cfg`.
-  Old cfg files missing any key load with safe defaults and are migrated on read (see the V1/V2
-  migration arms in `bt_remotes_profile_activate`).
-- **`{name}.keys`** — BLE bonding keys binary blob (written by the BT service).
+  `bt_remotes_profile_create` writes only `name` + `mac`; every other key then loads its default.
+  Files missing any key load with safe defaults (enum-style rows snap an out-of-range value to the
+  default, range rows clamp). `menu_order` is migrated on read in `bt_remotes_profile_activate`:
+  files carrying `menu_item_count` migrate generically (pinned-slot values shift up by the number
+  of fixed items added since the save); older files fall through the legacy length-keyed arms
+  (33-entry, V2, V1, fixed-only).
+- **`{name}.keys`** — BLE bonding keys binary blob (copied from the active `.bt_hid.keys` by
+  `bt_remotes_profile_save`).
 - **`{name}.pins`** — `Flipper BT Collection Pins` v1. Per-profile list of Start-menu pins:
   ```
   Filetype: Flipper BT Collection Pins
   Version: 1
   count: 2
-  collection_0: My Macros   kind_0: 0    # 0 = collection
-  collection_1: Head Track  kind_1: 1    # 1 = gesture
+  collection_0: My Macros
+  kind_0: 0                      # 0 = collection
+  collection_1: Head Track
+  kind_1: 1                      # 1 = gesture
   ```
-  Older `.pins` files omit `kind_N` and default to collection (kind 0).
+  Older `.pins` files omit `kind_N` and default to collection (kind 0). `profile_rename` moves the
+  `.pins` file with the profile and `profile_delete` removes it.
 
 The **active** profile's keys are mirrored to `APP_DATA_PATH(".bt_hid.keys")` — that file is what
 the BT stack reads at runtime. The BLE identity (name + MAC) has no on-disk mirror: it lives in
@@ -271,7 +302,7 @@ Filetype: Flipper BT Remotes App Config
 Version: 1
 default_name: Flipper Zero       # BT name new profiles inherit ("" if unset)
 vibro_mode: 1                    # 0=Neither 1=Disconnect 2=Connect 3=Both (default 1)
-back_hold_exit_s: 6              # seconds Back must be held to quit the app (2-10, default 6)
+back_hold_exit_s: 6              # seconds Back must be held to quit the app (1-10, default 6)
 profile_order: Keyboard|Mouse|…  # pipe-separated saved profile display order
 ```
 Missing keys fall back to defaults (default_name "", vibro 1, back-hold 6 s, no profile order).
@@ -280,16 +311,17 @@ Legacy files with the old `disconnect_vibro` bool simply fail the uint32 read an
 ### Collections (Ducky Scripts) — `APP_DATA_PATH("collections/")`
 
 - **`{name}.collection`** — `Flipper BT Ducky Collection` v1: `count` + `script_0`, `script_1`, …
-  (each a full path to a `.txt` DuckyScript). Up to `BT_REMOTES_COLLECTION_SCRIPT_MAX` (32).
+  (each a full path to a `.txt` DuckyScript). Up to `BT_REMOTES_COLLECTION_SCRIPT_MAX` (16).
 
 ### Custom Gestures (global) — `APP_DATA_PATH("gestures/")`
 
 - **`{name}.gesture`** — plain text (computer-editable): **one command per line** (blank lines and
-  `#` comments allowed). **No header required** — `gesture_save` writes the bare command lines; the
-  readers still skip a legacy `Filetype:`/`Version:` header so older files keep loading. No
-  `count` / `line_N` keys — written/read directly via `storage_file_*` in `bt_remotes.c`
-  (`gesture_save`/`gesture_load`) and the runner (`gesture_run_file`), not FlipperFormat. Global =
-  shared across all profiles. See **Custom Gestures** and [`WRITING_GESTURES.md`](WRITING_GESTURES.md).
+  `#` comments allowed). **No header required**; a legacy `Filetype:`/`Version:` header parses as
+  invalid lines, which the runner skips, so older files keep loading. No `count` / `line_N` keys —
+  not FlipperFormat. The app never writes gestures (no on-device editor): files are authored on a
+  computer and dropped on the SD card; the app only lists them (`bt_remotes_gesture_load_list`) and
+  the runner streams them (`gesture_run_file`). Global = shared across all profiles. See
+  **Custom Gestures** and [`WRITING_GESTURES.md`](WRITING_GESTURES.md).
 
 ### Profile Launcher shortcuts — `APP_DATA_PATH("launchers/")`
 
@@ -328,10 +360,10 @@ Legacy files with the old `disconnect_vibro` bool simply fail the uint32 read an
   Start with a `FURI_LOG_W`.
 - Written by the **Create Shortcut** row under Profile Settings → Profile Management: a submenu
   picker ("Profile Only" + every fixed item except Settings + the profile's pinned
-  collections/gestures), then the file is written to `BT_REMOTES_LAUNCHER_DIR` (overwrites if
-  present). Profile-only shortcuts are `{profile}.btremote`; target shortcuts are
-  `{profile} - {name}.btremote` with filesystem-hostile chars in the name replaced by `-`
-  ("TikTok / YT Shorts" contains `/`).
+  collections/gestures), then the file is written to `BT_REMOTES_LAUNCHER_DIR` (created on first
+  write, not at app start; overwrites if present). Profile-only shortcuts are `{profile}.btremote`;
+  target shortcuts are `{profile} - {name}.btremote` with filesystem-hostile chars in the name
+  replaced by `-` ("TikTok / YT Shorts" contains `/`).
   Users can move the file anywhere on the SD card — routing is by extension, not location.
   Renaming a profile after creating a shortcut breaks it (documented in the Profile Management
   help page).
@@ -353,8 +385,8 @@ Legacy files with the old `disconnect_vibro` bool simply fail the uint32 read an
 
 **Registers the status callback every time it is called** — the callback would otherwise be lost
 after any stop/start cycle. Note it **asserts** `!ble_started` (it does not guard); callers must
-stop BLE first. `ble_profile_hid_ext` is the custom Momentum-only profile template that injects
-the per-profile MAC/name (see **Firmware Compatibility**).
+stop BLE first. `ble_profile_hid_ext` is this app's own profile template
+(`helpers/ble_hid_ext_profile.c`) that injects the per-profile MAC/name.
 
 ### `bt_remotes_stop_ble(Hid* app)`
 
@@ -363,10 +395,11 @@ Has an `if(!app->ble_started) return;` guard — safe to call redundantly. Then:
 1. Stops the pairing-save timer (`furi_timer_stop(app->pair_save_timer)`)
 2. Clears the status callback (`bt_set_status_changed_callback(NULL, NULL)`)
 3. Resets the blue LED off
-4. Disconnects (`bt_disconnect`) and waits 200 ms
+4. Disconnects (`bt_disconnect`); waits 200 ms only if `app->connected` (nothing to flush otherwise)
 5. Resets keys path to default (`bt_keys_storage_set_default_path`)
 6. Restores default BT profile (`furi_check(bt_profile_restore_default)`)
-7. Sets `app->ble_started = false`
+7. Sets `app->ble_started = false`, NULLs `app->ble_hid_profile` (the `hid_hal_*` wrappers then
+   no-op stale input events) and clears `app->connected` (the callback is already detached)
 
 ### Connection Status Callback
 
@@ -374,19 +407,23 @@ Has an `if(!app->ble_started) return;` guard — safe to call redundantly. Then:
 static void bt_remotes_connection_status_changed_callback(BtStatus status, void* context)
 ```
 
-Fires on every BT status change. It:
-- Sets the blue LED on connect / off otherwise
+Fires on every BT status change, on the BT service thread (so no SD I/O). It:
+- Sets `app->connected` and the blue LED (on connect / off otherwise)
 - Fires a vibro pulse per `vibro_mode` (connect if mode 2/3, disconnect if mode 1/3)
-- Updates connected state in every remote-control view
+- Posts `BT_REMOTES_EVENT_CONNECT_TICK` on link-up (for the Ducky connect-per-run wait)
+- Updates connected state in every remote view that has been built (views are lazy, so each
+  pointer is NULL-checked)
 
 **Pairing auto-save (the important part).** When a profile is active and the status becomes
-connected, the keys file may or may not exist yet:
-- **Reconnect** (`profiles/{name}.keys` already on disk) → call `bt_remotes_profile_save(app)`
-  immediately to capture any refreshed key material.
-- **First-time pairing** (no saved keys yet) → the BLE link connects *before* SMP bonding
-  finishes, so `.bt_hid.keys` doesn't exist at callback time. Instead of saving now, it starts
-  `pair_save_timer` (period `PAIR_SAVE_POLL_MS` = 200 ms) which polls for the keys file and saves
-  once the stack writes it (up to `PAIR_SAVE_MAX_ATTEMPTS` = 25 ≈ 5 s).
+connected, the callback only resets `pair_save_attempts` and starts `pair_save_timer` (period
+`PAIR_SAVE_POLL_MS` = 200 ms). The timer callback just posts `BT_REMOTES_EVENT_PAIR_SAVE_TICK`;
+`bt_remotes_custom_event_callback` handles it on the dispatcher thread (it never reaches the
+scenes) by calling `bt_remotes_profile_save`, which returns false until `.bt_hid.keys` exists. The
+poll stops on the first successful save or after `PAIR_SAVE_MAX_ATTEMPTS` = 25 (≈ 5 s):
+- **Reconnect** (keys already on disk, restored by `profile_activate`) → the first tick saves,
+  capturing any refreshed key material.
+- **First-time pairing** → the BLE link connects *before* SMP bonding finishes, so `.bt_hid.keys`
+  doesn't exist yet; the poll saves as soon as the stack writes it.
 
 On **disconnect** it stops the pairing-save timer. (This polling approach replaced an earlier
 assumption that the BT service always writes keys before firing the status callback.)
@@ -403,17 +440,17 @@ remote/script/gesture screen is open**, and dropped on return to the Start menu:
 - **`start_on_enter`** calls `stop_ble` when `delay_connect` is set, so every return to the menu
   disconnects. (Entering a remote pushes `Main` over `Start`, so `start_on_enter` doesn't re-run
   until Back — no start/stop churn.)
-- The `unpair` / `reset_profile` / `scene_rename` BT-name restarts are all gated by
+- The `unpair` / `reset_profile` / `scene_rename` / `reset_bt_name` restarts are all gated by
   `!delay_connect` (they call `bt_remotes_start_ble_if_immediate`), so management flows stay
   disconnected at the menu in delay mode.
 
 `delay_connect` is **off by default**. New profiles get the default via the
 `bt_remotes_profile_activate(app)` call the `profile_new` flow now runs after `profile_create` —
 that also defaults *all* the other per-profile fields (menu layout + per-remote settings) instead
-of inheriting the previous profile's stale in-memory values. Toggle lives in Settings → "Delay
-Connect". The three immediate-vs-delay start sites
-(`profile_select` / `unpair` / `reset_profile`) go through the
-`bt_remotes_start_ble_if_immediate(app)` helper.
+of inheriting the previous profile's stale in-memory values. Toggle lives in Settings → Connection →
+"Delay Connect" (`profile_connection`; saved immediately). The immediate-vs-delay start sites
+(`profile_select`, `unpair`, `reset_profile`, `scene_rename`, `reset_bt_name`, and the `.btremote`
+launcher entry) go through the `bt_remotes_start_ble_if_immediate(app)` helper.
 
 ### Ducky/Collections "connect per run" (`ducky_connect_per_run`, per profile)
 
@@ -421,14 +458,16 @@ An **independent** per-profile policy that narrows the connection window for Duc
 Collections to a single script's execution (Custom Gestures are unaffected). When set, regardless
 of `delay_connect`:
 
-- **Browsing is disconnected.** `custom_actions` and `collection_view` `on_enter` call `stop_ble`
-  (idempotent; this is what disconnects an immediate-mode profile). `start_on_event` also skips its
+- **Browsing is disconnected.** `custom_actions` and `collection_view` `on_enter` call
+  `bt_remotes_ducky_browse_enter`, which `stop_ble`s when the flag is set (idempotent; this is what
+  disconnects an immediate-mode profile). `start_on_event` also skips its
   `delay_connect` BLE-start for the Ducky list and pinned **collection** (kind 0) launches so there
   is no start/stop churn.
 - **The run scene connects just for the run.** `custom_actions_run` `on_enter`: if not already
   `connected`, `start_ble` and show "Connecting…", then poll `app->connected` via
   `connect_wait_timer` (period `CONNECT_WAIT_POLL_MS`, cap `CONNECT_WAIT_MAX_ATTEMPTS` ≈ 15 s,
-  posting `BT_REMOTES_EVENT_CONNECT_TICK`). On connect, **settle** `ducky_connect_settle_ms`
+  posting `BT_REMOTES_EVENT_CONNECT_TICK`, which the status callback also posts on link-up; the
+  scene ignores ticks unless `connect_wait_active`). On connect, **settle** `ducky_connect_settle_ms`
   (the BLE link comes up before the host has subscribed to HID report notifications — sending
   immediately drops the first keystrokes; the settle counts whole `CONNECT_WAIT_POLL_MS` ticks)
   then start the runner; on timeout → "Not Connected"; Back cancels. `on_exit` always `stop_ble`
@@ -473,9 +512,16 @@ item missing from a saved order — so items added in a firmware update (e.g. Cu
 Phone) appear on existing profiles without a "Reset Menu Order", and (b) any newly-pinned
 collection not yet in `menu_order`. **Settings must stay the highest-indexed fixed item** —
 `hide_items` and the load-time "never hide Settings" guard depend on it. When inserting a new
-fixed item, add it *before* Settings and add a new V-arm in `bt_remotes_profile_activate` for the
-previous `MENU_ITEM_COUNT` / `MENU_ORDER_LEN` so older saved orders shift pinned slots up to
-land in the new layout (see existing V1 / V2 arms).
+fixed item, add it *before* Settings and bump `BT_REMOTES_MENU_ITEM_COUNT` (and the
+`REMOTE_MENU_MAX_ITEMS` capacity in `hid_remote_menu.h`, which a `_Static_assert` in `scene_start.c`
+checks) — no new migration arm is needed. Profile `.cfg`s carry `menu_item_count`, so
+`bt_remotes_profile_activate` shifts older saved pinned-slot values up generically (the old Settings
+value is reinterpreted as the first new item and the real Settings re-appends via `start_on_enter`).
+The V1 / V2 / 33-entry arms only serve files saved before that key existed — don't extend them.
+
+**Reset Menu Order** (Profile Settings → Start Menu Layout) restores identity order, sets every
+pin slot to `0xFF` (pins stay in `.pins`; `start_on_enter` re-appends them after the fixed items)
+and clears `menu_hidden`.
 
 ---
 
@@ -488,25 +534,32 @@ ProfileSelect ──► ProfileNew ──► (back to ProfileSelect, auto-advanc
     │      │  [Back] stops BLE, clears active_profile, returns to ProfileSelect    │
     │      │                                                                        │
     │      ├──► Main (remote views: Keynote[/Vertical], Keyboard, Numpad, Media,   │
-    │      │      Apple Music macOS, Movie, TikTok, Mouse[/Clicker/Jiggler/        │
-    │      │      Stealth], PushToTalk→PTT menu). [Back from Main returns to Start] │
+    │      │      Apple Music macOS, Movie, TikTok, iOS Phone, Mouse[/Clicker/     │
+    │      │      Jiggler/Stealth], PushToTalk→PTT menu). [Back from Main → Start] │
     │      │                                                                        │
     │      ├──► CustomActions ("Ducky Scripts") ─► Browse Files (file_browser)     │
     │      │         │                                 └─► CustomActionsRun         │
     │      │         └─► CollectionList ─► CollectionView/Create/Edit/Delete/Pin    │
+    │      │              (View ─► CustomActionsRun; Create ─► Edit)               │
     │      │                                                                        │
-    │      ├──► GestureList ("Custom Gestures") ─► GestureCreate/Edit/Run/Pin      │
+    │      ├──► GestureList ("Custom Gestures", read-only) ─► GestureRun/Pin       │
     │      │                                                                        │
     │      ├──► (pinned slot) ─► CollectionView (kind 0) or GestureRun (kind 1)    │
     │      │                                                                        │
-    │      └──► ProfileSettings (hub) ─┬──► ProfileConnection ─► Rename / Unpair  │
-    │                                  │   (Bluetooth Name, Delay Connect, Unpair)│
-    │                                  ├──► ProfileMenuLayout ─► HideItems/ResetMenu│
-    │                                  ├──► RemoteTypeSettings ─► Keynote/Media/  │
-    │                                  │     TikTok/DuckySettings → RemoteSettingsHelp│
-    │                                  ├──► ProfileManagement ─► ProfileRenameFile,│
-    │                                  │     SaveProfile, DeleteProfile           │
-    │                                  └──► Help (RemoteSettingsHelp / Profile)   │
+    │      └──► ProfileSettings (hub) ─┬──► ProfileConnection ─► Rename (Bluetooth   │
+    │                                  │     Name), ResetBtName, SaveProfile (Save BT│
+    │                                  │     Keys), Unpair, [Delay Connect: inline   │
+    │                                  │     toggle], Help (RemoteSettingsHelp)      │
+    │                                  ├──► ProfileMenuLayout ─► HideItems/ResetMenu/ │
+    │                                  │     Help (RemoteSettingsHelp)               │
+    │                                  ├──► RemoteTypeSettings ─► Keynote/Media/     │
+    │                                  │     TikTok/Ducky/IosPhone Settings, Help    │
+    │                                  │     (each Settings ─► RemoteSettingsHelp)   │
+    │                                  └──► ProfileManagement ─► ProfileRenameFile,  │
+    │                                        ProfileShortcutCreate, DeleteProfile,   │
+    │                                        Help (RemoteSettingsHelp)               │
+    │
+    ├──► Help ("? Help" row: topic list → scrollable pages; Back → ProfileSelect)
     │
     └──► GlobalSettings (VariableItemList, from ProfileSelect, no active profile)
             ├──► Rename (Default BT Name → app->default_ble_name)
@@ -517,16 +570,18 @@ ProfileSelect ──► ProfileNew ──► (back to ProfileSelect, auto-advanc
 
 `bt_remotes_scenes.h` is the authoritative scene list. Start does **not** use a plain submenu — it
 uses the custom `hid_remote_menu` view (see **Start Menu**). Routing of the selected index lives
-in `bt_remotes_scene_start_on_event`.
+in `bt_remotes_scene_start_on_event`. The `ResetProfile` scene is registered but **unreachable**
+from the UI (nothing navigates to it; Unpair performs the same reset).
 
 **Critical navigation rule**: BLE stays up through the whole Profile Settings sub-tree in the
 default (immediate-connect) mode. `start_on_event` no longer calls `stop_ble` for the Settings
 selection, and `profile_settings_on_event` no longer restarts BLE on Back — sub-scenes inherit a
-live BLE session and the host doesn't drop. Two Settings actions need to re-advertise — the
-per-profile **Bluetooth Name** rename (`scene_rename.c`) and **Reset Name to Default**
-(`scene_reset_bt_name.c`): each performs a local
-`stop_ble` → `profile_activate` → `start_ble_if_immediate` after persisting the new name (the
-`_if_immediate` keeps `delay_connect` profiles offline). Ducky Scripts / Custom Gestures /
+live BLE session and the host doesn't drop. Three Settings actions need to re-advertise — the
+per-profile **Bluetooth Name** rename (`scene_rename.c`), **Reset Name to Default**
+(`scene_reset_bt_name.c`) and **Bluetooth Unpairing** (`scene_unpair.c`, which resets the MAC and
+pairing): each performs a local `stop_ble` → (`profile_reset` for Unpair) → `profile_activate` →
+`start_ble_if_immediate` after persisting the change (the `_if_immediate` keeps `delay_connect`
+profiles offline). Ducky Scripts / Custom Gestures /
 pinned-slot launches don't stop BLE either. In `delay_connect` mode the Start scene's
 `on_enter`/`on_event` own the stop-at-menu / start-into-remote transitions; the Start scene's
 `delay_connect` BLE-start branch already excludes the Settings selection, so delay-connect profiles
@@ -534,7 +589,7 @@ stay offline through Settings as before. `GlobalSettings` has no profile and nev
 
 **Hold-Back-to-Quit watchdog**: independent of scene navigation, `bt_remotes.c` subscribes to the
 raw input pubsub (`RECORD_INPUT_EVENTS`) — Back **press** arms a one-shot `back_hold_timer` for
-`back_hold_exit_s` seconds (app-level setting, 2–10 s, default 6), Back **release** disarms it.
+`back_hold_exit_s` seconds (app-level setting, 1–10 s, default 6), Back **release** disarms it.
 Because the pubsub delivers every press/release regardless of view focus or event consumption, the
 gesture works everywhere (remotes, text inputs, running scripts). When the timer fires it posts
 `BT_REMOTES_EVENT_HOLD_EXIT`; `bt_remotes_custom_event_callback` handles it globally with
@@ -558,9 +613,10 @@ Reached from the Start menu item **"Ducky Scripts"** (`BtRemotesStartIndexCustom
   (`helpers/ducky_runner.c` — a DuckyScript parser + worker-thread runner against the BLE HID
   profile; interruptible, with a done/error popup).
 - **Collections** → `CollectionList`: named groups of script paths stored in
-  `collections/{name}.collection`. Scenes: `collection_create` (name + validate), `collection_edit`
-  (add/remove scripts), `collection_view` (run the collection's scripts in sequence),
-  `collection_delete`, `collection_pin` (pin to the Start menu, kind 0).
+  `collections/{name}.collection`. Scenes: `collection_create` (name + validate, then pushes
+  `collection_edit`), `collection_edit` (add/remove scripts, max 16), `collection_view` (lists the
+  collection's scripts; selecting one pushes `CustomActionsRun` for it), `collection_delete`,
+  `collection_pin` (pin to the Start menu, kind 0).
 
 `ducky_runner` and the gesture runner share only the **threading/stop/popup pattern**, not code.
 
@@ -586,22 +642,24 @@ Start menu (kind 1) and run from a pin or from the list.
 | `tap` | Finger tap = left press + release |
 | `click left\|right` | Mouse button click |
 | `drag <dx> <dy>` | Left press → stepped move → release |
+| `press [left\|right]` / `release [left\|right]` | Hold / release a mouse button (default left) for manual drag timing |
 | `scroll <n>` | Mouse wheel (signed) |
 | `wait <ms>` | Delay (interruptible) |
 | `key <combo>` | Keyboard key/combo, e.g. `key enter`, `key cmd space` |
 | `type <text>` | Type a literal string |
 | `run <name>` | **Script inheritance** — run another gesture by name |
 
-**Authoring** is on-device, line-by-line: `gesture_create` (name) → `gesture_edit` (add/edit/delete
-lines + a Help page). Each line is validated by `gesture_line_validate` (unknown verbs/keys
-rejected). `gesture_run` executes via `gesture_runner` with a Running/Done/Error popup; Back stops
-the run.
+**Authoring** is off-device: the on-device editor was removed (`ee6746b`), so gestures are
+plain-text files written on a computer. `gesture_list` is a read-only browser of
+`gestures/*.gesture`; picking one offers Run / Pin to Start. There is no line validation at
+authoring time — the runner silently skips unknown or malformed lines. `gesture_run` executes via
+`gesture_runner` with a Running/Done/Error popup; Back stops the run.
 
 **Inheritance** (`run <name>`): `gesture_runner` executes recursively. `gesture_run_file` resolves
 `<name>` as a **sibling** in the same `gestures/` dir, capped at `GESTURE_MAX_DEPTH` (5) to prevent
 cycles; a missing child in a nested `run` is skipped (only a missing **top-level** file is an
-error). The worker thread uses a 4 KB stack to accommodate the recursion. File format is `count` +
-`line_0…line_N` (see **On-Disk File Formats**).
+error). The worker thread uses a 4 KB stack to accommodate the recursion. File format is plain
+text, one command per line (see **On-Disk File Formats**).
 
 ---
 
@@ -660,18 +718,19 @@ add the `Hid` field, one table row, and the settings-scene UI row.
 |---|---|
 | `bt_remotes_profile_load_list(app)` | Scans `profiles/` for `*.cfg`, fills `profile_list[]`, then applies `profile_order_str` ordering. |
 | `bt_remotes_profile_create(app)` | New random MAC; writes profile `.cfg` (inherits `default_ble_name`); removes stale active keys. Callers follow up with `profile_activate` to load the identity into memory. |
-| `bt_remotes_profile_activate(app)` | Loads the profile `.cfg`'s name + MAC into `app->ble_hid_cfg` and copies profile `.keys` → active keys (or clears keys if none). **Also** loads per-profile `menu_order`/`menu_hidden` + per-remote settings (with V1 migration). Returns `false` if `.cfg` missing. |
+| `bt_remotes_profile_activate(app)` | Loads the profile `.cfg`'s name + MAC into `app->ble_hid_cfg` and copies profile `.keys` → active keys (or clears keys if none). **Also** loads per-profile `menu_order`/`menu_hidden` + per-remote settings (generic `menu_item_count` migration; legacy V1/V2 arms for older files). Returns `false` if `.cfg` missing. |
 | `bt_remotes_profile_save(app)` | Copies active `.bt_hid.keys` → profile `.keys`, then re-snapshots the full profile `.cfg` via `save_profile_menu_cfg`. Returns `false` if no active keys file exists yet. |
-| `bt_remotes_profile_rename(app)` | Renames profile `.cfg`/`.keys`. Old name in `app->pending_name`, new in `app->active_profile`. |
-| `bt_remotes_profile_reset(app)` | New random MAC (name preserved) into `ble_hid_cfg`; persists via `save_profile_menu_cfg`; deletes profile + active key files. |
-| `bt_remotes_profile_delete(app)` | Removes profile `.cfg` and `.keys` (tolerates already-absent). |
+| `bt_remotes_profile_rename(app)` | Renames profile `.cfg`/`.keys`/`.pins` and rewrites the entry in `profile_order_str` (then `save_app_cfg`). Old name in `app->pending_name`, new in `app->active_profile`. |
+| `bt_remotes_profile_reset(app)` | New random MAC (name preserved) into `ble_hid_cfg`; persists via `save_profile_menu_cfg`; then `profile_clear_pairing` (deletes profile + active key files). |
+| `bt_remotes_profile_delete(app)` | Removes profile `.cfg`, `.keys` and `.pins` (tolerates already-absent). |
 | `bt_remotes_profile_clear_pairing(app)` | Deletes both key files (active + profile) without touching the BLE stack — safe whether BLE is running or stopped. |
 | `bt_remotes_save_profile_menu_cfg(app)` | Writes the full profile `.cfg` (name+mac+menu+per-remote settings). No-op if no active profile. |
 | `bt_remotes_load_app_cfg(app)` | Reads `app.cfg` → `default_ble_name`, `vibro_mode`, `back_hold_exit_s`, `profile_order_str`. Sets defaults if file/keys missing. |
 | `bt_remotes_save_app_cfg(app)` | Writes `default_name`, `vibro_mode`, `back_hold_exit_s`, `profile_order` to `app.cfg`. |
 
-(Collection/gesture/pins ops mirror these — see `bt_remotes_collection_*`, `bt_remotes_gesture_*`,
-`bt_remotes_pinned_load/save`.)
+(Collection/pins ops mirror these — see `bt_remotes_collection_*`, `bt_remotes_pinned_load/save`,
+`bt_remotes_pin_add/remove`. Gestures are read-only: just `bt_remotes_gesture_load_list` and
+`bt_remotes_gesture_path`.)
 
 **Static-random BLE MAC format**: `mac[5] |= 0xC0` sets bits 47:46 to `11`, which is required by
 the BLE spec for static random addresses. Always do this when generating a new MAC.
@@ -690,7 +749,8 @@ safe regardless of BLE state — the `unpair` scene `stop_ble`s first, then clea
 `profile_activate` overwrites the in-memory `app->ble_hid_cfg` (and all per-profile settings) with
 whatever the profile `.cfg` on disk says. If you change a per-profile value in memory without
 persisting it via `bt_remotes_save_profile_menu_cfg`, the next `profile_activate` (e.g. the local
-cycle in `scene_rename` after a Bluetooth Name edit, or Back-from-Settings) silently reverts it.
+cycle in `scene_rename` after a Bluetooth Name edit, or in `scene_reset_bt_name` / `unpair`)
+silently reverts it.
 **Persist to the profile's `.cfg` before any path that may re-activate** — settings scenes do this
 in `on_exit`; rename/reset do it inline before cycling BLE.
 
@@ -700,8 +760,9 @@ Use `on_event` with `SceneManagerEventTypeBack` instead.
 
 ### `profile_select` auto-advance guard
 `profile_select_on_enter` checks `app->ble_started` and, if true, immediately sends
-`BtRemotesProfileSelectEventAutoAdvance` to skip directly to the Start scene. This handles the case
-where `profile_new` creates a profile and pops back. If you stop BLE and clear `active_profile`
+`BtRemotesProfileSelectEventAutoAdvance` to skip directly to the Start scene. This handles `profile_new`
+creating a profile and popping back, and a `.btremote` launch of an immediate-connect profile (the
+entry point starts BLE before pushing ProfileSelect). If you stop BLE and clear `active_profile`
 before navigating to ProfileSelect (as the Start Back handler does), this guard will be false and
 the full profile list will render.
 
@@ -709,5 +770,6 @@ the full profile list will render.
 `bt_remotes_scene_rename` behaves differently depending on `active_profile`:
 - **No profile** → edits `app->default_ble_name`, saves via `bt_remotes_save_app_cfg`. No BLE.
 - **Profile active** → edits `app->ble_hid_cfg.name` (the text-input writes into it directly), then
-  `bt_remotes_save_profile_menu_cfg` (full profile `.cfg`). BLE is already stopped; restart
-  happens on Back from Settings (which re-activates the profile and loads the new name).
+  `bt_remotes_save_profile_menu_cfg` (full profile `.cfg`), then cycles BLE locally:
+  `stop_ble` (if started) → `profile_activate` → `start_ble_if_immediate`, so the new name
+  advertises right away.

@@ -1,8 +1,13 @@
+# origin at bottom-left
 anchor bl
+# step in off the corner (avoid the Dwell hot corner)
 move 100 0
+# nudge down to be sure the pointer is on the bottom edge
 move 0 500
 wait 100
+# touch down at the bottom edge
 press
 wait 50
+# short swipe up
 move 0 -100
 release

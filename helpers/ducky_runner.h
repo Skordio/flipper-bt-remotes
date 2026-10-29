@@ -15,7 +15,7 @@ typedef enum {
 
 typedef struct DuckyRunner DuckyRunner;
 
-// Called from the runner worker thread when state changes (done / error).
+// Called from the runner worker thread when state changes (running / done / error).
 // Use view_dispatcher_send_custom_event inside the callback to forward the
 // notification back to the main thread.
 typedef void (*DuckyRunnerCallback)(void* context);

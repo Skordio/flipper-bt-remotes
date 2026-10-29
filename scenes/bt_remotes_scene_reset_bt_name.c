@@ -2,7 +2,7 @@
 
 // Replaces the active profile's Bluetooth Name with the global Default Bluetooth
 // Name and re-advertises. Mirrors the structure of scene_save_profile: do the
-// work in on_enter, then show a "Done!" popup that pops back on timeout.
+// work in on_enter, then show a "Reset!" popup that pops back on timeout.
 
 enum BtRemotesResetBtNameEvent {
     BtRemotesResetBtNameEventDone,

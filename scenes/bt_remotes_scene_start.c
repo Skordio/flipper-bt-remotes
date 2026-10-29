@@ -10,10 +10,11 @@ _Static_assert(
     "REMOTE_MENU_MAX_ITEMS must hold every fixed item plus every pin slot");
 
 // ---------------------------------------------------------------------------
-// Static default item table — labels parallel to the enum values above
+// Static default item table — labels parallel to the BtRemotesStartIndex values
 // ---------------------------------------------------------------------------
 
-// Defined without 'static' so bt_remotes_scene_hide_items.c can reach it via extern in bt_remotes.h
+// Defined without 'static' so other files (hide_items, profile_shortcut_create, the
+// launcher loader in bt_remotes.c) can reach it via extern in bt_remotes.h
 const BtRemotesMenuEntry bt_remotes_menu_default[BT_REMOTES_MENU_ITEM_COUNT] = {
     {"Keynote",               BtRemotesStartIndexKeynote},
     {"Keynote Vertical",      BtRemotesStartIndexKeynoteVertical},
@@ -192,7 +193,8 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
     if(event.type == SceneManagerEventTypeCustom) {
         // Delay-connect: any selection except Settings is a HID destination
         // (remote view, Ducky/Gesture list, or pinned script/gesture) — bring BLE
-        // up now. Settings must stay disconnected and stops BLE in its own branch.
+        // up now. Settings is excluded: a delay-connect profile stays disconnected
+        // there (on_enter already stopped BLE; Settings never starts it).
         // Bound to real menu events so a stray high-value event (e.g. a connect-wait
         // tick that arrived after the run scene closed) can't spuriously start BLE.
         if(app->delay_connect && !app->ble_started &&
@@ -210,10 +212,11 @@ bool bt_remotes_scene_start_on_event(void* context, SceneManagerEvent event) {
             if(!(app->ducky_connect_per_run && ducky_target)) bt_remotes_start_ble(app);
         }
         if(event.event == BtRemotesStartIndexSettings) {
-            // BLE stays up through Settings so the paired host doesn't drop when
-            // the user is tweaking knobs. The only Settings action that needs a
-            // BLE cycle (renaming the active profile's BT name) does it locally
-            // in scene_rename.c.
+            // BLE stays up through Settings (immediate-connect profiles) so the
+            // paired host doesn't drop when the user is tweaking knobs. The Settings
+            // actions that need a BLE cycle (renaming the active profile's BT name,
+            // Reset Name to Default, Bluetooth Unpairing) do it locally in
+            // scene_rename.c, scene_reset_bt_name.c and scene_unpair.c.
             scene_manager_set_scene_state(app->scene_manager, BtRemotesSceneStart, event.event);
             scene_manager_next_scene(app->scene_manager, BtRemotesSceneProfileSettings);
             consumed = true;

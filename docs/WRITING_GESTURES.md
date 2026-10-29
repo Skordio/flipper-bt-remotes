@@ -5,8 +5,8 @@ moves, clicks, drags, waits, and keystrokes — a reusable "quick action" you ca
 button press. Typical use: navigate deep into a host's UI (e.g. an iOS Settings screen) and flip
 a switch, hands-free.
 
-This guide is for writing gestures by hand. You can also build them on the device
-(**Custom Gestures → + Create**), but editing the plain-text files on a computer is often faster.
+This guide is for writing gestures by hand. They are plain-text files you author on a computer and
+copy to the SD card; the app lists, runs, and pins them (there is no on-device editor).
 
 ---
 
@@ -24,27 +24,35 @@ release
 
 - **No header is needed** — just list the commands.
 - **Blank lines** are ignored.
-- **Comments** start with `#` and run to the end of the line.
+- **Comments** are whole lines that start with `#`. Keep them on their own line: a `#` after a
+  command is *not* a comment — it becomes part of the arguments, which breaks `press`, `release`,
+  `key`, `type`, and `run` lines (`press`/`release` lines are skipped entirely).
 - A legacy `Filetype:` / `Version:` header (written by older versions of the app)
   is still accepted and ignored, so old files keep working — but you don't need it.
 
 ```
-# Go to the Home screen
-anchor bl       # plant a known origin at the bottom-left
-move 100 0      # step in off the corner
+# Go to the Home screen: plant a known origin at the bottom-left...
+anchor bl
+# ...then step in off the corner
+move 100 0
 ```
 
-Limits: up to **64 commands** per file, **63 characters** per line. Verbs are
-case-insensitive (`MOVE`, `move`, and `Move` are the same).
+Limits: **63 characters** per line. A longer line — a long `#` comment included — is split at 63
+characters and the tail is read as a separate line (so a comment's tail is parsed as a command);
+keep comments short or break them across lines. There is no cap on the number of commands. Verbs
+are case-insensitive (`MOVE`, `move`, and `Move` are the same). Separate words with spaces — tabs
+between words aren't recognised.
 
 ### Where files live
 
-- **On the Flipper:** `/ext/apps_data/bt_remotes/gestures/` (the SD card). The filename without
-  `.gesture` is the gesture's name in the app. Gestures are **global** — shared across all
-  profiles.
+- **On the Flipper:** `/ext/apps_data/bt_remotes/gestures/` (the SD card). The app doesn't create
+  this folder, so make sure it exists (the `storage.py` command below creates it). The filename
+  without `.gesture` is the gesture's name in the app — keep names under 32 characters; the
+  list shows at most 32 gestures and skips files starting with `.`. Gestures are **global** —
+  shared across all profiles.
 - **In this repo:** ready-made examples are in [`../examples/`](../examples/).
 
-Upload from a computer with the Flipper CLI / `storage.py`:
+Upload from a computer with the Flipper CLI / `storage.py` (from the firmware repo root):
 
 ```
 python scripts/storage.py -p <PORT> send home.gesture /ext/apps_data/bt_remotes/gestures/home.gesture
@@ -78,7 +86,7 @@ Large moves are split automatically into small steps under the hood, so you can 
 | `drag <dx> <dy>` | Press left, move by `dx,dy`, release — all in one step (a quick swipe/drag). |
 | `press [left\|right]` | Press a button **and hold it** (default left). Pair with `move` and `release` for a drag whose timing you control. |
 | `release [left\|right]` | Release a held button (default left). |
-| `scroll <n>` | Mouse wheel; positive/negative for direction. |
+| `scroll <n>` | Mouse wheel; positive/negative for direction (−128 to 127 per command). |
 | `wait <ms>` | Pause for `ms` milliseconds (lets the host UI catch up / animate). |
 | `key <combo>` | Send a keyboard key or combo (see below). |
 | `type <text>` | Type a literal string. |
@@ -90,11 +98,16 @@ Large moves are split automatically into small steps under the hood, so you can 
 to control the timing — hold at the start, swipe slowly, pause at the end — use the manual form:
 
 ```
-press            # button down (and stays down)
-wait 200         # dwell before moving
-move 0 -550      # swipe up while held
-wait 100         # settle at the end
-release          # button up
+# button down (and stays down)
+press
+# dwell before moving
+wait 200
+# swipe up while held
+move 0 -550
+# settle at the end
+wait 100
+# button up
+release
 ```
 
 ### `key` combos
@@ -110,7 +123,8 @@ Examples:
 
 ```
 key enter
-key cmd space      # e.g. Spotlight / search
+# cmd + space, e.g. Spotlight / search
+key cmd space
 key ctrl shift t
 ```
 
@@ -189,21 +203,32 @@ to fight. Use `key cmd space` / `key gui ...` etc. for shortcuts.
 ### `home.gesture` — go to the iOS Home screen (pointer edge-swipe)
 
 ```
-anchor bl       # origin at bottom-left
-move 100 0      # step in off the corner (avoid the Dwell hot corner)
-press           # touch down at the bottom edge
-move 0 -550     # swipe up
+# origin at bottom-left
+anchor bl
+# step in off the corner (avoid the Dwell hot corner)
+move 100 0
+# nudge down to be sure the pointer is on the bottom edge
+move 0 500
+wait 100
+# touch down at the bottom edge
+press
+wait 50
+# short swipe up
+move 0 -100
 release
 ```
 
 ### `head_tracking.gesture` — open Settings, reusing `home`
 
 ```
-run home        # start from the Home screen
+# start from the Home screen
+run home
 wait 1000
-anchor tl       # re-anchor top-left for repeatable Settings navigation
+# re-anchor top-left for repeatable Settings navigation
+anchor tl
 move 200 250
-drag 0 300      # pull down to reveal search
+# pull down to reveal search
+drag 0 300
 wait 800
 type settings
 wait 600
@@ -226,8 +251,10 @@ to tune them for your device.)
 - **The cursor drifts / lands in the wrong place:** add an `anchor` at the start, and re-check
   move values — they're relative and screen-specific.
 - **A step happens before the screen is ready:** add a `wait` before it.
-- **A line is ignored:** unknown verbs/keys are skipped when running (and rejected in the on-device
-  editor). Re-check spelling against the command reference above.
+- **A line is ignored:** a line with an unknown verb or missing/invalid arguments is skipped when
+  running, and an unknown name inside `key` is ignored (the rest of the combo is still sent).
+  Re-check spelling against the command reference above, and make sure comments are on their own
+  line.
 - **iOS triggers Dwell / a screenshot / Control Center:** you're dwelling in a corner — step off
   the corner before any hold, and don't `press` + `wait` while parked in one.
 

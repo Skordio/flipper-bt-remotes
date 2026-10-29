@@ -38,7 +38,7 @@ typedef enum {
     IosSwipePhaseLead,    // cursor moving, button NOT yet pressed (iOS gesture priming)
     IosSwipePhaseDrag,    // button pressed; emit chunks until remaining is 0
     IosSwipePhaseRelease, // emit the button release on this tick
-    IosSwipePhaseReturn,  // optional: drag back to the starting position (no button)
+    IosSwipePhaseReturn,  // drag back to the starting position (no button)
 } IosSwipePhase;
 
 struct HidIosPhone {
@@ -178,8 +178,8 @@ static bool hid_ios_swipe_start(HidIosPhone* self, int dx, int dy) {
 //              press the mouse button after the move, advance to Drag.
 //   Drag    -> emit one chunk; when remaining_x and remaining_y are both 0,
 //              advance to Release.
-//   Release -> emit mouse release; if Return-to-Start is on, prime the mirror
-//              move and advance to Return; otherwise Idle + stop timer.
+//   Release -> emit mouse release, prime the mirror move (swipes always return
+//              the cursor to its start) and advance to Return.
 //   Return  -> emit one chunk (no button); when remaining is 0, Idle + stop.
 // Per-tick BLE ordering is move -> press -> release, so in Lead the cursor is
 // already in motion at touch-down.

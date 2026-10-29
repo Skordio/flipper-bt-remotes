@@ -20,15 +20,21 @@ saved profiles so it can remember several paired devices and switch between them
   own saved pairing, so you can keep separate remotes for your laptop, phone, and TV and switch
   between them without re-pairing.
 - **Includes all remotes from stock fw bluetooth remote**
+- **iOS Phone remote** — a mouse remote tuned for an iPhone: hold a d-pad direction to move the
+  cursor (constant speed or ramping up), double-tap to swipe, or switch to Swipe mode for
+  single-press swipes.
 - **Ducky Scripts** — minimal duckyscript runner allows you to run duckyscripts without leaving
   the BT Remotes app.
 - **Custom Gestures** — a simple built-in scripting language for creating a sequence of mouse
   moves, clicks, drags, waits, and keystrokes (e.g. "open Settings and toggle a switch"), then
   executing it on a device.
 - **Customizable menu** — reorder the main menu, hide remotes you don't use, and **pin** your
-  favorite scripts or gestures to the top for one-tap access.
+  favorite Ducky collections or gestures to the menu for one-tap access.
 - **Per-remote settings** — tune behavior like the Keynote back-button key, Media remote mode,
-  and TikTok swipe distances.
+  TikTok swipe distances, iOS Phone cursor and swipe speeds, and whether Ducky scripts connect
+  only while they run.
+- **Delay Connect** — an optional per-profile mode that keeps Bluetooth off at the menu and
+  turns it on only while a remote, script, or gesture is open.
 - **Connection feedback** — optional vibration on connect/disconnect, and a blue LED while
   connected.
 
@@ -45,6 +51,14 @@ saved profiles so it can remember several paired devices and switch between them
 BT Remotes is built against Momentum, and relies on a few app-facing resources (some built-in
 icons and UI helpers) that Momentum makes available to apps but other firmwares don't. Because of
 that, other firmwares won't load it.
+
+Two features also depend on small firmware patches that currently live in the author's
+[Momentum fork](https://github.com/Skordio/Momentum-Firmware): opening `.btremote` shortcuts from
+the File Browser, and the **List Wraparound** setting (Momentum app → Interface → General) that
+the Start, Profile Select, and PushToTalk lists follow. On a Momentum build without them the app
+still loads, but `.btremote` files won't launch it and the lists read a setting that isn't there,
+so their wrap-around at the ends isn't reliable. Building from source needs the fork too (the
+menu code reads `momentum_settings.wrap_on_hold`).
 
 ---
 
@@ -68,7 +82,8 @@ This app lives in the Momentum firmware tree. From the firmware root:
 ./fbt build  APPSRC=applications_user/bt_remotes      # just build the .fap
 ```
 
-(On Windows use `.\fbt.cmd` instead of `./fbt`.)
+(On Windows use `.\fbt.cmd` instead of `./fbt`.) The tree must include the firmware patch
+described under [Compatibility](#compatibility).
 
 ---
 
@@ -83,29 +98,35 @@ This app lives in the Momentum firmware tree. From the firmware root:
    different Bluetooth device — each remembers its own pairing.
 
 **Tips**
-- **Reorder / hide / pin:** In a profile's menu, long-press or use **Settings → Hide Items** and
-  the menu's reorder mode to arrange things; pin a script or gesture from its **Pin to Start**
-  option.
+- **Reorder / hide / pin:** In a profile's menu, hold **OK** on an item to reorder it (**OK** or
+  **Back** drops it). **Settings → Start Menu Layout** has **Hide Remote Types** and **Reset Menu
+  Order**. Pin a Ducky collection or a gesture from its **Pin to Start** option.
+- **Leaving:** hold **Back** to exit a remote to its menu. Holding Back for several seconds
+  (Profile Select → **Settings** → **Hold Back Quit**, 1–10 s, default 6) quits the app from
+  anywhere.
 - **Ducky Scripts:** Main menu → **Ducky Scripts** → **Browse Files** to run a `.txt` script, or
   **Collections** to group several.
-- **Custom Gestures:** Main menu → **Custom Gestures** → create one, add command lines (there's a
-  built-in Help page listing every command), then run or pin it.
+- **Custom Gestures:** write a `.gesture` text file on your computer (see
+  [`docs/WRITING_GESTURES.md`](docs/WRITING_GESTURES.md)) and copy it to `gestures/` on the SD
+  card (below). Then Main menu → **Custom Gestures** → pick it → **Run** or **Pin to Start**.
 - **Launch a profile directly:** In a profile, go to **Settings → Profile Management → Create
   Shortcut**, then pick **Profile Only**, a specific remote, or one of the profile's pinned
   collections/gestures. This writes a `.btremote` file to `apps_data/bt_remotes/launchers/`.
   Open it from the Flipper's File Browser (or pin it to Favorites) and the app boots straight
   into that profile's menu — or all the way into the picked remote / pinned item — no Profile
-  Select. Move the `.btremote` anywhere on the SD card; it still works. Requires firmware
-  support (Momentum).
+  Select. Move the `.btremote` anywhere on the SD card; it still works. Requires the firmware
+  patch described under [Compatibility](#compatibility).
 
 ### Where files are stored
 
 On the SD card under `apps_data/bt_remotes/`:
 
+- `app.cfg` — global settings (default BT name, vibration, Hold Back Quit, profile order).
 - `profiles/` — your saved profiles (each `.cfg` + `.keys` + optional `.pins`).
 - `collections/` — saved Ducky Script collections (`.collection`).
 - `gestures/` — your Custom Gestures (`.gesture`). These are global (shared by all profiles) and
-  are plain text you can edit on a computer.
+  are plain text you can edit on a computer. The app doesn't create this folder — make it
+  yourself before copying gestures in.
 - `launchers/` — profile-launcher shortcuts (`.btremote`), one per profile you chose to make a
   shortcut for.
 
@@ -114,7 +135,8 @@ On the SD card under `apps_data/bt_remotes/`:
 ## Notes
 
 - Profiles use a randomized static Bluetooth address so each one looks like a separate device.
-- "Unpair" / "Reset" in a profile's Settings clear the saved pairing if a host gets confused.
+- **Settings → Connection → Bluetooth Unpairing** clears a profile's saved pairing (and gives it
+  a new Bluetooth address) if a host gets confused.
 
 ---
 
