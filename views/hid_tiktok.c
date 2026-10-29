@@ -6,6 +6,19 @@
 
 #define TAG "HidTikTok"
 
+// After a gesture swipe the cursor is left near a screen edge, so Pause (a tap)
+// and Like (a double-tap) miss the video's central hit area. Following each
+// swipe we re-home to the top-left corner and step GENTLY inward to this point
+// so those taps land on the video. Measured in px from the top-left corner.
+// Kept modest and upper-left of dead centre on purpose: the phone maps each
+// mouse packet to more than its nominal pixels (pointer acceleration), so a
+// large inward target overshoots and clamps at the far edge instead of landing
+// mid-screen (see hid_tiktok_center_cursor). This lands in the upper-central
+// video area, clear of the left-edge gesture zone, the right-side action rail
+// (like/comment/share) and the bottom caption.
+#define TIKTOK_GESTURE_CENTER_X 120
+#define TIKTOK_GESTURE_CENTER_Y 200
+
 struct HidTikTok {
     View* view;
     Hid* hid;
@@ -154,6 +167,30 @@ static void hid_tiktok_move_axis(
     }
 }
 
+// Re-home the cursor to the upper-central video area so a following Pause (tap)
+// or Like (double-tap) lands on the video instead of near an edge.
+//
+// Slam to the top-left corner first: the max-delta (-127) packets overshoot and
+// the host CLAMPS at the edge, giving a known reference wherever the drag left
+// the cursor. Then nudge inward with SMALL, SLOWLY-PACED steps.
+//
+// The gentle cadence is the whole point. The phone maps each mouse packet to
+// more than its nominal pixels (pointer acceleration) — that is what lets the
+// corner slam reach the corner from anywhere. A fast/large inward move is
+// amplified the same way and overshoots into the FAR edge's clamp; an earlier
+// version that stepped 90px every 20ms left the cursor pinned at the BOTTOM on
+// every swipe. 60px steps at 50ms stay in the near-linear range, matching
+// hid_tiktok_reset_cursor, so the landing point is predictable.
+static void hid_tiktok_center_cursor(HidTikTok* hid_tiktok) {
+    for(size_t i = 0; i < 8; i++) {
+        hid_hal_mouse_move(hid_tiktok->hid, -127, -127);
+        furi_delay_ms(50);
+    }
+    hid_tiktok_move_axis(hid_tiktok, true, TIKTOK_GESTURE_CENTER_X, 60, 50);
+    furi_delay_ms(20);
+    hid_tiktok_move_axis(hid_tiktok, false, TIKTOK_GESTURE_CENTER_Y, 60, 50);
+}
+
 // Emulate a finger swipe via a mouse click-drag.
 //   dir = -1 : drag up   (content scrolls up  -> NEXT video)
 //   dir = +1 : drag down (content scrolls down -> PREVIOUS video)
@@ -194,6 +231,11 @@ static void hid_tiktok_gesture_swipe(HidTikTok* hid_tiktok, int dir) {
     hid_tiktok_move_axis(hid_tiktok, false, dir * swipe, 35, 15);
     furi_delay_ms(40);
     hid_hal_mouse_release(hid_tiktok->hid, HID_MOUSE_BTN_LEFT);
+
+    // Leave the cursor on the video's central hit area so a following Pause
+    // (tap) or Like (double-tap) works instead of landing near the edge.
+    furi_delay_ms(40);
+    hid_tiktok_center_cursor(hid_tiktok);
 }
 
 static void
